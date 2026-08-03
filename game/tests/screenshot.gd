@@ -7,7 +7,7 @@ extends Node
 ## Sert à vérifier le rendu sans appareil ni écran — en CI comme en local. Les
 ## captures atterrissent dans le dossier `user://` du projet.
 
-const WARMUP_FRAMES := 45
+const WARMUP_FRAMES := 60
 const SHOTS := [
 	{"name": "01_village", "setup": "village"},
 	{"name": "02_village_dense", "setup": "dense"},
@@ -78,12 +78,16 @@ func _apply_setup(setup: String) -> void:
 				Game.build("wall", mid + d, mid + 8)
 			Game.foreman_apply()
 			Game.fill_army()
+			# On laisse la production s'accumuler pour que les badges de récolte
+			# soient visibles sur la capture.
+			Economy.tick(Game.state, Game.tables, 900.0)
 
 	_main = load("res://scenes/main.tscn").instantiate()
 	add_child(_main)
 
 	if setup == "raid":
 		await get_tree().process_frame
+		Game.state.set_bastion_level(9)
 		if Game.start_campaign_raid(0):
 			_main.call("_enter_raid")
 			await get_tree().process_frame
@@ -92,6 +96,10 @@ func _apply_setup(setup: String) -> void:
 			if view != null:
 				var placed := 0
 				for id: String in view.remaining_army.keys():
-					for i in range(mini(6, int(view.remaining_army[id]))):
-						view.deploy(id, Vector2i(3 + placed % 26, 2))
+					for i in range(mini(8, int(view.remaining_army[id]))):
+						view.deploy(id, Vector2i(6 + placed % 22, 8 + (placed % 3)))
 						placed += 1
+				# On laisse le combat s'engager : sans ça, la capture montre des
+				# troupes intactes et aucune barre de vie.
+				for f in range(150):
+					await get_tree().process_frame

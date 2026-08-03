@@ -68,7 +68,8 @@ func begin_place(type_id: String) -> void:
 	mode = Mode.PLACING
 	placing_type = type_id
 	_ghost_size = int(d["size"])
-	_ghost.mesh = BuildingMesh.get_mesh(String(d["shape"]), _ghost_size, 1, String(d["color"]))
+	_ghost.mesh = BuildingMesh.get_mesh(String(d["shape"]), _ghost_size, 1,
+			String(d["color"]), type_id)
 	_ghost.visible = true
 	clear_selection()
 	# On propose le centre de l'écran comme point de départ.
@@ -84,7 +85,7 @@ func begin_move(uid: int) -> void:
 	moving_uid = uid
 	_ghost_size = int(b["size"])
 	_ghost.mesh = BuildingMesh.get_mesh(String(d["shape"]), _ghost_size,
-			int(b["level"]), String(d["color"]))
+			int(b["level"]), String(d["color"]), String(b["type"]))
 	_ghost.visible = true
 	_update_ghost(Vector2i(int(b["x"]) + _ghost_size / 2, int(b["y"]) + _ghost_size / 2))
 
@@ -156,10 +157,18 @@ func _on_tap(screen_pos: Vector2) -> void:
 	if b.is_empty():
 		clear_selection()
 		emit_signal("empty_tapped", cell)
-	else:
-		selected_uid = int(b["uid"])
-		renderer.show_selection(b)
-		emit_signal("building_tapped", b)
+		return
+
+	var uid := int(b["uid"])
+	# Règle d'interaction centrale du jeu : si le bâtiment a quelque chose à
+	# donner, le tap le RAMASSE. Sinon il ouvre sa fiche. Un seul geste, jamais
+	# ambigu — le badge au-dessus indique lequel des deux va se produire.
+	if Game.pending_of(uid) > 0:
+		Game.collect(uid)
+		return
+	selected_uid = uid
+	renderer.show_selection(b)
+	emit_signal("building_tapped", b)
 
 
 # ------------------------------------------------------------------- fantôme

@@ -34,6 +34,8 @@ func _initialize() -> void:
 	_run("Combat — replay depuis inputs", func() -> void: test_combat_replay(tables))
 	_run("Sauvegarde — aller-retour", func() -> void: test_save())
 	_run("Contremaître — plan cohérent", func() -> void: test_foreman(tables))
+	_run("Tycoon — améliorations et rebirth", func() -> void: test_tycoon(tables))
+	_run("Conseiller — jamais bloqué", func() -> void: test_advisor(tables))
 
 	print("")
 	if _failures == 0:
@@ -186,11 +188,38 @@ func test_economy(tables: DataTables) -> void:
 	_check(int(s.resources["wood"]) <= int(caps["wood"]), "le plafond de stockage est ignoré")
 	_check(int(granted.get("wood", 0)) < 999999, "le butin annoncé ignore le plafond")
 
-	# Production : une heure de scierie doit rapporter quelque chose.
+	# Production : une heure de scierie doit remplir la réserve du bâtiment,
+	# et la récolte doit la transférer au trésor.
 	var s2 := PlayerState.create_new(tables)
 	s2.resources = {"wood": 0, "stone": 0, "iron": 0, "gold": 0, "essence": 0}
-	var gains := Economy.tick(s2, tables, 3600.0)
-	_check(int(gains.get("wood", 0)) > 0, "aucune production sur une heure")
+	Economy.tick(s2, tables, 3600.0)
+	var waiting := Economy.pending_summary(s2)
+	_check(int(waiting.get("wood", 0)) > 0, "aucune production sur une heure")
+	_check(int(s2.resources["wood"]) == 0, "la production a été créditée sans récolte")
+	var gains := Economy.collect_all(s2, tables)
+	_check(int(gains.get("wood", 0)) > 0, "la récolte ne rapporte rien")
+	_check(int(s2.resources["wood"]) > 0, "le trésor n'a pas été crédité")
+	# Ce qui dépasse le plafond de stockage RESTE au-dessus du bâtiment au lieu
+	# d'être perdu : le joueur ne doit jamais être puni d'avoir bien produit.
+	var caps2 := Economy.storage_caps(s2, tables)
+	var left := int(Economy.pending_summary(s2).get("wood", 0))
+	_check(left == 0 or int(s2.resources["wood"]) >= int(caps2["wood"]),
+			"la réserve garde du bois alors que l'entrepôt n'est pas plein")
+
+	# Plafond de réserve : un bâtiment n'accumule pas indéfiniment.
+	var s3 := PlayerState.create_new(tables)
+	Economy.tick(s3, tables, 60.0)
+	var after_1m := int(Economy.pending_summary(s3).get("wood", 0))
+	Economy.tick(s3, tables, 1800.0)
+	var after_31m := int(Economy.pending_summary(s3).get("wood", 0))
+	_check(after_31m > after_1m, "la réserve ne monte plus du tout")
+	var s5 := PlayerState.create_new(tables)
+	Economy.tick(s5, tables, 86400.0)
+	var after_day := int(Economy.pending_summary(s5).get("wood", 0))
+	var per_min := float(Economy.production_per_minute(s5, tables).get("wood", 0))
+	_check(float(after_day) <= per_min * Tycoon.pending_capacity_minutes(s5) + 2.0,
+			"la réserve dépasse son plafond après 24 h")
+	_check(after_day > after_31m, "une journée d'absence ne rapporte pas plus qu'une demi-heure")
 
 	var missing := Economy.missing_for(s, {"iron": 30})
 	_eq(int(missing.get("iron", 0)), 30, "calcul du manque")
@@ -438,3 +467,93 @@ func test_foreman(tables: DataTables) -> void:
 	# Aucun bâtiment ne doit dépasser le niveau du Bastion.
 	for step: Dictionary in plan:
 		_check(int(step["to_level"]) <= s.bastion_level(), "amélioration au-delà du Bastion")
+
+
+func test_tycoon(tables: DataTables) -> void:
+	var s := PlayerState.create_new(tables)
+
+	# Coûts exponentiels : c'est ce qui crée la boucle « encore un niveau ».
+	var c1 := Tycoon.cost_of(s, "yield")
+	s.upgrades["yield"] = 5
+	var c6 := Tycoon.cost_of(s, "yield")
+	_check(c6 > c1 * 5, "les coûts d'amélioration ne montent pas assez")
+	_check(Tycoon.production_multiplier(s) > 1.5, "le multiplicateur de production ne suit pas")
+
+	# Achat : refusé sans or, accepté avec, et l'or est bien débité.
+	s.upgrades = {}
+	s.resources["gold"] = 0
+	_check(not Tycoon.can_buy(s, "yield"), "achat autorisé sans or")
+	s.resources["gold"] = 100000
+	var before := int(s.resources["gold"])
+	_check(Tycoon.buy(s, "yield"), "achat refusé avec 100k d'or")
+	_check(int(s.resources["gold"]) < before, "l'or n'a pas été débité")
+	_check(Tycoon.level_of(s, "yield") == 1, "le niveau n'a pas monté")
+
+	# Plafond respecté.
+	s.upgrades["auto"] = int(Tycoon.UPGRADES["auto"]["max"])
+	_check(Tycoon.is_maxed(s, "auto"), "le plafond n'est pas détecté")
+	_check(not Tycoon.can_buy(s, "auto"), "achat au-delà du plafond")
+	_check(Tycoon.auto_collect_interval(s) > 0.0, "la récolte auto reste inactive au max")
+
+	# Les multiplicateurs doivent réellement changer la production.
+	var s2 := PlayerState.create_new(tables)
+	Economy.tick(s2, tables, 600.0)
+	var base_prod := int(Economy.pending_summary(s2).get("wood", 0))
+	var s3 := PlayerState.create_new(tables)
+	s3.upgrades["yield"] = 10
+	Economy.tick(s3, tables, 600.0)
+	var boosted := int(Economy.pending_summary(s3).get("wood", 0))
+	_check(boosted > base_prod, "le multiplicateur n'affecte pas la production")
+
+	# Rebirth : verrouillé trop tôt, puis conserve ce qu'il doit conserver.
+	var s4 := PlayerState.create_new(tables)
+	_check(not Tycoon.can_prestige(s4), "renaissance possible dès le départ")
+	_check(not Tycoon.prestige_blockers(s4).is_empty(), "aucune raison donnée au blocage")
+	s4.set_bastion_level(12)
+	s4.stats["total_earned"] = 5000000
+	s4.campaign_stars[3] = 3
+	s4.trials_done[5] = 1
+	s4.upgrades["yield"] = 7
+	s4.resources["gold"] = 99999
+	_check(Tycoon.can_prestige(s4), "renaissance refusée alors que tout est réuni")
+	var pts := Tycoon.apply_prestige(s4, tables)
+	_check(pts > 0, "aucun point accordé")
+	_check(s4.prestige_points == pts, "points non enregistrés")
+	_check(s4.stars_for(3) == 3, "la campagne a été perdue au rebirth")
+	_check(s4.trials_done.has(5), "les Épreuves ont été perdues au rebirth")
+	_check(Tycoon.level_of(s4, "yield") == 0, "les améliorations n'ont pas été remises à zéro")
+	_check(s4.bastion_level() == 1, "le Bastion n'est pas reparti de zéro")
+	_check(Tycoon.prestige_multiplier(s4) > 1.0, "le bonus permanent n'est pas appliqué")
+	_check(int(s4.resources["gold"]) < 99999, "les ressources n'ont pas été remises à zéro")
+
+
+func test_advisor(tables: DataTables) -> void:
+	## La promesse du jeu : quel que soit l'état, il y a toujours une action
+	## proposée. Un joueur ne doit jamais se retrouver à devoir attendre.
+	var cases: Array[Dictionary] = []
+
+	var fresh := PlayerState.create_new(tables)
+	cases.append({"name": "partie neuve", "state": fresh})
+
+	var broke := PlayerState.create_new(tables)
+	broke.resources = {"wood": 0, "stone": 0, "iron": 0, "gold": 0, "essence": 0}
+	broke.army = {}
+	cases.append({"name": "sans rien", "state": broke})
+
+	var full := PlayerState.create_new(tables)
+	for res: String in Economy.storage_caps(full, tables).keys():
+		full.resources[res] = int(Economy.storage_caps(full, tables)[res])
+	cases.append({"name": "entrepôts pleins", "state": full})
+
+	var late := PlayerState.create_new(tables)
+	late.set_bastion_level(22)
+	for i in range(30):
+		late.campaign_stars[i] = 3
+	cases.append({"name": "fin de partie", "state": late})
+
+	for c: Dictionary in cases:
+		var st: PlayerState = c["state"]
+		_check(not Advisor.is_player_stuck(st, tables),
+				"aucune action proposée — %s" % String(c["name"]))
+		var best := Advisor.best(st, tables)
+		_check(not String(best["text"]).is_empty(), "conseil vide — %s" % String(c["name"]))

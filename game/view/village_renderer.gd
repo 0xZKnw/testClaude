@@ -19,6 +19,7 @@ var _base_xform: Dictionary = {}    # uid -> Transform3D au repos
 var _anim: Dictionary = {}          # uid -> temps écoulé
 var _hidden: Dictionary = {}        # uid -> true (détruit en combat)
 var _ground: MeshInstance3D
+var _water: MeshInstance3D
 var _selection: MeshInstance3D
 var _dust: Array[MeshInstance3D] = []
 var _dust_cursor := 0
@@ -41,15 +42,23 @@ func setup(v: Village, t: DataTables) -> void:
 
 func _build_ground_placeholder() -> void:
 	_ground = MeshInstance3D.new()
-	_ground.material_override = Palette.material()
+	# Terrain : cel-shading sans contour. Un trait autour de chaque tuile
+	# transformerait le sol en papier millimétré.
+	_ground.material_override = Palette.material_flat()
 	_ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_ground)
+
+	_water = MeshInstance3D.new()
+	_water.material_override = Palette.water_material()
+	_water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_water)
 
 
 func _rebuild_ground() -> void:
 	if village == null:
 		return
 	_ground.mesh = BuildingMesh.make_ground(village.width, village.height, 1337)
+	_water.mesh = BuildingMesh.make_water(village.width, village.height)
 
 
 # ----------------------------------------------------------------- bâtiments
@@ -59,8 +68,10 @@ func rebuild() -> void:
 	## qui est rare (construction, amélioration, vente) — le coût est négligeable
 	## comparé à une gestion incrémentale bien plus fragile.
 	for key: Variant in _groups.keys():
-		var mmi: MultiMeshInstance3D = _groups[key]["mmi"]
-		mmi.queue_free()
+		var g: Dictionary = _groups[key]
+		(g["mmi"] as MultiMeshInstance3D).queue_free()
+		if g.has("outline"):
+			(g["outline"] as MultiMeshInstance3D).queue_free()
 	_groups.clear()
 	_slot.clear()
 	_base_xform.clear()
@@ -73,17 +84,18 @@ func rebuild() -> void:
 		if d.is_empty():
 			continue
 		var tier := BuildingMesh.tier_for_level(int(b["level"]))
-		var key := "%s|%d|%d|%s" % [d["shape"], int(b["size"]), tier, d["color"]]
+		var key := "%s|%d|%d|%s|%s" % [d["shape"], int(b["size"]), tier, d["color"], b["type"]]
 		if not by_key.has(key):
 			by_key[key] = {"shape": String(d["shape"]), "size": int(b["size"]),
-					"level": int(b["level"]), "color": String(d["color"]), "items": []}
+					"level": int(b["level"]), "color": String(d["color"]),
+					"id": String(b["type"]), "items": []}
 		by_key[key]["items"].append(b)
 
 	for key: String in by_key.keys():
 		var g: Dictionary = by_key[key]
 		var items: Array = g["items"]
 		var mesh := BuildingMesh.get_mesh(String(g["shape"]), int(g["size"]),
-				int(g["level"]), String(g["color"]))
+				int(g["level"]), String(g["color"]), String(g["id"]))
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.mesh = mesh
@@ -92,6 +104,16 @@ func rebuild() -> void:
 		mmi.multimesh = mm
 		mmi.material_override = Palette.material()
 		add_child(mmi)
+
+		# Contour : un second MultiMeshInstance qui PARTAGE la même ressource
+		# MultiMesh. Les transformations restent donc synchronisées sans une
+		# ligne de code, et l'on n'a pas à se reposer sur `next_pass`, qui ne
+		# s'applique pas aux instances dans le renderer Compatibility.
+		var outline := MultiMeshInstance3D.new()
+		outline.multimesh = mm
+		outline.material_override = Palette.outline_material()
+		outline.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(outline)
 		var uids: Array[int] = []
 		for i in range(items.size()):
 			var b: Dictionary = items[i]
@@ -104,7 +126,7 @@ func rebuild() -> void:
 				mm.set_instance_transform(i, xf)
 			_slot[uid] = {"key": key, "index": i}
 			uids.append(uid)
-		_groups[key] = {"mmi": mmi, "uids": uids}
+		_groups[key] = {"mmi": mmi, "outline": outline, "uids": uids}
 
 
 func _transform_for(b: Dictionary) -> Transform3D:

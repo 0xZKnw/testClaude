@@ -18,3 +18,16 @@ tesla,Tour a foudre,defense,2,15,200,300,180,0,-,0,-,0,500,70,4.5,12,tower,essen
 wall,Mur,wall,1,15,0,25,0,0,-,0,-,0,450,0,0,3,wall,stone,25,25,300
 tree,Arbre,deco,1,1,5,0,0,0,-,0,-,0,60,0,0,1,tree,leaf,20,10,100
 statue,Statue,deco,2,5,0,150,40,0,-,0,-,0,300,0,0,7,statue,white,1,1,4
+lumber_camp,Camp de bucherons,production,2,15,45,15,0,0,wood,70,-,0,260,0,0,3,tent,wood_dark,2,4,7
+windmill,Moulin a vent,production,3,15,220,140,30,0,gold,150,-,0,420,0,0,7,windmill,roof_teal,1,3,4
+orchard,Verger,production,3,15,130,40,0,0,gold,70,-,0,330,0,0,5,tent,leaf,2,4,6
+gem_mine,Mine de gemmes,production,3,15,600,500,300,0,essence,4,-,0,560,0,0,12,mine,essence,1,2,3
+market,Marche,production,4,15,400,260,120,0,gold,260,-,0,520,0,0,10,market,roof_orange,1,2,3
+granary,Grenier,storage,3,15,90,70,0,0,-,0,wood|stone|iron,700,480,0,0,4,store,roof_orange,1,3,5
+temple,Temple,special,3,15,700,900,400,0,-,0,-,0,700,0,0,14,temple,roof_purple,1,0,1
+fountain,Fontaine,deco,2,5,0,90,0,0,-,0,-,0,240,0,0,5,fountain,water,1,2,4
+ballista,Baliste,defense,2,15,140,110,90,0,-,0,-,0,340,46,8.0,7,cannon,wood_dark,1,4,7
+bomb_tower,Tour a bombes,defense,2,15,260,320,200,0,-,0,-,0,520,62,5.0,10,tower,roof_purple,1,3,5
+siege_works,Atelier de siege,military,4,15,380,300,220,0,-,0,-,0,540,0,0,9,workshop,copper,1,1,2
+elite_camp,Camp d elite,military,3,15,520,380,300,0,-,0,-,0,560,0,0,12,workshop,roof_purple,1,2,3
+wonder,Merveille,special,4,15,4000,5000,2500,0,-,0,-,0,1600,0,0,20,temple,gold,1,0,1

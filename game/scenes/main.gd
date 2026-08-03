@@ -16,6 +16,9 @@ var ui_layer: CanvasLayer
 var hud: HUD
 var raid_hud: RaidHUD
 var overlay: Control
+var village_overlay: VillageOverlay
+var combat_overlay: CombatOverlay
+var quest_bar: QuestBar
 
 var screen: int = Screen.VILLAGE
 
@@ -36,17 +39,17 @@ func _build_world() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color("4e86bd")
-	sky_mat.sky_horizon_color = Color("bcd6e6")
-	sky_mat.ground_bottom_color = Color("53705c")
-	sky_mat.ground_horizon_color = Color("9ab08f")
+	sky_mat.sky_top_color = Color("5b8fc9")
+	sky_mat.sky_horizon_color = Color("cfe4f0")
+	sky_mat.ground_bottom_color = Color("6b6e63")
+	sky_mat.ground_horizon_color = Color("aeb3a5")
 	sky_mat.sun_angle_max = 24.0
 	var sky := Sky.new()
 	sky.sky_material = sky_mat
 	e.background_mode = Environment.BG_SKY
 	e.sky = sky
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	e.ambient_light_energy = 0.5
+	e.ambient_light_energy = 0.55
 	# Brouillard volontairement très léger : il adoucit l'horizon, il ne doit
 	# pas délaver le village. Trop dense, il tue la saturation qui fait tout
 	# l'intérêt du low poly.
@@ -56,14 +59,14 @@ func _build_world() -> void:
 	e.fog_sky_affect = 0.2
 	e.tonemap_mode = Environment.TONE_MAPPER_LINEAR
 	e.adjustment_enabled = true
-	e.adjustment_saturation = 1.18
-	e.adjustment_contrast = 1.05
+	e.adjustment_saturation = 1.0
+	e.adjustment_contrast = 1.02
 	env.environment = e
 	world.add_child(env)
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52, -128, 0)
-	sun.light_energy = 1.5
+	sun.light_energy = 1.45
 	sun.light_color = Color("fff2dc")
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 60.0
@@ -94,7 +97,21 @@ func _build_hud() -> void:
 	hud.army_pressed.connect(_open_army)
 	hud.attack_pressed.connect(_open_campaign)
 	hud.bastion_pressed.connect(_open_bastion)
+	hud.shop_pressed.connect(_open_shop)
+	hud.collect_pressed.connect(func() -> void: Game.collect_all())
 	hud.hint_pressed.connect(_on_hint)
+
+	quest_bar = QuestBar.new()
+	ui_layer.add_child(quest_bar)
+	quest_bar.claim_pressed.connect(func() -> void:
+		Game.claim_quest()
+		hud.refresh())
+	quest_bar.details_pressed.connect(_open_quests)
+
+	# Badges de récolte : posés sous le HUD pour ne jamais masquer les boutons.
+	village_overlay = VillageOverlay.new(camera)
+	ui_layer.add_child(village_overlay)
+	ui_layer.move_child(village_overlay, 0)
 
 
 # ------------------------------------------------------------------- entrées
@@ -117,6 +134,8 @@ func _on_hint(action: String) -> void:
 		"army": _open_army()
 		"attack": _open_campaign()
 		"bastion": _open_bastion()
+		"shop": _open_shop()
+		"collect": Game.collect_all()
 
 
 # ------------------------------------------------------------------ panneaux
@@ -150,6 +169,22 @@ func _open_bastion() -> void:
 		hud.refresh()
 		village_view.refresh())
 	p.trial_requested.connect(_start_trial)
+	_show_overlay(p)
+
+
+func _open_quests() -> void:
+	var p := QuestPanel.new()
+	p.claimed.connect(func() -> void:
+		hud.refresh()
+		quest_bar.refresh())
+	_show_overlay(p)
+
+
+func _open_shop() -> void:
+	var p := ShopPanel.new()
+	p.changed.connect(func() -> void:
+		hud.refresh()
+		village_view.refresh())
 	_show_overlay(p)
 
 
@@ -197,6 +232,8 @@ func _enter_raid() -> void:
 	village_view.cancel_mode()
 	village_view.visible = false
 	hud.visible = false
+	village_overlay.visible = false
+	quest_bar.visible = false
 
 	raid_view = RaidView.new()
 	world.add_child(raid_view)
@@ -213,6 +250,9 @@ func _enter_raid() -> void:
 	var title := String(info["name"])
 	if bool(info.get("is_trial", false)):
 		title = "Épreuve — %s" % String(info["name"])
+	combat_overlay = CombatOverlay.new(raid_view, camera)
+	ui_layer.add_child(combat_overlay)
+
 	raid_hud = RaidHUD.new(title, raid_view)
 	ui_layer.add_child(raid_hud)
 	raid_hud.finish_pressed.connect(func() -> void: raid_view.force_finish())
@@ -261,9 +301,15 @@ func _leave_raid() -> void:
 	if raid_view != null:
 		raid_view.queue_free()
 		raid_view = null
+	if combat_overlay != null:
+		combat_overlay.queue_free()
+		combat_overlay = null
 	screen = Screen.VILLAGE
 	village_view.visible = true
 	hud.visible = true
+	village_overlay.visible = true
+	quest_bar.visible = true
+	quest_bar.refresh()
 	var v := Game.state.village
 	camera.setup_bounds(v.width, v.height)
 	village_view.refresh()

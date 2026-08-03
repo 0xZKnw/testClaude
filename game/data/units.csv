@@ -7,3 +7,7 @@ ram,Belier,5,100,60,400,60,1.2,1.6,building,6,ram,wood_dark
 knight,Chevalier,4,150,70,300,45,3.0,0.9,any,8,soldier,iron
 crossbow,Arbaletrier,2,90,50,90,42,2.0,7.0,any,10,soldier,roof_blue
 healer,Guerisseur,4,140,60,120,-38,2.0,5.0,ally,12,soldier,white
+scout,Eclaireur,1,20,0,45,10,3.6,0.8,building,3,soldier,leaf
+pyromancer,Pyromancien,3,180,90,80,70,1.9,5.5,building,11,soldier,roof_orange
+shieldbearer,Porte-bouclier,6,200,110,780,20,1.4,0.9,defense,14,soldier,copper
+catapult,Catapulte,7,260,180,520,110,0.9,7.5,building,16,ram,iron

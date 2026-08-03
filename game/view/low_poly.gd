@@ -15,11 +15,25 @@ var verts := PackedVector3Array()
 var normals := PackedVector3Array()
 var colors := PackedColorArray()
 
+## Occlusion ambiante cuite dans les sommets : les parties basses des volumes
+## sont assombries. C'est ce qui empêche un bâtiment low poly de ressembler à
+## un empilement de cubes en plastique, et ça ne coûte rien à l'exécution.
+var ao_strength := 1.0
+var ao_height := 1.5      # hauteur à laquelle l'assombrissement s'annule
+var ao_floor := 0.58      # facteur au niveau du sol
+
 
 func clear() -> void:
 	verts.clear()
 	normals.clear()
 	colors.clear()
+
+
+func _ao(y: float) -> float:
+	if ao_strength <= 0.0:
+		return 1.0
+	var k := clampf(y / ao_height, 0.0, 1.0)
+	return lerpf(lerpf(1.0, ao_floor, ao_strength), 1.0, k)
 
 
 func _tri(a: Vector3, b: Vector3, c: Vector3, col: Color) -> void:
@@ -32,9 +46,17 @@ func _tri(a: Vector3, b: Vector3, c: Vector3, col: Color) -> void:
 	if n.length_squared() < 0.0000001:
 		return
 	n = n.normalized()
+	# Les couleurs sont écrites en sRGB dans la palette, mais Godot interprète
+	# les couleurs de sommets comme du LINÉAIRE. Sans cette conversion, les
+	# teintes ressortent bien plus claires et saturées que celles choisies —
+	# c'est ce qui donnait au jeu son aspect « fluo », et pourquoi assombrir la
+	# palette ne changeait presque rien.
+	var lin := col.srgb_to_linear()
 	verts.push_back(a); verts.push_back(b); verts.push_back(c)
 	normals.push_back(n); normals.push_back(n); normals.push_back(n)
-	colors.push_back(col); colors.push_back(col); colors.push_back(col)
+	colors.push_back(lin * _ao(a.y))
+	colors.push_back(lin * _ao(b.y))
+	colors.push_back(lin * _ao(c.y))
 
 
 func _quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, col: Color) -> void:

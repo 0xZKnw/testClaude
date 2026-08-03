@@ -13,6 +13,7 @@ const OFFLINE_DECAY_AFTER_H := 6  # rendement dégressif au-delà de 6 h hors-li
 
 static func storage_caps(state: PlayerState, tables: DataTables) -> Dictionary:
 	var caps := {"wood": 0, "stone": 0, "iron": 0, "gold": 0, "essence": 999999999}
+	var mult := Tycoon.storage_multiplier(state)
 	for b: Dictionary in state.village.buildings:
 		var d: Dictionary = tables.buildings.get(b["type"], {})
 		if d.is_empty():
@@ -23,18 +24,32 @@ static func storage_caps(state: PlayerState, tables: DataTables) -> Dictionary:
 		var amount := tables.building_storage(b["type"], int(b["level"]))
 		for res: String in store_res:
 			caps[res] = int(caps.get(res, 0)) + amount
+	for res: String in ["wood", "stone", "iron", "gold"]:
+		caps[res] = int(float(caps[res]) * mult)
 	return caps
+
+
+static func building_output(state: PlayerState, tables: DataTables, b: Dictionary) -> Dictionary:
+	## Production d'UN bâtiment, par minute, tous multiplicateurs appliqués.
+	## C'est l'unité de base de la couche tycoon : chaque bâtiment accumule
+	## sa propre réserve, visible au-dessus de lui.
+	var d: Dictionary = tables.buildings.get(b["type"], {})
+	if d.is_empty() or String(d["prod_res"]).is_empty():
+		return {}
+	var res: String = d["prod_res"]
+	var rate := float(tables.building_production(b["type"], int(b["level"])))
+	rate = rate * float(_adjacency_bonus(state, b)) / 100.0
+	rate = rate * Tycoon.production_multiplier(state)
+	if rate <= 0.0:
+		return {}
+	return {res: rate}
 
 
 static func production_per_minute(state: PlayerState, tables: DataTables) -> Dictionary:
 	var prod := {"wood": 0, "stone": 0, "iron": 0, "gold": 0, "essence": 0}
 	for b: Dictionary in state.village.buildings:
-		var d: Dictionary = tables.buildings.get(b["type"], {})
-		if d.is_empty() or String(d["prod_res"]).is_empty():
-			continue
-		var res: String = d["prod_res"]
-		var rate := tables.building_production(b["type"], int(b["level"]))
-		prod[res] = int(prod.get(res, 0)) + int(rate * _adjacency_bonus(state, b) / 100)
+		for res: String in building_output(state, tables, b).keys():
+			prod[res] = int(prod.get(res, 0)) + int(building_output(state, tables, b)[res])
 	return prod
 
 
@@ -125,31 +140,83 @@ static func grant(state: PlayerState, tables: DataTables, gains: Dictionary) -> 
 		if added > 0:
 			state.resources[res] = cur + added
 			actual[res] = added
+			# Total gagné sur toute la partie : c'est lui qui détermine les
+			# points de rebirth (docs — couche tycoon).
+			state.stats["total_earned"] = int(state.stats.get("total_earned", 0)) + added
 	return actual
 
 
-static func tick(state: PlayerState, tables: DataTables, delta_seconds: float) -> Dictionary:
-	## Production continue. `delta_seconds` peut être un pas de jeu (0.25 s) ou
-	## une durée hors-ligne (jusqu'à 24 h). Retourne ce qui a été crédité.
+static func tick(state: PlayerState, tables: DataTables, delta_seconds: float) -> void:
+	## La production ne va PAS directement au trésor : elle s'accumule au-dessus
+	## de chaque bâtiment, jusqu'à un plafond, en attendant d'être ramassée.
+	##
+	## C'est le cœur de la greffe tycoon. Deux conséquences voulues :
+	##  * le joueur a en permanence quelque chose à faire au doigt ;
+	##  * revenir après une pause offre une belle moisson à récolter, au lieu
+	##    d'un compteur qui a monté tout seul pendant son absence.
 	if delta_seconds <= 0.0:
-		return {}
+		return
 	var seconds := minf(delta_seconds, float(RESERVE_MAX_HOURS * 3600))
-	var efficiency := 1.0
 	var decay_start := float(OFFLINE_DECAY_AFTER_H * 3600)
 	if seconds > decay_start:
 		# Au-delà de 6 h : rendement dégressif, mais jamais nul.
-		var extra := seconds - decay_start
-		seconds = decay_start + extra * 0.35
-	var prod := production_per_minute(state, tables)
+		seconds = decay_start + (seconds - decay_start) * 0.35
+
+	var cap_minutes := Tycoon.pending_capacity_minutes(state)
+	for b: Dictionary in state.village.buildings:
+		var out := building_output(state, tables, b)
+		if out.is_empty():
+			continue
+		var uid := int(b["uid"])
+		var slot: Dictionary = state.pending.get(uid, {})
+		for res: String in out.keys():
+			var per_min := float(out[res])
+			var cap := per_min * cap_minutes
+			var cur := float(slot.get(res, 0.0))
+			slot[res] = minf(cap, cur + per_min * seconds / 60.0)
+		state.pending[uid] = slot
+
+
+static func collect(state: PlayerState, tables: DataTables, uid: int) -> Dictionary:
+	## Ramasse la réserve d'un bâtiment. Retourne ce qui a réellement été
+	## crédité (les plafonds de stockage s'appliquent).
+	var slot: Dictionary = state.pending.get(uid, {})
+	if slot.is_empty():
+		return {}
 	var gains := {}
-	for res: String in prod.keys():
-		var per_sec := float(prod[res]) / 60.0 * efficiency
-		var raw := per_sec * seconds + float(state.accum.get(res, 0.0))
-		var whole := int(floor(raw))
-		state.accum[res] = raw - float(whole)
+	for res: String in slot.keys():
+		var whole := int(floor(float(slot[res])))
 		if whole > 0:
 			gains[res] = whole
-	return grant(state, tables, gains)
+	if gains.is_empty():
+		return {}
+	var granted := grant(state, tables, gains)
+	# On ne retire que ce qui a été effectivement encaissé : si l'entrepôt est
+	# plein, la réserve reste au-dessus du bâtiment au lieu d'être perdue.
+	for res: String in granted.keys():
+		slot[res] = maxf(0.0, float(slot[res]) - float(granted[res]))
+	state.pending[uid] = slot
+	return granted
+
+
+static func collect_all(state: PlayerState, tables: DataTables) -> Dictionary:
+	var total := {}
+	for uid: Variant in state.pending.keys():
+		var got := collect(state, tables, int(uid))
+		for res: String in got.keys():
+			total[res] = int(total.get(res, 0)) + int(got[res])
+	return total
+
+
+static func pending_summary(state: PlayerState) -> Dictionary:
+	var total := {}
+	for uid: Variant in state.pending.keys():
+		var slot: Dictionary = state.pending[uid]
+		for res: String in slot.keys():
+			var v := int(floor(float(slot[res])))
+			if v > 0:
+				total[res] = int(total.get(res, 0)) + v
+	return total
 
 
 static func upgrade_cost(tables: DataTables, type_id: String, current_level: int) -> Dictionary:

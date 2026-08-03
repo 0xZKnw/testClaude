@@ -10,6 +10,10 @@ signal village_changed
 signal bastion_upgraded(level: int)
 signal notice(text: String)
 signal army_changed
+signal pending_changed
+signal collected(uid: int, gains: Dictionary)
+signal prestiged(points: int)
+signal quest_changed
 
 const ECONOMY_STEP := 0.25
 const AUTOSAVE_STEP := 30.0
@@ -20,6 +24,7 @@ var raid_context: Dictionary = {}
 
 var _econ_accum := 0.0
 var _save_accum := 0.0
+var _auto_accum := 0.0
 var _session_start_unix := 0
 
 
@@ -59,9 +64,12 @@ func _apply_offline_progress() -> void:
 	var elapsed := maxi(0, now - state.last_seen_unix)
 	if elapsed < 30:
 		return
-	var gained := Economy.tick(state, tables, float(elapsed))
-	if not gained.is_empty():
-		emit_signal("notice", "Réserve du Régent : %s" % format_resources(gained))
+	# Rien n'est crédité automatiquement : la production d'absence attend au
+	# dessus des bâtiments. Revenir dans le jeu, c'est une moisson à ramasser.
+	Economy.tick(state, tables, float(elapsed))
+	var waiting := Economy.pending_summary(state)
+	if not waiting.is_empty():
+		emit_signal("notice", "Pendant ton absence : %s à ramasser" % format_resources(waiting))
 
 
 func _process(delta: float) -> void:
@@ -69,10 +77,22 @@ func _process(delta: float) -> void:
 		return
 	_econ_accum += delta
 	if _econ_accum >= ECONOMY_STEP:
-		var got := Economy.tick(state, tables, _econ_accum)
+		Economy.tick(state, tables, _econ_accum)
 		_econ_accum = 0.0
-		if not got.is_empty():
-			emit_signal("resources_changed")
+		emit_signal("pending_changed")
+
+	# Récolte automatique : une amélioration tycoon, pas un réglage par défaut.
+	# Le joueur commence en ramassant lui-même — c'est ce geste qui accroche —
+	# puis achète le confort quand la répétition devient une corvée.
+	var auto_interval := Tycoon.auto_collect_interval(state)
+	if auto_interval > 0.0:
+		_auto_accum += delta
+		if _auto_accum >= auto_interval:
+			_auto_accum = 0.0
+			var got := Economy.collect_all(state, tables)
+			if not got.is_empty():
+				emit_signal("resources_changed")
+				emit_signal("pending_changed")
 	_save_accum += delta
 	if _save_accum >= AUTOSAVE_STEP:
 		_save_accum = 0.0
@@ -269,7 +289,67 @@ func foreman_apply() -> int:
 # -------------------------------------------------------------------- armée
 
 func army_cap() -> int:
-	return Progression.army_housing(state.bastion_level())
+	return Progression.army_housing(state.bastion_level()) + Tycoon.army_bonus(state)
+
+
+# ------------------------------------------------------------------- récolte
+
+func collect(uid: int) -> Dictionary:
+	var got := Economy.collect(state, tables, uid)
+	if not got.is_empty():
+		state.stats["collected"] = int(state.stats.get("collected", 0)) + 1
+		emit_signal("resources_changed")
+		emit_signal("pending_changed")
+		emit_signal("collected", uid, got)
+	return got
+
+
+func collect_all() -> Dictionary:
+	var got := Economy.collect_all(state, tables)
+	if not got.is_empty():
+		emit_signal("resources_changed")
+		emit_signal("pending_changed")
+		emit_signal("notice", "Récolté : %s" % format_resources(got))
+	return got
+
+
+func pending_of(uid: int) -> int:
+	return state.pending_total(uid)
+
+
+# ------------------------------------------------------------------- quêtes
+
+func claim_quest() -> Dictionary:
+	var reward := Quests.claim(state, tables)
+	if not reward.is_empty():
+		emit_signal("resources_changed")
+		emit_signal("quest_changed")
+		emit_signal("notice", "Quête terminée : %s" % format_resources(reward))
+		save_now()
+	return reward
+
+
+# ------------------------------------------------------------------- tycoon
+
+func buy_upgrade(id: String) -> bool:
+	if Tycoon.buy(state, id):
+		emit_signal("resources_changed")
+		emit_signal("village_changed")
+		save_now()
+		return true
+	emit_signal("notice", "Or insuffisant")
+	return false
+
+
+func do_prestige() -> int:
+	var gained := Tycoon.apply_prestige(state, tables)
+	if gained > 0:
+		emit_signal("resources_changed")
+		emit_signal("village_changed")
+		emit_signal("army_changed")
+		emit_signal("prestiged", gained)
+		save_now()
+	return gained
 
 
 func army_used() -> int:
@@ -419,7 +499,11 @@ func finish_raid(result: Dictionary, used_units: Dictionary) -> Dictionary:
 			summary["new_best"] = true
 		if stars > 0:
 			state.stats["raids_won"] = int(state.stats.get("raids_won", 0)) + 1
-		var granted := Economy.grant(state, tables, result["loot"])
+		var boosted := {}
+		var loot_mult := Tycoon.loot_multiplier(state)
+		for res: String in (result["loot"] as Dictionary).keys():
+			boosted[res] = int(float(result["loot"][res]) * loot_mult)
+		var granted := Economy.grant(state, tables, boosted)
 		summary["loot"] = granted
 		var total := 0
 		for v: Variant in granted.values():
@@ -440,6 +524,7 @@ func upgrade_bastion() -> bool:
 		var lvl := state.bastion_level()
 		emit_signal("resources_changed")
 		emit_signal("village_changed")
+		emit_signal("quest_changed")
 		emit_signal("bastion_upgraded", lvl)
 		save_now()
 		return true

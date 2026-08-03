@@ -8,7 +8,10 @@ const PITCH_DEG := 42.0
 const MIN_DIST := 14.0
 const MAX_DIST := 78.0
 const DEFAULT_DIST := 44.0
-const ROTATE_THRESHOLD := 0.02
+const ROTATE_THRESHOLD := 0.06
+const PAN_SENSITIVITY := 0.00105
+const PINCH_SENSITIVITY := 0.55
+const ROTATE_SENSITIVITY := 0.45
 
 @export var bounds_min := Vector2(0, 0)
 @export var bounds_max := Vector2(44, 44)
@@ -121,16 +124,18 @@ func handle_input(event: InputEvent) -> bool:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
-			_zoom(-2.0)
+			_zoom(-distance * 0.08)
 			return true
 		if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
-			_zoom(2.0)
+			_zoom(distance * 0.08)
 			return true
 	return false
 
 
 func _pan(relative: Vector2) -> void:
-	var scale_factor := distance * 0.0022
+	# Sensibilité volontairement basse : sur mobile, un pan trop nerveux rend
+	# le placement de bâtiment pénible et donne le mal de mer en session longue.
+	var scale_factor := distance * PAN_SENSITIVITY
 	var right := Vector3(cos(rotation.y), 0.0, -sin(rotation.y))
 	var forward := Vector3(sin(rotation.y), 0.0, cos(rotation.y))
 	target -= right * relative.x * scale_factor
@@ -159,10 +164,12 @@ func _pinch_and_rotate() -> void:
 	var ang := (pts[1] - pts[0]).angle()
 	if _last_pinch_dist > 0.0:
 		var ratio := _last_pinch_dist / maxf(d, 1.0)
-		distance = clampf(distance * ratio, MIN_DIST, MAX_DIST)
+		# On amortit le ratio : un pincement brut fait bondir le zoom.
+		distance = clampf(distance * (1.0 + (ratio - 1.0) * PINCH_SENSITIVITY),
+				MIN_DIST, MAX_DIST)
 		var delta_ang := angle_difference(_last_pinch_angle, ang)
 		if absf(delta_ang) > ROTATE_THRESHOLD:
-			yaw_deg -= rad_to_deg(delta_ang)
+			yaw_deg -= rad_to_deg(delta_ang) * ROTATE_SENSITIVITY
 	_last_pinch_dist = d
 	_last_pinch_angle = ang
 	_apply()

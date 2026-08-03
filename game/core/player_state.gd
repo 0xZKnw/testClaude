@@ -11,9 +11,14 @@ var army: Dictionary = {}                 # unit_id -> nombre en stock
 var campaign_stars: Dictionary = {}       # index de niveau (int) -> étoiles (0..3)
 var trials_done: Dictionary = {}          # niveau de Bastion (int) -> true
 var accum: Dictionary = {}                # accumulation fractionnaire de production
+var pending: Dictionary = {}              # uid -> {ressource: quantité en attente de récolte}
+var upgrades: Dictionary = {}             # améliorations tycoon : id -> niveau
+var quests_claimed: Dictionary = {}       # id de quête -> 1
+var prestige_points: int = 0
 var stats: Dictionary = {
 	"raids_won": 0, "raids_played": 0, "buildings_built": 0,
 	"upgrades": 0, "playtime_sec": 0, "loot_total": 0,
+	"total_earned": 0, "collected": 0, "prestiges": 0,
 }
 var last_seen_unix: int = 0
 
@@ -82,6 +87,24 @@ func levels_cleared() -> int:
 	return n
 
 
+func pending_of(uid: int) -> Dictionary:
+	return pending.get(uid, {})
+
+
+func pending_total(uid: int) -> int:
+	var n := 0
+	for v: Variant in pending_of(uid).values():
+		n += int(v)
+	return n
+
+
+func has_anything_pending() -> bool:
+	for uid: Variant in pending.keys():
+		if pending_total(int(uid)) > 0:
+			return true
+	return false
+
+
 func army_size(tables: DataTables) -> int:
 	var n := 0
 	for id: String in army.keys():
@@ -102,6 +125,10 @@ func to_dict() -> Dictionary:
 		"campaign_stars": campaign_stars,
 		"trials_done": trials_done,
 		"accum": accum,
+		"pending": pending,
+		"upgrades": upgrades,
+		"quests_claimed": quests_claimed,
+		"prestige_points": prestige_points,
 		"stats": stats,
 		"last_seen_unix": last_seen_unix,
 	}
@@ -116,7 +143,13 @@ static func from_dict(d: Dictionary) -> PlayerState:
 	s.campaign_stars = _int_key_dict(d.get("campaign_stars", {}))
 	s.trials_done = _int_key_dict(d.get("trials_done", {}))
 	s.accum = d.get("accum", {})
-	s.stats = d.get("stats", s.stats)
+	s.pending = _pending_from_dict(d.get("pending", {}))
+	s.upgrades = _int_dict(d.get("upgrades", {}))
+	s.quests_claimed = _int_dict(d.get("quests_claimed", {}))
+	s.prestige_points = int(d.get("prestige_points", 0))
+	var loaded_stats: Dictionary = d.get("stats", {})
+	for k: Variant in loaded_stats.keys():
+		s.stats[String(k)] = int(loaded_stats[k])
 	s.last_seen_unix = int(d.get("last_seen_unix", 0))
 	return s
 
@@ -126,6 +159,18 @@ static func _int_dict(src: Dictionary) -> Dictionary:
 	var out := {}
 	for k: Variant in src.keys():
 		out[String(k)] = int(src[k])
+	return out
+
+
+static func _pending_from_dict(src: Dictionary) -> Dictionary:
+	## JSON transforme les clés entières en chaînes : on les restaure.
+	var out := {}
+	for k: Variant in src.keys():
+		var inner: Dictionary = src[k]
+		var conv := {}
+		for res: Variant in inner.keys():
+			conv[String(res)] = float(inner[res])
+		out[int(String(k))] = conv
 	return out
 
 
