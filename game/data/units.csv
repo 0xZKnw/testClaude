@@ -1,0 +1,9 @@
+id,name,housing,c_gold,c_iron,hp,dps,speed,range,target_pref,unlock,shape,color
+militia,Milicien,1,30,0,90,14,2.4,0.8,any,1,soldier,roof_red
+archer,Archer,1,40,10,55,18,2.2,6.0,any,2,soldier,roof_green
+sapper,Sapeur,2,60,30,70,180,2.6,0.9,wall,4,soldier,wood
+guardian,Gardien,5,120,40,520,16,1.6,0.9,defense,5,soldier,stone
+ram,Belier,5,100,60,400,60,1.2,1.6,building,6,ram,wood_dark
+knight,Chevalier,4,150,70,300,45,3.0,0.9,any,8,soldier,iron
+crossbow,Arbaletrier,2,90,50,90,42,2.0,7.0,any,10,soldier,roof_blue
+healer,Guerisseur,4,140,60,120,-38,2.0,5.0,ally,12,soldier,white

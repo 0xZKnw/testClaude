@@ -1,0 +1,19 @@
+# Godot
+.godot/
+game/.godot/
+game/android/
+export_presets.cfg.bak
+
+# Builds
+build/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

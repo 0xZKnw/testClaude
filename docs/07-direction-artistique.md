@@ -89,13 +89,33 @@ Le choix technique et le choix esthétique sont **le même choix**. Le style low
 
 ## 8. Pipeline de production art
 
-1. **Modélisation** dans Blender. Un fichier `.blend` maître par catégorie.
-2. Script Python Blender qui **assigne les UV vers la palette** automatiquement à partir du nom du material (`MAT_wood_dark` → pixel [3,7]).
-3. Cuisson de l'**AO en vertex colors** via un second script.
-4. Export FBX batché vers `Assets/Art/`.
-5. Import Unity via un **AssetPostprocessor** qui applique automatiquement le material partagé, la compression et les settings.
+**Décision prise à l'implémentation : aucun asset 3D n'est embarqué.** Chaque
+bâtiment, unité et décor est assemblé par code (`view/low_poly.gd` et
+`view/building_mesh.gd`) à partir de primitives — boîtes, troncs de pyramide,
+toits, cylindres — avec la couleur écrite dans les sommets.
 
-**Le résultat** : ajouter un bâtiment au jeu = modéliser + lancer un script + glisser dans Unity. ~45 minutes par bâtiment une fois le pipeline en place. 46 bâtiments × 3 paliers visuels = 138 meshes ≈ 100 h de travail art. C'est le poste de coût art principal, et il est prévisible.
+Conséquences, toutes favorables à ce projet :
 
-### Achat vs production
-Les asset packs low poly de qualité existent (Synty, Kenney, KayKit). **Recommandation** : partir d'un pack de base pour le vertical slice (gain de 6 semaines), puis reconvertir progressivement vers la palette maison pour l'identité visuelle. Kenney est CC0, donc utilisable sans contrainte, y compris en prod.
+| | |
+|---|---|
+| Dépôt | quelques kilo-octets de géométrie au lieu de centaines de méga-octets |
+| Licences | aucune à gérer, aucun crédit à afficher |
+| Ajouter un bâtiment | écrire une fonction de ~10 lignes, pas ouvrir Blender |
+| Changer l'identité visuelle | modifier `view/palette.gd` |
+| Draw calls | un seul material pour tout le jeu |
+| Paliers visuels | une condition `if tier >= 2` au lieu d'un nouveau maillage |
+
+Le coût : le style est contraint à des formes primitives. Pour ce jeu, c'est
+exactement l'esthétique voulue, donc la contrainte ne coûte rien.
+
+**Si l'ambition visuelle grandit** (héros, boss, animations squelettées), la
+porte reste ouverte : passer par Blender pour ces objets précis, en gardant le
+même material à couleurs de sommets. Les packs low poly sous licence permissive
+(Kenney, CC0) restent une option pour accélérer.
+
+### Deux pièges rencontrés, à ne pas réintroduire
+1. **Sens des normales** — Godot attend un enroulement horaire pour les faces
+   avant. Une normale inversée laisse tout *visible* mais éteint l'éclairage
+   directionnel : la scène devient plate et sombre sans erreur ni avertissement.
+2. **Jonction mur/toit** — la face supérieure des murs affleure sous
+   l'avant-toit et dessine un liseré clair. Une corniche fine ferme le volume.

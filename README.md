@@ -3,7 +3,7 @@
 > Pitch en une phrase : un builder de village à la Clash of Clans où **rien ne se construit en attendant** — tout est instantané, et la seule vraie ressource, c'est le temps que tu passes à jouer.
 
 **Plateforme cible** : Android (APK/AAB) d'abord, iOS ensuite.
-**Moteur** : Unity 6 LTS + URP.
+**Moteur** : Godot 4.4 (voir docs/08 §1 pour le pourquoi).
 **Style** : low poly 3D coloré, palette-atlas, 60 fps sur téléphone milieu de gamme.
 **Objectif de rétention** : une session de 10h d'affilée doit être *possible et agréable*, pas une corvée.
 
@@ -60,4 +60,27 @@ Détail complet : [`docs/03-economie-et-progression.md`](docs/03-economie-et-pro
 Ce plan est écrit pour une **petite équipe (1 à 3 personnes) assistée par IA**, budget asset store modeste, sans éditeur. Si le contexte est différent (studio, budget, deadline imposée), la roadmap du doc 09 est celle qui bouge en premier — le design des docs 01→07 tient dans tous les cas.
 
 **Durée estimée jusqu'à un APK jouable et complet** : 7 à 9 mois solo, 4 à 5 mois à trois.
-**Premier build APK testable** : semaine 6 (vertical slice).
+
+---
+
+## Le jeu
+
+Le code vit dans [`game/`](game/) — projet Godot 4.4 jouable, avec sa propre
+[documentation d'exécution](game/README.md). L'état d'avancement réel, poste par
+poste, est dans [`ETAT.md`](ETAT.md).
+
+```bash
+godot --path game                                             # jouer
+godot --headless --path game --script res://tests/run_tests.gd  # tests
+```
+
+Chaque push déclenche `.github/workflows/android.yml`, qui lance les tests puis
+publie un **APK téléchargeable** dans les artefacts du run. Aucun secret à
+configurer.
+
+| Village | Village développé | Raid |
+|---|---|---|
+| ![](docs/captures/01_village.png) | ![](docs/captures/02_village_dense.png) | ![](docs/captures/03_raid.png) |
+
+Captures produites automatiquement par `tests/screenshot.tscn`, sans appareil
+ni écran.

@@ -1,163 +1,201 @@
 # 08 — Architecture technique
 
-## 1. Choix du moteur
+> Ce document décrit l'architecture **telle qu'implémentée** dans `game/`.
+> Les parties non encore construites sont signalées « à venir ».
 
-**Recommandation : Unity 6 LTS + URP.**
+## 1. Choix du moteur : Godot 4
 
-| Critère | Unity 6 | Godot 4.4 | Verdict |
-|---|---|---|---|
-| Export APK/AAB | Mature, signature, Play Console | Fonctionne, moins d'outillage | Unity |
-| Perf 3D mobile | URP mobile renderer, SRP Batcher, GPU instancing | Correct mais moins optimisé sur Vulkan mobile | Unity |
-| Écosystème (SDK pub, analytics, IAP) | Tout existe en natif | À bricoler | **Unity, largement** |
-| Assets low poly | Énorme catalogue | Limité | Unity |
-| Coût | Gratuit jusqu'à 200 k$ de CA | Gratuit total | Godot |
-| Taille du build | ~40 Mo de base | ~30 Mo | Godot |
+Le plan initial recommandait Unity. La décision a été renversée pour une raison
+concrète et vérifiable : **Unity ne peut pas produire d'APK en intégration
+continue sans identifiants de licence Unity** (secrets `UNITY_EMAIL`,
+`UNITY_PASSWORD`, `UNITY_LICENSE`). Godot n'a pas cette contrainte : la CI sort
+un APK dès le premier push, sans compte ni secret.
 
-Unity gagne sur ce qui coûte du temps (IAP, pubs, analytics, crash reporting, assets). Godot reste le plan B si la licence Unity devient un problème — l'architecture décrite ci-dessous est portable, car la logique de jeu est volontairement découplée du moteur.
+| Critère | Godot 4.4 | Unity 6 |
+|---|---|---|
+| APK en CI sans secret | **Oui** | Non — licence obligatoire |
+| Licence / redevances | Aucune (MIT) | Gratuit sous 200 k$ de CA |
+| Taille du moteur dans l'APK | ~30 Mo | ~40 Mo |
+| SDK pub / IAP / analytics | Plugins communautaires | Natif, plus mature |
+| Catalogue d'assets 3D | Limité | Énorme |
 
-**Config** : Unity 6000.x LTS · URP mobile · IL2CPP · ARM64 uniquement · Vulkan (fallback GLES3) · .NET Standard 2.1 · Managed Stripping High.
+Les deux faiblesses de Godot (SDK monétisation, catalogue d'assets) ne coûtent
+rien ici : la monétisation n'arrive qu'au jalon M4, et **le jeu ne consomme
+aucun asset externe** — toute la 3D est générée par code (§6).
 
----
-
-## 2. Architecture logicielle
-
-### Principe directeur : la logique de jeu ne connaît pas Unity
-
-```
-Valdris.Core/          ← C# pur, zéro référence UnityEngine, testable en console
-  ├─ Economy/          ressources, coûts, formules
-  ├─ Village/          grille, bâtiments, adjacences, villageois
-  ├─ Combat/           simulation déterministe (fixed-point)
-  ├─ Progression/      bastion, recherche, quêtes
-  └─ Save/             sérialisation, migration de version
-
-Valdris.Unity/         ← présentation
-  ├─ View/             MonoBehaviours qui reflètent l'état de Core
-  ├─ Input/            gestes, caméra
-  ├─ UI/               UI Toolkit
-  └─ Services/         IAP, ads, analytics, backend
-
-Valdris.Tools/         ← éditeur de niveaux, simulateur de balance, générateur de données
-```
-
-Bénéfices : les 10 000 raids de simulation d'équilibrage (doc 05 §7) tournent en console sans Unity, en quelques secondes. Et le serveur peut rejouer les combats avec **exactement le même code**.
-
-### Pattern
-- **État centralisé immuable-ish** : un `GameState` sérialisable, muté uniquement via des `Command` (`BuildCommand`, `UpgradeCommand`, `AssignVillagerCommand`…). Chaque commande est validée, appliquée, et émet des événements.
-- **Bus d'événements** typé pour que la vue réagisse sans coupler (`OnBuildingPlaced`, `OnResourceChanged`).
-- **Pas de Singleton sauvage** : un `ServiceLocator` explicite injecté au boot.
-- **Pas d'`Update()` par bâtiment.** Un `TickManager` unique à 4 Hz pour l'économie, 20 Hz pour la sim de combat, avec des buckets. 300 bâtiments × `Update()` = mort assurée sur mobile.
+**Configuration** : Godot 4.4.1 · renderer `gl_compatibility` (le plus
+compatible et le plus rapide pour du low poly) · ARM64 · portrait · export
+Android sans build Gradle (template pré-compilé).
 
 ---
 
-## 3. Données
+## 2. Organisation du code
 
-- Toutes les constantes de jeu en **CSV** (éditables dans un tableur, versionnés dans Git) → générés en `ScriptableObject` par un script d'éditeur.
-- **Hot-reload** en dev : recharger le CSV et relancer la scène sans recompiler.
-- **Remote config** en prod : les CSV sont téléchargeables → rééquilibrage sans update du store. Fallback local systématique si le réseau est absent.
-- **Addressables** pour les assets par région/saison : APK de base léger, contenu téléchargé à la demande.
+```
+game/
+├── core/          logique pure — aucune dépendance à la scène ni au rendu
+│   ├── fix.gd            virgule fixe Q16.16
+│   ├── det_random.gd     xorshift32 seedé
+│   ├── data_tables.gd    CSV -> tables, courbes de progression
+│   ├── village.gd        grille d'occupation + bâtiments
+│   ├── player_state.gd   état sauvegardé
+│   ├── economy.gd        production, plafonds, coûts, adjacences
+│   ├── progression.gd    les 40 paliers et leurs trois verrous
+│   ├── combat_sim.gd     simulation de raid déterministe
+│   ├── village_gen.gd    génération procédurale des villages ennemis
+│   ├── campaign.gd       72 niveaux + 8 Épreuves
+│   ├── advisor.gd        scoreur « quoi faire maintenant ? »
+│   ├── save_system.gd    sauvegarde versionnée, triple écriture
+│   ├── game_db.gd        autoload DB
+│   └── game.gd           autoload Game — orchestrateur, seul mutateur d'état
+├── view/          rendu 3D
+├── ui/            interface
+├── scenes/main.gd point d'entrée
+├── data/*.csv     toutes les constantes de jeu
+└── tests/         suites headless
+```
+
+**Règle structurante** : `core/` ne référence jamais un nœud de scène. C'est ce
+qui permet de rejouer 10 000 combats en console pour l'équilibrage, et à un
+serveur de revalider un rapport de combat avec exactement le même code.
+
+**Un seul mutateur** : toute modification de l'état passe par l'autoload
+`Game`, qui émet des signaux. La vue lit et affiche, elle ne décide jamais.
+
+**Un seul fichier de scène** (`main.tscn`, 4 lignes). Tout le reste est
+construit par code : les scènes Godot fusionnent mal dans Git, et une interface
+générée reste lisible en revue de code.
 
 ---
 
-## 4. Simulation de combat déterministe
+## 3. Déterminisme du combat
 
-Contrainte non négociable (voir doc 05 §4).
+Contrainte non négociable (docs/05 §4), respectée dans `core/combat_sim.gd` :
 
-```csharp
-// Arithmétique fixed-point Q16.16 — aucun float dans Valdris.Core.Combat
-public readonly struct Fix32 {
-    readonly int raw;               // 16 bits entiers, 16 bits fractionnaires
-    public static Fix32 operator *(Fix32 a, Fix32 b) => FromRaw((int)(((long)a.raw * b.raw) >> 16));
-    // sqrt, sin/cos par table de lookup précalculée
-}
+- **aucun float** dans la boucle — arithmétique Q16.16 via `Fix`
+- **aucun `randi()`/`randf()`** — uniquement `DetRandom` seedé
+- **pas fixe de 1/20 s**, indépendant du framerate ; la vue interpole
+- **aucune itération sur Dictionary** dont l'ordre compterait
 
-// RNG dédié, seedé, jamais partagé avec la présentation
-public sealed class DetRandom {           // xorshift32
-    uint s;
-    public DetRandom(uint seed) => s = seed == 0 ? 1u : seed;
-    public uint Next() { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return s; }
-}
-```
+Le simulateur expose `queue_deploy()`, `step()`, `run_to_end()` et une fonction
+statique `replay(village, tables, seed, inputs)`. Un rapport de combat se
+résume à `(seed, snapshot, liste d'inputs)` — le serveur rejoue et recalcule le
+butin lui-même.
 
-Règles :
-- Pas de `float`, pas de `Random.Range`, pas de `Time.deltaTime` dans `Core/Combat`.
-- Pas d'itération sur `Dictionary` (ordre non garanti) → `SortedList` ou tableaux indexés.
-- Pas de multithreading non ordonné dans la sim.
-- Pas de dépendance à la framerate : pas fixe de 50 ms, la vue interpole.
+Une **empreinte** est mise à jour à chaque tick (positions, PV, destruction).
+Deux exécutions identiques doivent produire la même valeur : c'est ce que
+vérifie `test_combat_determinism`, et c'est ce qui casse le build si une
+refonte brise silencieusement le PvP.
 
-**Test de non-régression** : une suite de 200 replays enregistrés rejoués à chaque CI. Toute divergence casse le build. C'est ce qui empêche une refonte de casser silencieusement le PvP.
+Autres choix de simulation : ciblage par préférence avec départage par index
+(déterministe), interception par les murs sur la case suivante (au lieu d'un
+pathfinding complet), dégâts continus `dps × dt` plutôt que des cooldowns.
 
-### Perf de la sim
-- Jusqu'à 200 unités + 300 bâtiments à 20 Hz.
-- **Spatial hashing** (grille de 4×4 unités) pour les requêtes de ciblage — pas de `Physics.OverlapSphere`, pas de collider Unity dans la sim.
-- Pathfinding : **flow field** calculé une fois par cible de zone, pas d'A* par unité. C'est ce qui permet 200 unités sans effort.
-- Si besoin : Burst + Jobs sur la boucle de ciblage uniquement (avec ordonnancement déterministe).
+---
+
+## 4. Données
+
+Tout est dans `data/*.csv`, éditable dans un tableur : coûts, PV, dégâts,
+portées, paliers de déblocage, quotas par bâtiment. **Rééquilibrer le jeu ne
+demande aucune recompilation.**
+
+Les courbes sont calculées en **entiers** (multiplication/division répétée,
+`DataTables.grow`) et jamais avec `pow()` en float : les valeurs dérivées
+alimentent la simulation, qui doit rester bit à bit reproductible.
+
+> **Piège Godot rencontré** : les `.csv` sont happés par l'importateur de
+> traductions et ne survivent pas à l'export — l'APK démarre sans aucune
+> donnée. Les fichiers `data/*.csv.import` forcent `importer="keep"`. Un test
+> de CI lance un **build exporté** justement pour attraper ce genre de bug.
 
 ---
 
 ## 5. Sauvegarde
 
-- Format : **binaire compact** (MessagePack ou un writer maison) + gzip. Un village complet ≈ 40–80 Ko.
-- **Versionné** avec des migrations explicites (`SaveMigration_v3_to_v4`). Non négociable : casser les saves des joueurs en live est le pire incident possible.
-- **Triple écriture** : `save.dat` + `save.bak` + un slot de secours, avec checksum. Restauration automatique si corruption.
-- Sauvegarde à chaque commande importante + toutes les 30 s + sur `OnApplicationPause`.
-- **Cloud save** : Google Play Games Services (gratuit) en v1, backend maison en v2.
+JSON compact dans une enveloppe `{version, checksum, body}`, checksum FNV-1a.
+**Triple écriture** avec rotation (`.save` → `.bak` → `.old`) et restauration
+automatique si le fichier principal est corrompu. Chaîne de migrations
+explicite dans `SaveSystem._migrate()` — casser les sauvegardes en production
+est le pire incident possible sur un jeu de gestion.
+
+Sauvegarde automatique toutes les 30 s, à chaque fin de raid, et sur
+`NOTIFICATION_APPLICATION_PAUSED`.
+
+**À venir** : sauvegarde cloud (Google Play Games Services), puis backend.
 
 ---
 
-## 6. Backend
+## 6. Rendu
 
-### v1 (jusqu'au soft launch) — minimal
-- **Supabase** (Postgres + auth + storage, généreux gratuitement) ou **PlayFab**.
-- Tables : `players`, `village_snapshots`, `battle_reports`, `guilds`, `guild_members`, `leaderboards`, `config`.
-- 4 endpoints : `sync_save`, `publish_snapshot`, `find_opponent`, `submit_battle`.
-- Validation des combats : **par échantillonnage** (10 % des combats rejoués) au début, 100 % ensuite.
+**Aucun asset 3D n'est embarqué.** Chaque bâtiment, unité et décor est assemblé
+par code dans `view/low_poly.gd` à partir de boîtes, troncs de pyramide, toits
+et cylindres, la couleur étant écrite dans les **sommets**. Un seul
+`StandardMaterial3D` avec `vertex_color_use_as_albedo` sert pour tout le jeu.
 
-### v2 (si ça marche) — Nakama
-[Nakama](https://heroiclabs.com/nakama/) (open source, Go) gère guildes, chat, classements, matchmaking et stockage. Self-hostable sur un VPS à 20 €/mois pour les premiers 50 k joueurs. Passer à Nakama quand le trafic le justifie, pas avant.
+Les bâtiments sont regroupés par (silhouette, taille, palier visuel, couleur)
+dans des `MultiMeshInstance3D` : un village de 300 bâtiments tient en une
+vingtaine de draw calls au lieu de 300.
 
-### Coût estimé
-| Étape | Coût mensuel |
+Trois paliers visuels par bâtiment (niveaux 1-5, 6-10, 11+) — produire 15
+maillages par bâtiment serait ruineux et l'œil ne lit que les changements
+francs de silhouette.
+
+> **Deux pièges de géométrie corrigés**, notés ici parce qu'ils sont
+> silencieux et coûteux à diagnostiquer :
+> 1. **Normales inversées.** Godot considère comme face avant un triangle
+>    enroulé dans le sens horaire ; la normale est donc `(c-a)×(b-a)`. Avec
+>    l'autre sens, tout reste *visible* (le culling ne dépend que de
+>    l'enroulement) mais plus rien n'est éclairé par le soleil — la scène est
+>    plate et sombre, en lumière ambiante seule.
+> 2. **Liseré sur les toits.** La face supérieure des murs affleurait sous
+>    l'avant-toit. Une corniche fine sous chaque toit ferme la jonction.
+
+Picking sans collider : intersection analytique du rayon caméra avec le plan
+`y = 0`. Exact, et gratuit.
+
+---
+
+## 7. Performance mobile
+
+| Règle | État |
 |---|---|
-| Dev / soft launch (< 1 k DAU) | 0–25 € |
-| 10 k DAU | ~80 € |
-| 100 k DAU | ~600 € |
+| Regroupement en MultiMesh | fait |
+| Un seul material, couleurs aux sommets | fait |
+| Pas d'`_process()` par bâtiment | fait — tick centralisé (économie 0,25 s, combat 20 Hz) |
+| Reconstruction des lots seulement au changement de village | fait |
+| Pool d'effets (poussière) | fait |
+| Marge de terrain pour masquer le bord | fait |
+| LOD sur les gros bâtiments | à venir |
+| Occlusion par cellule de grille | à venir |
+| Détection de throttling thermique | à venir (essentiel pour les sessions longues) |
+
+**Appareil plancher visé** : Snapdragon 665 / Adreno 610 / 3 Go de RAM. Le
+renderer `gl_compatibility` et le regroupement en MultiMesh sont les deux
+décisions qui rendent cette cible atteignable.
 
 ---
 
-## 7. Performance mobile — les règles dures
+## 8. Tests et CI
 
-| Règle | Pourquoi |
-|---|---|
-| Zéro `GameObject.Find`, zéro `Camera.main` en boucle | Coût scandaleux |
-| **Object pooling** obligatoire (unités, projectiles, particules, popups de dégâts, éléments de liste UI) | Le GC est l'ennemi n°1 sur Android |
-| **0 allocation par frame** en régime établi, vérifié au Profiler | Les hitches de GC ruinent le feel |
-| UI Toolkit plutôt qu'uGUI pour les écrans complexes | Moins de draw calls, meilleure séparation |
-| Canvas uGUI restants découpés par fréquence de mise à jour | Un canvas qui change = tout le canvas re-batché |
-| Textures ASTC 6×6, mipmaps off pour l'UI | |
-| Audio : `.ogg`, streaming pour la musique, décompressé en RAM pour les SFX courts | |
-| LOD à 2 niveaux sur les bâtiments 3×3+ | |
-| Frustum + occlusion custom par cellule de grille | |
-| Cap à 60 fps, `Application.targetFrameRate` + option 30 fps « économie de batterie » | 10h de jeu = la batterie compte vraiment |
-| Détection de thermal throttling (Adaptive Performance) → baisse auto de qualité | Idem, spécifique aux sessions longues |
+Trois niveaux, tous exécutables sans écran :
 
-**Device cible plancher** : Snapdragon 665 / Adreno 610 / 3 Go RAM (≈ Redmi Note 8). Si ça tourne à 30 fps stable là-dessus, ça tourne partout.
+| Suite | Commande | Ce qu'elle protège |
+|---|---|---|
+| Unitaire | `godot --headless --path game --script res://tests/run_tests.gd` | virgule fixe, RNG, grille, économie, progression, **déterminisme**, replay, sauvegarde |
+| Intégration | `godot --headless --path game res://tests/integration.tscn` | la partie jouable de bout en bout via `Game` |
+| Build exporté | export Linux + lancement | les fichiers absents du paquet |
+| Captures | `xvfb-run godot --path game --rendering-driver opengl3 res://tests/screenshot.tscn` | le rendu, sans appareil |
+
+Le workflow `.github/workflows/android.yml` enchaîne : tests → smoke test sur
+build exporté → APK signé en debug → artefact téléchargeable. **Aucun secret
+n'est requis** : la clé de debug est générée à la volée, comme le fait Android
+Studio.
 
 ---
 
-## 8. Build & CI
+## 9. Ce qui reste à construire
 
-- **GitHub Actions** avec [GameCI](https://game.ci/) : build AAB + APK à chaque merge sur `main`.
-- Tests unitaires `Valdris.Core` (rapides, sans Unity) sur chaque PR + la suite de 200 replays déterministes.
-- Signature via un keystore en secret GitHub. **Le keystore doit être sauvegardé hors du repo, en 2 endroits** — le perdre signifie ne plus jamais pouvoir mettre à jour l'app.
-- Distribution de test : Firebase App Distribution ou piste interne Play Console.
-- **Version bump automatique** + changelog généré depuis les commits.
-
-## 9. Localisation
-
-Prévue dès le départ, sinon c'est un enfer plus tard :
-- Toutes les chaînes dans des tables (Unity Localization Package), **zéro string en dur**.
-- Clés sémantiques (`building.sawmill.name`), pas de phrases comme clés.
-- Prévoir **+40 % de largeur** pour l'allemand et le russe dans les layouts UI.
-- Pluriels et genres gérés par la table, pas par concaténation.
-- v1 : FR + EN. Puis DE, ES, PT-BR, RU, TR.
+Backend (Supabase puis Nakama), PvP asynchrone et validation serveur des
+combats, guildes, saisons, IAP, localisation (toutes les chaînes sont
+actuellement en dur dans le code — à externaliser avant la première traduction),
+héros, expéditions, forge, villageois. Voir la roadmap en docs/09.
