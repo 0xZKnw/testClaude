@@ -10,6 +10,7 @@ import android.bluetooth.BluetoothGattServerCallback
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
@@ -294,7 +295,7 @@ class BleHost(
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 gattServer.notifyCharacteristicChanged(device, tx, false, frame) ==
-                    BluetoothStatusCodesCompat.SUCCESS
+                    BluetoothStatusCodes.SUCCESS
             } else {
                 tx.value = frame
                 gattServer.notifyCharacteristicChanged(device, tx, false)
@@ -326,9 +327,4 @@ class BleHost(
     private companion object {
         const val TAG = "BleHost"
     }
-}
-
-/** [android.bluetooth.BluetoothStatusCodes] only exists from API 31, so mirror the one value we need. */
-internal object BluetoothStatusCodesCompat {
-    const val SUCCESS = 0
 }

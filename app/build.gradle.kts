@@ -95,6 +95,12 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    lint {
+        // Gradle only echoes the first failure; the full text report in the job log is
+        // what makes the remaining ones fixable without downloading an artifact.
+        textReport = true
+    }
 }
 
 dependencies {

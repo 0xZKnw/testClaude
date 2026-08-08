@@ -8,6 +8,7 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
@@ -263,7 +264,7 @@ class BleGuest(
                     characteristic,
                     frame,
                     BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                ) == BluetoothStatusCodesCompat.SUCCESS
+                ) == BluetoothStatusCodes.SUCCESS
             } else {
                 characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
                 characteristic.value = frame

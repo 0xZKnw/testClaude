@@ -62,10 +62,16 @@ jobs:
           ls -la out
 
       # Printed so the signature can be compared between two builds at a glance.
+      # apksigner and not `keytool -printcert -jarfile`: the APK carries a v2 signature
+      # only, which lives in the APK Signing Block and is invisible to keytool.
       - name: Show APK signature
         run: |
-          keytool -printcert -jarfile out/uno-duo.apk | grep -i "SHA256:" | head -1 \
-            || echo "signature illisible"
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner introuvable, signature non verifiee"
+            exit 0
+          fi
+          "$APKSIGNER" verify --print-certs out/uno-duo.apk | grep -i "SHA-256 digest"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
