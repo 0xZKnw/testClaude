@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,8 +18,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -193,8 +196,9 @@ private fun BoxScope.CornerMark(
 }
 
 /**
- * Cartoon lettering: the same text drawn four times in ink, offset around the fill.
- * Deliberately low-tech — no experimental text API, and predictable on every device.
+ * Cartoon lettering: the glyph is stroked in ink, then filled on top. Drawing offset
+ * copies instead would show four ghosts around the digit rather than one clean
+ * keyline — which is exactly what it looked like.
  */
 @Composable
 fun OutlinedGlyphText(
@@ -205,22 +209,21 @@ fun OutlinedGlyphText(
     modifier: Modifier = Modifier,
     outline: Color = Palette.Outline
 ) {
+    val strokeWidth = with(LocalDensity.current) { outlineWidth.toPx() }
     Box(modifier, contentAlignment = Alignment.Center) {
-        val shifts = listOf(
-            outlineWidth to 0.dp,
-            -outlineWidth to 0.dp,
-            0.dp to outlineWidth,
-            0.dp to -outlineWidth
-        )
-        shifts.forEach { (dx, dy) ->
-            Text(
-                text = text,
-                modifier = Modifier.offset(x = dx, y = dy),
-                color = outline,
-                fontWeight = FontWeight.Black,
-                fontSize = fontSize
+        Text(
+            text = text,
+            color = outline,
+            fontWeight = FontWeight.Black,
+            fontSize = fontSize,
+            style = TextStyle(
+                drawStyle = Stroke(
+                    width = strokeWidth,
+                    join = StrokeJoin.Round,
+                    cap = StrokeCap.Round
+                )
             )
-        }
+        )
         Text(
             text = text,
             color = fill,

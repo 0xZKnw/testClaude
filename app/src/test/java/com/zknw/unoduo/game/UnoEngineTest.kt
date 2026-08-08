@@ -584,6 +584,70 @@ class UnoEngineTest {
         assertFalse(facingStack.canDraw)
     }
 
+    @Test
+    fun `swallowing a stack is reported so the table can show it`() {
+        val e = engine()
+        e.forceState(
+            hostHand = listOf(card(1, CardColor.RED, CardKind.DRAW_TWO)) + filler(2, 700),
+            guestHand = listOf(card(2, CardColor.BLUE, CardKind.NUMBER, 3)),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = Seat.HOST,
+            deck = filler(20, 100)
+        )
+        assertEquals(0, e.penaltyTaken)
+
+        e.playCard(Seat.HOST, 1, null)
+        e.autoAdvance()
+        assertEquals(2, e.penaltyTaken)
+        assertEquals(Seat.GUEST, e.penaltyVictim)
+
+        val guestView = e.viewFor(Seat.GUEST, rematchSelf = false, rematchOther = false)
+        assertTrue(guestView.penaltyIsMine)
+        val hostView = e.viewFor(Seat.HOST, rematchSelf = false, rematchOther = false)
+        assertFalse(hostView.penaltyIsMine)
+        assertEquals(2, hostView.penaltyTaken)
+    }
+
+    @Test
+    fun `the penalty mark is cleared by the next action`() {
+        val e = engine()
+        e.forceState(
+            hostHand = listOf(card(1, CardColor.RED, CardKind.DRAW_TWO)) + filler(2, 700),
+            guestHand = listOf(card(2, CardColor.RED, CardKind.NUMBER, 3)),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = Seat.HOST,
+            deck = filler(20, 100)
+        )
+        e.playCard(Seat.HOST, 1, null)
+        e.autoAdvance()
+        assertEquals(2, e.penaltyTaken)
+
+        // The guest keeps the turn after a +2 and plays: the flash must not repeat.
+        assertTrue(e.playCard(Seat.GUEST, 2, null))
+        assertEquals(0, e.penaltyTaken)
+        assertNull(e.penaltyVictim)
+    }
+
+    @Test
+    fun `a plus four penalty is reported with its full amount`() {
+        val e = engine()
+        e.forceState(
+            hostHand = listOf(card(1, CardColor.WILD, CardKind.WILD_DRAW_FOUR)) + filler(2, 700),
+            guestHand = listOf(card(2, CardColor.WILD, CardKind.WILD_DRAW_FOUR)) + filler(2, 800),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = Seat.HOST,
+            deck = filler(30, 100)
+        )
+        e.playCard(Seat.HOST, 1, CardColor.BLUE)
+        e.playCard(Seat.GUEST, 2, CardColor.YELLOW)
+        e.autoAdvance()
+        assertEquals(8, e.penaltyTaken)
+        assertEquals(Seat.HOST, e.penaltyVictim)
+    }
+
     // -------------------------------------------------------------- hand order
 
     @Test

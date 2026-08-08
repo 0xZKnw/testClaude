@@ -87,10 +87,23 @@ fun GameScreen(
 ) {
     var pendingWild by remember { mutableStateOf<Card?>(null) }
     var toast by remember { mutableStateOf("") }
+    var penaltyHit by remember { mutableStateOf<PenaltyHit?>(null) }
     val haptics = LocalHapticFeedback.current
 
     LaunchedEffect(view.eventId) {
         if (view.event.isNotEmpty()) toast = view.event
+        // Eating a stack resolves in a single snapshot, so the table has to stop and
+        // spell it out — otherwise six cards appear in your hand out of nowhere.
+        if (view.penaltyTaken > 0) {
+            penaltyHit = PenaltyHit(view.penaltyTaken, view.penaltyIsMine, view.opponentName)
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            kotlinx.coroutines.delay(1900)
+            penaltyHit = null
+        } else {
+            // A newer event cancels this effect mid-delay; clearing here stops a stale
+            // slam from staying on screen.
+            penaltyHit = null
+        }
     }
 
     TableBackground {
@@ -152,8 +165,101 @@ fun GameScreen(
             )
         }
 
+        penaltyHit?.let { PenaltyOverlay(it) }
+
         if (view.phase == Phase.GAME_OVER) {
             GameOverOverlay(view, onRematch, onQuit)
+        }
+    }
+}
+
+private data class PenaltyHit(val amount: Int, val mine: Boolean, val opponent: String)
+
+/**
+ * The beat that makes a stack land: a full-screen slam with the count, held long
+ * enough to register, with the cards fanning in behind it.
+ */
+@Composable
+private fun PenaltyOverlay(hit: PenaltyHit) {
+    val slam = remember { Animatable(0f) }
+    LaunchedEffect(hit) {
+        slam.snapTo(0f)
+        slam.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 220f))
+    }
+
+    val accent = if (hit.mine) Palette.Red else Palette.Gold
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Palette.Outline.copy(alpha = 0.66f * slam.value.coerceIn(0f, 1f)))
+            // Swallow taps so nobody plays a card blind through the overlay.
+            .clickableNoRipple { },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Cards fanning in behind the number.
+            Box(contentAlignment = Alignment.Center) {
+                Row(horizontalArrangement = Arrangement.spacedBy((-30).dp)) {
+                    repeat(min(hit.amount, 8)) { index ->
+                        val mid = (min(hit.amount, 8) - 1) / 2f
+                        val delta = index - mid
+                        UnoCardBack(
+                            width = 54.dp,
+                            modifier = Modifier.graphicsLayer {
+                                val t = slam.value.coerceIn(0f, 1f)
+                                rotationZ = delta * 9f * t
+                                translationY = (1f - t) * 220f
+                                translationX = delta * 6f * t
+                                alpha = t
+                            }
+                        )
+                    }
+                }
+
+                Box(
+                    Modifier
+                        .graphicsLayer {
+                            val t = slam.value
+                            scaleX = t
+                            scaleY = t
+                            rotationZ = (1f - t) * 24f
+                        }
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(accent)
+                        .border(4.dp, Palette.Outline, RoundedCornerShape(22.dp))
+                        .padding(horizontal = 26.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        "+${hit.amount}",
+                        color = Palette.Stock,
+                        fontSize = 54.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(22.dp))
+            Box(
+                Modifier
+                    .graphicsLayer { alpha = slam.value.coerceIn(0f, 1f) }
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Palette.Slate)
+                    .border(3.dp, Palette.Outline, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    if (hit.mine) {
+                        "Tu encaisses ${hit.amount} cartes"
+                    } else {
+                        "${hit.opponent} encaisse ${hit.amount} cartes"
+                    },
+                    color = Palette.Text,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }

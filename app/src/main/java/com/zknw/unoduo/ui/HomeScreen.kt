@@ -43,7 +43,8 @@ fun HomeScreen(
     onNameChange: (String) -> Unit,
     onHost: () -> Unit,
     onJoin: () -> Unit,
-    onRules: () -> Unit
+    onRules: () -> Unit,
+    onSettings: () -> Unit
 ) {
     MenuBackground {
         Column(
@@ -110,6 +111,8 @@ fun HomeScreen(
             GhostButton("Rejoindre une partie", Modifier.fillMaxWidth()) { onJoin() }
             Spacer(Modifier.height(12.dp))
             GhostButton("Règles du jeu", Modifier.fillMaxWidth()) { onRules() }
+            Spacer(Modifier.height(12.dp))
+            GhostButton("Réglages", Modifier.fillMaxWidth()) { onSettings() }
 
             Spacer(Modifier.weight(1f))
             Text(

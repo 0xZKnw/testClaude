@@ -73,5 +73,7 @@ jobs:
           gh release delete "$TAG" --yes --cleanup-tag || true
           gh release create "$TAG" out/uno-duo.apk \
             --title "UNO Duo — dernier APK" \
-            --notes "APK construit depuis \`${GITHUB_SHA::7}\`. Installe-le sur les deux téléphones." \
+            --notes "APK construit depuis \`${GITHUB_SHA::7}\`. Installe-le sur les deux téléphones.
+
+sha=${GITHUB_SHA::7}" \
             --prerelease

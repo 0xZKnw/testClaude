@@ -58,7 +58,9 @@ data class GameView(
     @SerialName("ys") val yourScore: Int = 0,
     @SerialName("os") val opponentScore: Int = 0,
     @SerialName("ri") val roundId: Int = 0,
-    @SerialName("lp") val lastPlayedBy: Seat? = null
+    @SerialName("lp") val lastPlayedBy: Seat? = null,
+    @SerialName("pk") val penaltyTaken: Int = 0,
+    @SerialName("pv") val penaltyVictim: Seat? = null
 ) {
     val yourTurn: Boolean get() = turn == youAre && phase != Phase.GAME_OVER
     val youWon: Boolean get() = winner == youAre
@@ -73,4 +75,7 @@ data class GameView(
 
     /** True when the top card was played by the opponent, used to pick an animation. */
     val topCameFromOpponent: Boolean get() = lastPlayedBy != null && lastPlayedBy != youAre
+
+    /** True when it is you who just swallowed the stack. */
+    val penaltyIsMine: Boolean get() = penaltyTaken > 0 && penaltyVictim == youAre
 }

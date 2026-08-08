@@ -12,6 +12,11 @@ Télécharge `uno-duo.apk` sur les **deux** téléphones (Android 8.0 / API 26 m
 autorise l'installation depuis une source inconnue. L'APK est signé avec la clé de
 debug d'Android : il s'installe directement, sans passer par le Play Store.
 
+Une fois l'app installée, tu peux aussi te mettre à jour depuis l'écran **Réglages** :
+il télécharge le dernier APK publié par la CI et lance l'installateur. Comme le dépôt
+est privé, GitHub exige un jeton d'accès personnel (portée « Contents: read ») à coller
+dans ce même écran ; il reste sur le téléphone. Rendre le dépôt public supprime ce besoin.
+
 ## Comment jouer
 
 1. Joueur A : *Créer une partie* → un QR code s'affiche, le téléphone devient

@@ -41,6 +41,7 @@ import com.zknw.unoduo.ui.HomeScreen
 import com.zknw.unoduo.ui.HostScreen
 import com.zknw.unoduo.ui.JoinScreen
 import com.zknw.unoduo.ui.RulesScreen
+import com.zknw.unoduo.ui.SettingsScreen
 import com.zknw.unoduo.ui.components.MenuBackground
 import com.zknw.unoduo.ui.components.StatusRow
 import com.zknw.unoduo.ui.theme.Palette
@@ -48,6 +49,8 @@ import com.zknw.unoduo.ui.theme.UnoDuoTheme
 import com.zknw.unoduo.vm.AppViewModel
 import com.zknw.unoduo.vm.LinkStatus
 import com.zknw.unoduo.vm.Screen
+import com.zknw.unoduo.update.Updater
+import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -141,6 +144,7 @@ private fun App(vm: AppViewModel = viewModel()) {
     BackHandler(enabled = state.screen != Screen.HOME) {
         when (state.screen) {
             Screen.RULES -> vm.closeRules()
+            Screen.SETTINGS -> vm.closeSettings()
             Screen.GAME -> vm.leaveGame()
             else -> vm.goHome()
         }
@@ -152,10 +156,30 @@ private fun App(vm: AppViewModel = viewModel()) {
             onNameChange = vm::setName,
             onHost = { withBle(asHost = true) { vm.startHosting() } },
             onJoin = { withBle(asHost = false) { vm.openJoin() } },
-            onRules = vm::openRules
+            onRules = vm::openRules,
+            onSettings = vm::openSettings
         )
 
         Screen.RULES -> RulesScreen(onBack = vm::closeRules)
+
+        Screen.SETTINGS -> SettingsScreen(
+            update = state.update,
+            token = state.updateToken,
+            canInstall = Updater.canInstall(context),
+            onTokenChange = vm::setUpdateToken,
+            onCheck = vm::checkForUpdate,
+            onDownload = vm::downloadUpdate,
+            onInstall = { path ->
+                // Re-check: the user may have just granted the permission and come back.
+                if (Updater.canInstall(context)) {
+                    context.startActivity(Updater.installIntent(context, File(path)))
+                } else {
+                    context.startActivity(Updater.unknownSourcesIntent(context))
+                }
+            },
+            onAllowInstalls = { context.startActivity(Updater.unknownSourcesIntent(context)) },
+            onBack = vm::closeSettings
+        )
 
         Screen.HOST -> HostScreen(
             roomCode = state.roomCode,

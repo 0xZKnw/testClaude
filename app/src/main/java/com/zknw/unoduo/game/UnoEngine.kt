@@ -53,6 +53,14 @@ class UnoEngine(private val rng: Random) {
     var lastPlayedBy: Seat? = null
         private set
 
+    /** Size of the stack just swallowed, so the UI can stop and show it. */
+    var penaltyTaken: Int = 0
+        private set
+
+    /** Who swallowed it. Both reset as soon as anything else happens. */
+    var penaltyVictim: Seat? = null
+        private set
+
     private val scores = mutableMapOf(Seat.HOST to 0, Seat.GUEST to 0)
 
     fun score(seat: Seat): Int = scores.getValue(seat)
@@ -104,6 +112,7 @@ class UnoEngine(private val rng: Random) {
         winner = null
         drawnCardId = -1
         lastPlayedBy = null
+        clearPenaltyMark()
         roundId++
         pushEvent("Nouvelle manche")
     }
@@ -169,6 +178,7 @@ class UnoEngine(private val rng: Random) {
         discardPile.add(card)
         drawnCardId = -1
         lastPlayedBy = seat
+        clearPenaltyMark()
         phase = Phase.PLAYING
 
         val name = seatName(seat)
@@ -236,6 +246,8 @@ class UnoEngine(private val rng: Random) {
             pendingDraw = 0
             pendingType = Penalty.NONE
             drawnCardId = -1
+            penaltyTaken = amount
+            penaltyVictim = seat
             if (skipTurn) {
                 // House rule: eating a +4 also costs you your turn.
                 turn = seat.other
@@ -247,6 +259,7 @@ class UnoEngine(private val rng: Random) {
             return true
         }
 
+        clearPenaltyMark()
         val card = drawOne(seat)
         if (card == null) {
             // Nothing left anywhere: nobody can be blocked, just hand over the turn.
@@ -270,10 +283,16 @@ class UnoEngine(private val rng: Random) {
     fun pass(seat: Seat): Boolean {
         if (seat != turn || phase != Phase.DECIDE_AFTER_DRAW) return false
         drawnCardId = -1
+        clearPenaltyMark()
         phase = Phase.PLAYING
         turn = seat.other
         pushEvent("${seatName(seat)} passe")
         return true
+    }
+
+    private fun clearPenaltyMark() {
+        penaltyTaken = 0
+        penaltyVictim = null
     }
 
     private fun drawOne(seat: Seat): Card? {
@@ -344,7 +363,9 @@ class UnoEngine(private val rng: Random) {
         yourScore = scores.getValue(seat),
         opponentScore = scores.getValue(seat.other),
         roundId = roundId,
-        lastPlayedBy = lastPlayedBy
+        lastPlayedBy = lastPlayedBy,
+        penaltyTaken = penaltyTaken,
+        penaltyVictim = penaltyVictim
     )
 
     private fun pushEvent(text: String) {

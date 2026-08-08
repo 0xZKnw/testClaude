@@ -15,6 +15,10 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+
+        // Stamped by CI so the in-app updater knows what is installed.
+        val builtFrom = (System.getenv("GITHUB_SHA") ?: "local").take(7)
+        buildConfigField("String", "GIT_SHA", "\"$builtFrom\"")
     }
 
     buildTypes {
@@ -38,6 +42,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {

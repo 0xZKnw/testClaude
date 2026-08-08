@@ -13,6 +13,8 @@ import com.zknw.unoduo.net.BleHost
 import com.zknw.unoduo.net.JoinLink
 import com.zknw.unoduo.net.NetMsg
 import com.zknw.unoduo.net.RoomCode
+import com.zknw.unoduo.update.Updater
+import com.zknw.unoduo.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +26,18 @@ import kotlinx.coroutines.withContext
 import java.security.SecureRandom
 import kotlin.random.Random
 
-enum class Screen { HOME, RULES, HOST, JOIN, GAME }
+enum class Screen { HOME, RULES, SETTINGS, HOST, JOIN, GAME }
+
+/** Where the in-app updater is in its little state machine. */
+sealed interface UpdateState {
+    data object Idle : UpdateState
+    data object Checking : UpdateState
+    data class UpToDate(val commit: String) : UpdateState
+    data class Found(val release: Updater.Available) : UpdateState
+    data class Downloading(val progress: Float) : UpdateState
+    data class Ready(val path: String, val commit: String) : UpdateState
+    data class Failed(val reason: String) : UpdateState
+}
 
 enum class LinkStatus { IDLE, ADVERTISING, SEARCHING, CONNECTING, CONNECTED, LOST }
 
@@ -38,7 +51,9 @@ data class UiState(
     val statusText: String = "",
     val error: String? = null,
     val view: GameView? = null,
-    val inputLocked: Boolean = false
+    val inputLocked: Boolean = false,
+    val update: UpdateState = UpdateState.Idle,
+    val updateToken: String = ""
 )
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -46,7 +61,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("unoduo", Context.MODE_PRIVATE)
 
     private val _state = MutableStateFlow(
-        UiState(playerName = prefs.getString("name", "") ?: "")
+        UiState(
+            playerName = prefs.getString("name", "") ?: "",
+            updateToken = prefs.getString("updateToken", "") ?: ""
+        )
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
@@ -78,6 +96,56 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openRules() = _state.update { it.copy(screen = Screen.RULES) }
 
     fun closeRules() = _state.update { it.copy(screen = Screen.HOME) }
+
+    fun openSettings() = _state.update { it.copy(screen = Screen.SETTINGS) }
+
+    fun closeSettings() = _state.update { it.copy(screen = Screen.HOME, update = UpdateState.Idle) }
+
+    // --------------------------------------------------------------- updating
+
+    fun setUpdateToken(token: String) {
+        val trimmed = token.trim()
+        prefs.edit().putString("updateToken", trimmed).apply()
+        _state.update { it.copy(updateToken = trimmed, update = UpdateState.Idle) }
+    }
+
+    fun checkForUpdate() {
+        if (_state.value.update is UpdateState.Checking) return
+        _state.update { it.copy(update = UpdateState.Checking) }
+        viewModelScope.launch {
+            val token = _state.value.updateToken.takeIf { it.isNotBlank() }
+            val next = when (val outcome = Updater.check(BuildConfig.GIT_SHA, token)) {
+                is Updater.Outcome.UpToDate -> UpdateState.UpToDate(outcome.commit)
+                is Updater.Outcome.Ready -> UpdateState.Found(outcome.release)
+                is Updater.Outcome.Failed -> UpdateState.Failed(outcome.reason)
+            }
+            _state.update { it.copy(update = next) }
+        }
+    }
+
+    fun downloadUpdate() {
+        val found = _state.value.update as? UpdateState.Found ?: return
+        _state.update { it.copy(update = UpdateState.Downloading(0f)) }
+        viewModelScope.launch {
+            val token = _state.value.updateToken.takeIf { it.isNotBlank() }
+            val result = Updater.download(found.release, token, getApplication()) { progress ->
+                _state.update { current ->
+                    if (current.update is UpdateState.Downloading) {
+                        current.copy(update = UpdateState.Downloading(progress))
+                    } else {
+                        current
+                    }
+                }
+            }
+            val next = result.fold(
+                onSuccess = { UpdateState.Ready(it.absolutePath, found.release.commit) },
+                onFailure = { UpdateState.Failed(it.message ?: "Téléchargement impossible") }
+            )
+            _state.update { it.copy(update = next) }
+        }
+    }
+
+    fun resetUpdate() = _state.update { it.copy(update = UpdateState.Idle) }
 
     fun dismissError() = _state.update { it.copy(error = null) }
 
