@@ -70,10 +70,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="apk-latest"
+          SHORT="${GITHUB_SHA::7}"
+          # The `sha=` line is the contract the in-app updater parses; printf keeps the
+          # newlines out of the YAML block, which a literal blank line would have broken.
+          NOTES=$(printf 'APK construit depuis `%s`. Installe-le sur les deux téléphones.\n\nsha=%s\n' "$SHORT" "$SHORT")
           gh release delete "$TAG" --yes --cleanup-tag || true
           gh release create "$TAG" out/uno-duo.apk \
             --title "UNO Duo — dernier APK" \
-            --notes "APK construit depuis \`${GITHUB_SHA::7}\`. Installe-le sur les deux téléphones.
-
-sha=${GITHUB_SHA::7}" \
+            --notes "$NOTES" \
             --prerelease

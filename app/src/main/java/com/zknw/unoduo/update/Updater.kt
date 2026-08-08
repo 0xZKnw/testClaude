@@ -45,7 +45,8 @@ object Updater {
         try {
             val body = get(RELEASE_URL, token, accept = "application/vnd.github+json")
                 ?: return@withContext Outcome.Failed(
-                    "Impossible de lire la release. Si le dépôt est privé, ajoute un jeton d'accès."
+                    "Impossible de joindre GitHub. Vérifie ta connexion — et si le dépôt " +
+                        "redevient privé, ajoute un jeton dans les réglages."
                 )
             val json = JSONObject(body)
             val notes = json.optString("body", "")

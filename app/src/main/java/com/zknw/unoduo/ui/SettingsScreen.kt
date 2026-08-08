@@ -113,13 +113,13 @@ fun SettingsScreen(
 
             Panel(Modifier.fillMaxWidth()) {
                 Column {
-                    Label("JETON GITHUB (DÉPÔT PRIVÉ)")
+                    Label("JETON GITHUB — OPTIONNEL")
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Le dépôt ${Updater.OWNER}/${Updater.REPO} est privé, donc GitHub " +
-                            "refuse de servir l'APK sans authentification. Colle ici un jeton " +
-                            "d'accès personnel avec la portée « Contents: read ». Il reste sur " +
-                            "ce téléphone. Si tu rends le dépôt public, ce champ devient inutile.",
+                        "Le dépôt ${Updater.OWNER}/${Updater.REPO} est public : la mise à jour " +
+                            "fonctionne sans rien remplir ici. Ce champ ne sert que si tu le " +
+                            "repasses en privé un jour — colle alors un jeton d'accès personnel " +
+                            "avec la portée « Contents: read ». Il reste sur ce téléphone.",
                         color = Palette.TextDim,
                         fontSize = 13.sp,
                         lineHeight = 18.sp
