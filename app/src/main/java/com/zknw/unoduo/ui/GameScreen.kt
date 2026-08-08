@@ -354,17 +354,28 @@ private fun RivalsRow(view: GameView, photos: Map<Seat, String>, onQuit: () -> U
         }
 
         Spacer(Modifier.height(6.dp))
-        // Whoever the table is waiting on gets their hand drawn; in a duel that is
-        // simply always the same person.
-        val shown = single ?: view.rivals.firstOrNull { it.seat == view.turn }
-        OpponentFan(shown?.cards ?: 0)
+        if (single != null) {
+            OpponentFan(single.cards)
+        } else {
+            // Only the player the table is waiting on gets their hand drawn — four fans
+            // would not fit. The height is held even when that player is you, so the
+            // table does not jump every time the turn comes back round.
+            Box(Modifier.height(58.dp), contentAlignment = Alignment.Center) {
+                OpponentFan(view.rivals.firstOrNull { it.seat == view.turn }?.cards ?: 0)
+            }
+        }
     }
 }
 
 /** One rival squeezed into a column: face, name, card count. */
 @Composable
 private fun RivalTile(rival: Rival, onTurn: Boolean, photo: String?) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    // Fixed width: a long pseudo must ellipsize rather than push the other players
+    // off the row. Four of these plus the quit button have to fit on a small screen.
+    Column(
+        modifier = Modifier.width(64.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Box(contentAlignment = Alignment.BottomEnd) {
             PlayerAvatar(
                 name = rival.name,
