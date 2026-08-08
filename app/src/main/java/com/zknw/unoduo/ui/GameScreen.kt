@@ -11,6 +11,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -53,6 +54,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zknw.unoduo.game.Card
@@ -399,11 +401,16 @@ private fun DiscardPile(view: GameView) {
             targetState = view.top,
             transitionSpec = {
                 // The card slides in from whoever played it, so you see where it came from.
-                (
-                    slideInVertically(tween(260)) { h -> if (fromOpponent) -h * 3 else h * 3 } +
-                        fadeIn(tween(160)) +
-                        scaleIn(initialScale = 0.82f, animationSpec = tween(260))
-                    ).togetherWith(fadeOut(tween(120)))
+                val arrive: EnterTransition =
+                    fadeIn(animationSpec = tween<Float>(160)) +
+                        scaleIn(animationSpec = tween<Float>(260), initialScale = 0.82f) +
+                        slideInVertically(
+                            animationSpec = tween<IntOffset>(260),
+                            initialOffsetY = { height ->
+                                if (fromOpponent) -height * 3 else height * 3
+                            }
+                        )
+                arrive togetherWith fadeOut(animationSpec = tween<Float>(120))
             },
             label = "discard"
         ) { card ->
@@ -418,8 +425,8 @@ private fun DiscardPile(view: GameView) {
         AnimatedVisibility(
             visible = view.pendingDraw > 0,
             modifier = Modifier.offset(y = (-78).dp),
-            enter = scaleIn(initialScale = 0.4f) + fadeIn(),
-            exit = fadeOut()
+            enter = scaleIn(initialScale = 0.4f) + fadeIn(animationSpec = tween<Float>(200)),
+            exit = fadeOut(animationSpec = tween<Float>(150))
         ) {
             PendingBadge(view.pendingDraw)
         }
@@ -484,7 +491,10 @@ private fun TurnBanner(view: GameView) {
     ) {
         AnimatedContent(
             targetState = text,
-            transitionSpec = { fadeIn(tween(220)).togetherWith(fadeOut(tween(140))) },
+            transitionSpec = {
+                fadeIn(animationSpec = tween<Float>(220)) togetherWith
+                    fadeOut(animationSpec = tween<Float>(140))
+            },
             label = "turn-banner"
         ) { value ->
             Box(
@@ -530,9 +540,11 @@ private const val PREF_STEP_RATIO = 0.78f
 private fun handMetrics(count: Int, available: Dp): HandMetrics {
     if (count <= 1) return HandMetrics(MAX_CARD_ONE_ROW, MAX_CARD_ONE_ROW, 1)
 
-    fun widestThatFits(perRow: Int, ceiling: Dp): Dp =
-        if (perRow <= 1) ceiling
-        else minOf(ceiling, available / (1f + (perRow - 1) * MIN_STEP_RATIO))
+    fun widestThatFits(perRow: Int, ceiling: Dp): Dp {
+        if (perRow <= 1) return ceiling
+        val fitting: Dp = available / (1f + (perRow - 1) * MIN_STEP_RATIO)
+        return if (fitting < ceiling) fitting else ceiling
+    }
 
     // One row while the cards stay comfortably readable, two rows past that.
     val oneRow = widestThatFits(count, MAX_CARD_ONE_ROW)
@@ -547,8 +559,11 @@ private fun handMetrics(count: Int, available: Dp): HandMetrics {
     val step = if (perRow <= 1) {
         cardWidth
     } else {
-        minOf(cardWidth * PREF_STEP_RATIO, (available - cardWidth) / (perRow - 1))
-            .coerceAtLeast(cardWidth * 0.26f)
+        val preferred: Dp = cardWidth * PREF_STEP_RATIO
+        val fitting: Dp = (available - cardWidth) / (perRow - 1)
+        val tightest: Dp = cardWidth * 0.26f
+        val chosen: Dp = if (fitting < preferred) fitting else preferred
+        if (chosen < tightest) tightest else chosen
     }
     return HandMetrics(cardWidth, step, perRow)
 }
@@ -795,8 +810,13 @@ private fun EventToast(text: String, modifier: Modifier = Modifier) {
         targetState = text,
         modifier = modifier.padding(bottom = 4.dp),
         transitionSpec = {
-            (slideInVertically(tween(200)) { it / 2 } + fadeIn(tween(200)))
-                .togetherWith(fadeOut(tween(140)))
+            val arrive: EnterTransition =
+                fadeIn(animationSpec = tween<Float>(200)) +
+                    slideInVertically(
+                        animationSpec = tween<IntOffset>(200),
+                        initialOffsetY = { height -> height / 2 }
+                    )
+            arrive togetherWith fadeOut(animationSpec = tween<Float>(140))
         },
         label = "event"
     ) { value ->
