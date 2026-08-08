@@ -202,6 +202,17 @@ class BleGuest(
                 ready = true
                 listener.onReady()
                 pump()
+                // The high-priority interval is worth it for the handshake and the first
+                // board, then it is pure drain: a card game sends a few hundred bytes per
+                // turn, and BALANCED delivers those in well under the time it takes to
+                // notice. Posted rather than immediate so the opening exchange stays snappy.
+                handler.postDelayed({
+                    if (!stopped) {
+                        runCatching {
+                            gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED)
+                        }
+                    }
+                }, RELAX_LINK_AFTER_MS)
             }
         }
 
@@ -328,5 +339,6 @@ class BleGuest(
         const val REQUESTED_MTU = 247
         const val SCAN_TIMEOUT_MS = 25_000L
         const val MAX_CONNECT_ATTEMPTS = 2
+        const val RELAX_LINK_AFTER_MS = 3_000L
     }
 }

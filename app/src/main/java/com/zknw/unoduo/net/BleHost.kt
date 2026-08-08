@@ -121,9 +121,13 @@ class BleHost(
         }
         advertiser = le
 
+        // BALANCED emits every 250 ms instead of every 100 ms, and MEDIUM power carries
+        // well past the couple of metres between two phones reading the same QR code.
+        // The lobby can stay open for a while, and the guest scans at low latency, so
+        // this costs nothing in join time and a lot less in battery.
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
             .setConnectable(true)
             .setTimeout(0)
             .build()

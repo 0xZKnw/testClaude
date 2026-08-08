@@ -373,15 +373,27 @@ private fun OpponentFan(count: Int) {
     }
 }
 
+/**
+ * A value that breathes only while it is meant to be seen. An infinite animation left
+ * running keeps the whole frame loop awake at screen refresh rate, so an idle table
+ * would draw sixty times a second to show something perfectly still.
+ */
+@Composable
+private fun breathing(active: Boolean, from: Float, to: Float, periodMillis: Int, label: String): Float {
+    if (!active) return from
+    val transition = rememberInfiniteTransition(label = label)
+    val value by transition.animateFloat(
+        initialValue = from,
+        targetValue = to,
+        animationSpec = infiniteRepeatable(tween(periodMillis), RepeatMode.Reverse),
+        label = "$label-value"
+    )
+    return value
+}
+
 @Composable
 private fun UnoBadge() {
-    val transition = rememberInfiniteTransition(label = "uno")
-    val scale by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.16f,
-        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
-        label = "uno-scale"
-    )
+    val scale = breathing(active = true, from = 1f, to = 1.16f, periodMillis = 700, label = "uno")
     Box(
         Modifier
             .graphicsLayer {
@@ -429,13 +441,7 @@ private fun DrawPile(count: Int, enabled: Boolean, urgent: Boolean, onDraw: () -
     }
 
     // Nothing playable: the deck is the only move left, so it asks to be tapped.
-    val nudge = rememberInfiniteTransition(label = "deck")
-    val pulse by nudge.animateFloat(
-        initialValue = 1f,
-        targetValue = if (urgent) 1.07f else 1f,
-        animationSpec = infiniteRepeatable(tween(760), RepeatMode.Reverse),
-        label = "deck-pulse"
-    )
+    val pulse = breathing(urgent, from = 1f, to = 1.07f, periodMillis = 760, label = "deck")
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
@@ -551,13 +557,7 @@ private fun DiscardPile(view: GameView) {
 
 @Composable
 private fun PendingBadge(amount: Int) {
-    val transition = rememberInfiniteTransition(label = "pending")
-    val scale by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.12f,
-        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
-        label = "pending-scale"
-    )
+    val scale = breathing(active = true, from = 1f, to = 1.12f, periodMillis = 600, label = "pending")
     Box(
         Modifier
             .graphicsLayer {
@@ -700,6 +700,16 @@ private fun PlayerHand(view: GameView, enabled: Boolean, onCardTap: (Card) -> Un
         val rows = view.hand.chunked(metrics.perRow.coerceAtLeast(1))
         var freshSeen = 0
 
+        // One breathing value for the whole hand: a transition per card would light up
+        // the frame loop once per playable card, for an effect they all share anyway.
+        val ringAlpha = breathing(
+            active = enabled && view.legal.isNotEmpty(),
+            from = 0.55f,
+            to = 1f,
+            periodMillis = 900,
+            label = "ring"
+        )
+
         Column(
             Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(-(metrics.cardWidth * 0.30f)),
@@ -717,6 +727,7 @@ private fun PlayerHand(view: GameView, enabled: Boolean, onCardTap: (Card) -> Un
                             dimmed = enabled && card.id !in view.legal,
                             fresh = isFresh,
                             delayMillis = if (fresh.size > 2) order * 55 else 0,
+                            ringAlpha = ringAlpha,
                             onTap = { onCardTap(card) }
                         )
                     }
@@ -734,6 +745,7 @@ private fun HandCard(
     dimmed: Boolean,
     fresh: Boolean,
     delayMillis: Int,
+    ringAlpha: Float,
     onTap: () -> Unit
 ) {
     // Entrance: the card flies down from the deck and settles into the fan.
@@ -771,21 +783,14 @@ private fun HandCard(
             elevation = if (playable) 16.dp else 5.dp
         )
         if (playable) {
-            PlayableRing(width)
+            PlayableRing(width, ringAlpha)
         }
     }
 }
 
 /** Breathing gold outline on the cards you are allowed to play. */
 @Composable
-private fun PlayableRing(width: Dp) {
-    val transition = rememberInfiniteTransition(label = "ring")
-    val alpha by transition.animateFloat(
-        initialValue = 0.55f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-        label = "ring-alpha"
-    )
+private fun PlayableRing(width: Dp, alpha: Float) {
     val shape = RoundedCornerShape(width * 0.11f)
     Box(
         Modifier
