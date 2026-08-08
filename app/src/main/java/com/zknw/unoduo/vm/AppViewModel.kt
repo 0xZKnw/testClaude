@@ -143,8 +143,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 guestName = msg.name.ifBlank { "Invité" }
                 host?.send(NetMsg.Welcome(ok = true, hostName = displayName()))
-                startNewRound(firstRound = true)
                 _state.update { it.copy(screen = Screen.GAME, link = LinkStatus.CONNECTED) }
+                val running = engine
+                if (running == null) {
+                    startNewRound(firstRound = true)
+                } else {
+                    // The guest reconnected mid-game: resume instead of redealing.
+                    running.setNames(displayName(), guestName)
+                    broadcast()
+                }
             }
 
             is NetMsg.Play -> {

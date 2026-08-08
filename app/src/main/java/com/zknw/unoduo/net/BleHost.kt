@@ -59,6 +59,7 @@ class BleHost(
     private val outbox = ArrayDeque<ByteArray>()
     private var sending = false
     private var stopped = false
+    private var advertising = false
 
     fun start() = handler.post {
         val adapter = manager.adapter
@@ -101,7 +102,16 @@ class BleHost(
         }
     }
 
+    private fun stopAdvertising() {
+        try {
+            advertiser?.stopAdvertising(advertiseCallback)
+        } catch (_: Exception) {
+        }
+        advertising = false
+    }
+
     private fun startAdvertising() {
+        if (stopped || advertising) return
         val adapter = manager.adapter ?: return
         val le = adapter.bluetoothLeAdvertiser
         if (le == null) {
@@ -130,6 +140,7 @@ class BleHost(
             .addManufacturerData(Ble.MANUFACTURER_ID, roomCode.toByteArray(Charsets.US_ASCII))
             .build()
 
+        advertising = true
         le.startAdvertising(settings, data, scanResponse, advertiseCallback)
     }
 
@@ -139,6 +150,7 @@ class BleHost(
         }
 
         override fun onStartFailure(errorCode: Int) {
+            handler.post { advertising = false }
             listener.onError(
                 when (errorCode) {
                     ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "Émission BLE non supportée par cet appareil"
@@ -172,6 +184,8 @@ class BleHost(
                     }
                     peer = device
                     reassembler.reset()
+                    // The room is taken: stop shouting about it.
+                    stopAdvertising()
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     if (peer?.address == device.address) {
                         peer = null
@@ -179,6 +193,9 @@ class BleHost(
                         sending = false
                         outbox.clear()
                         reassembler.reset()
+                        // Some stacks also stop the advertiser on connect, so always
+                        // restart it — the guest may just be reconnecting.
+                        startAdvertising()
                         listener.onGuestDisconnected()
                     }
                 }
@@ -293,10 +310,7 @@ class BleHost(
             if (stopped) return@post
             stopped = true
             outbox.clear()
-            try {
-                advertiser?.stopAdvertising(advertiseCallback)
-            } catch (_: Exception) {
-            }
+            stopAdvertising()
             advertiser = null
             try {
                 peer?.let { server?.cancelConnection(it) }
