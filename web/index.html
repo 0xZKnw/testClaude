@@ -298,7 +298,12 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
         Avec l'appareil photo, tout simplement. La page s'ouvrira chez lui et affichera
         un QR de réponse à scanner ici.
       </p>
-      <button class="btn ghost" id="host-scan" style="margin-top:12px">Scanner sa réponse</button>
+      <textarea id="host-invite" readonly style="margin-top:10px"></textarea>
+      <button class="btn ghost" id="host-copy">Copier le lien d'invitation</button>
+      <p class="lead" style="margin:0 0 12px;text-align:left">
+        Si le QR ne passe pas, envoie-lui ce lien par message : il ouvre la même page.
+      </p>
+      <button class="btn ghost" id="host-scan">Scanner sa réponse</button>
       <video id="host-video" playsinline muted></video>
       <textarea id="host-answer" placeholder="…ou colle son code de réponse ici"></textarea>
       <button class="btn" id="host-accept">Valider la réponse</button>
@@ -397,7 +402,8 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
 <div class="overlay" id="dialog">
   <div class="panel">
     <div style="font-weight:900;font-size:18px;margin-bottom:8px" id="dialog-title"></div>
-    <p class="lead" style="text-align:left;margin-bottom:14px" id="dialog-body"></p>
+    <p class="lead" style="text-align:left;margin-bottom:14px;white-space:pre-wrap;
+     word-break:break-word;user-select:text;-webkit-user-select:text" id="dialog-body"></p>
     <button class="btn" id="dialog-ok">OK</button>
   </div>
 </div>

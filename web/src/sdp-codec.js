@@ -1,17 +1,21 @@
-// Squeezing a WebRTC session description into a QR code.
+// Getting a WebRTC session description through a QR code.
 //
 // Pairing two browsers normally needs a signalling server to carry the offer and the
 // answer. There is no server here, so those two blobs travel by QR code instead — which
-// means they have to fit. A raw offer is well over a kilobyte of boilerplate; a QR tops
-// out at 2953 bytes and stops scanning reliably long before that on a phone screen.
+// means they have to fit. A QR tops out at 2953 bytes and gets hard to scan off a phone
+// screen well before that.
 //
-// Two ways to shrink it, both implemented so they can be measured against each other:
+// The description is sent **whole**, never rebuilt. An earlier version shipped only the
+// handful of fields that vary and reconstructed the rest from a template: three times
+// smaller, and it worked between two Chromes — but any browser that words its
+// description differently, or wants a line the template does not produce, rejects the
+// result outright. Losslessly compressed it is around 570 bytes, and even uncompressed
+// it fits, so there is nothing to buy by being clever.
 //
-//   pack/unpack   keeps only the handful of fields that actually differ between
-//                 sessions and rebuilds the rest from a template. Smallest by far, and
-//                 needs no browser API at all.
-//   deflate       compresses the description as-is. Bigger, but lossless, so it cannot
-//                 be caught out by a description shaped differently than expected.
+//   D…   deflate-compressed, when the browser has CompressionStream
+//   R…   raw, for anything older
+//
+// The marker travels with the payload, so the two ends need not agree in advance.
 
 const FIELD = '|';
 const LIST = '~';
@@ -106,7 +110,7 @@ export function unpack(packed) {
   return { type: kind === 'o' ? 'offer' : 'answer', sdp: lines.join('\r\n') + '\r\n' };
 }
 
-// --------------------------------------------------------------- the safe fallback
+// ------------------------------------------------------------------ the wire format
 
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
@@ -148,14 +152,40 @@ async function through(stream, bytes) {
   return new Uint8Array(await new Response(written).arrayBuffer());
 }
 
-/** Lossless, at the cost of a longer string and a browser API. */
-export async function deflate(description) {
-  const raw = new TextEncoder().encode(`${description.type[0]}${description.sdp}`);
-  return toBase64Url(await through(new CompressionStream('deflate-raw'), raw));
+const hasCompression = typeof CompressionStream === 'function' &&
+  typeof DecompressionStream === 'function';
+
+/** The description as it will travel: whole, so nothing has to be rebuilt in front. */
+export async function encode(description) {
+  const body = `${description.type[0]}${description.sdp}`;
+  const raw = new TextEncoder().encode(body);
+  if (hasCompression) {
+    try {
+      return 'D' + toBase64Url(await through(new CompressionStream('deflate-raw'), raw));
+    } catch {
+      // Fall through: an uncompressed description still fits in a QR.
+    }
+  }
+  return 'R' + toBase64Url(raw);
 }
 
-export async function inflate(packed) {
-  const raw = await through(new DecompressionStream('deflate-raw'), fromBase64Url(packed));
-  const text = new TextDecoder().decode(raw);
-  return { type: text[0] === 'o' ? 'offer' : 'answer', sdp: text.slice(1) };
+export async function decode(packed) {
+  const text = (packed || '').trim();
+  if (!text) throw new Error('code vide');
+  const marker = text[0];
+  const body = text.slice(1);
+
+  if (marker === 'D' || marker === 'R') {
+    const bytes = fromBase64Url(body);
+    const raw = marker === 'D'
+      ? await through(new DecompressionStream('deflate-raw'), bytes)
+      : bytes;
+    const sdp = new TextDecoder().decode(raw);
+    if (!sdp.startsWith('o') && !sdp.startsWith('a')) throw new Error('contenu inattendu');
+    return { type: sdp[0] === 'o' ? 'offer' : 'answer', sdp: sdp.slice(1) };
+  }
+
+  // The compact format the diagnostic page still speaks.
+  if (marker === 'o' || marker === 'a') return unpack(text);
+  throw new Error('format inconnu');
 }

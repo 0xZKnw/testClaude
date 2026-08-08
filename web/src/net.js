@@ -8,7 +8,7 @@
 // There is no signalling server. The offer and the answer travel through a QR code, so
 // each guest is paired one at a time.
 
-import { pack, unpack } from './sdp-codec.js';
+import { encode, decode } from './sdp-codec.js';
 
 /** Vanilla ICE: with nothing to trickle through, wait for the full candidate list. */
 async function describe(pc, kind) {
@@ -27,7 +27,7 @@ async function describe(pc, kind) {
       setTimeout(resolve, 4000);
     });
   }
-  return pack(pc.localDescription);
+  return encode(pc.localDescription);
 }
 
 const newKey = () => Math.random().toString(36).slice(2, 10);
@@ -65,7 +65,7 @@ export class WebRtcHost {
   async acceptAnswer(packed) {
     const peer = this.pending;
     if (!peer) throw new Error("Aucune invitation en attente");
-    await peer.pc.setRemoteDescription(unpack(packed.trim()));
+    await peer.pc.setRemoteDescription(await decode(packed));
     this.peers.set(peer.key, peer);
     this.pending = null;
     return peer.key;
@@ -149,7 +149,7 @@ export class WebRtcGuest {
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed') this.handlers.onClosed?.();
     };
-    await pc.setRemoteDescription(unpack(packedOffer));
+    await pc.setRemoteDescription(await decode(packedOffer));
     return describe(pc, 'answer');
   }
 

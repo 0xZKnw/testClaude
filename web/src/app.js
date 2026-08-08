@@ -517,7 +517,9 @@ async function newInvite() {
   $('host-status').innerHTML = '<div class="spinner"></div><span>Préparation de l\'invitation…</span>';
   try {
     const offer = await state.net.invite();
-    drawQr('qrbox', `${location.href.split('#')[0].split('?')[0]}#${offer}`);
+    const link = `${location.href.split('#')[0].split('?')[0]}#${offer}`;
+    drawQr('qrbox', link);
+    $('host-invite').value = link;
     $('host-qr-panel').classList.remove('hidden');
     $('host-status').innerHTML = '<span style="color:var(--dim)">En attente de sa réponse…</span>';
   } catch (err) {
@@ -526,6 +528,14 @@ async function newInvite() {
 }
 
 $('host-invite-more').onclick = () => newInvite();
+$('host-copy').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($('host-invite').value);
+    $('host-copy').textContent = 'Lien copié';
+  } catch {
+    $('host-invite').select();
+  }
+};
 $('host-scan').onclick = () => scanQr('host-video', (value) => acceptAnswer(value));
 $('host-accept').onclick = () => acceptAnswer($('host-answer').value);
 
@@ -537,7 +547,7 @@ async function acceptAnswer(text) {
     $('host-qr-panel').classList.add('hidden');
     $('host-status').innerHTML = '<div class="spinner"></div><span>Connexion…</span>';
   } catch (err) {
-    dialog('Réponse refusée', err.message);
+    dialog('Réponse refusée', `${err?.message || err}\n\nNavigateur : ${navigator.userAgent}`);
   }
 }
 
@@ -606,7 +616,17 @@ async function joinWith(raw) {
     show('lobby');
     renderGuestLobby();
   } catch (err) {
-    dialog('Code invalide', "Ce code d'invitation n'a pas pu être lu.");
+    // Saying "unreadable code" for every failure hides the one that matters: a browser
+    // refusing the description is not the same problem as a mistyped code, and only the
+    // real message says which.
+    const detail = err?.message || String(err);
+    const truncated = offer.length > 24 ? `${offer.slice(0, 12)}…${offer.slice(-8)}` : offer;
+    dialog(
+      'Connexion impossible',
+      `Le code a été lu (${offer.length} caractères : ${truncated}) mais la connexion ` +
+      `a échoué.\n\nRaison exacte : ${detail}\n\n` +
+      `Navigateur : ${navigator.userAgent}`,
+    );
   }
 }
 
