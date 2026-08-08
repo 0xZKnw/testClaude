@@ -285,7 +285,14 @@ private fun blePermissions(asHost: Boolean): List<String> =
             listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
         }
     } else {
-        if (asHost) emptyList() else listOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        if (asHost) {
+            emptyList()
+        } else {
+            listOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        }
     }
 
 private fun isBluetoothOn(context: Context): Boolean {

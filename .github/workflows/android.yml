@@ -68,21 +68,6 @@ jobs:
           path: out/uno-duo.apk
           if-no-files-found: error
 
-      # Informational only: a lint nitpick must never withhold a working APK.
-      - name: Lint
-        continue-on-error: true
-        run: ./gradlew --no-daemon :app:lintDebug
-
-      - name: Upload test and lint reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: reports
-          path: |
-            app/build/reports/tests/**
-            app/build/reports/lint-results-debug.html
-          if-no-files-found: ignore
-
       - name: Publish a downloadable release
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         env:
@@ -98,6 +83,21 @@ jobs:
             --title "UNO Duo — dernier APK" \
             --notes "$NOTES" \
             --prerelease
+
+      # After the release on purpose: a lint error must be loud, but it must never
+      # withhold an APK that builds and runs.
+      - name: Lint
+        run: ./gradlew --no-daemon :app:lintDebug
+
+      - name: Upload test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            app/build/reports/tests/**
+            app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
 
       # Last so both results sit at the end of the log, where they are easy to find.
       - name: Verifications
