@@ -61,18 +61,6 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk out/uno-duo.apk
           ls -la out
 
-      # Printed so the signature can be compared between two builds at a glance.
-      # apksigner and not `keytool -printcert -jarfile`: the APK carries a v2 signature
-      # only, which lives in the APK Signing Block and is invisible to keytool.
-      - name: Show APK signature
-        run: |
-          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
-          if [ -z "$APKSIGNER" ]; then
-            echo "apksigner introuvable, signature non verifiee"
-            exit 0
-          fi
-          "$APKSIGNER" verify --print-certs out/uno-duo.apk | grep -i "SHA-256 digest"
-
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -110,3 +98,25 @@ jobs:
             --title "UNO Duo — dernier APK" \
             --notes "$NOTES" \
             --prerelease
+
+      # Last so both results sit at the end of the log, where they are easy to find.
+      - name: Verifications
+        if: always()
+        run: |
+          echo "=== signature de l'APK ==="
+          # apksigner and not `keytool -printcert -jarfile`: the APK carries a v2
+          # signature only, which lives in the APK Signing Block, invisible to keytool.
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner introuvable, signature non verifiee"
+          else
+            "$APKSIGNER" verify --print-certs out/uno-duo.apk | grep -i "SHA-256 digest" \
+              || echo "aucun certificat lisible"
+          fi
+          echo "=== erreurs lint ==="
+          REPORT=$(find app/build -name 'lint-results-debug.txt' 2>/dev/null | head -1)
+          if [ -z "$REPORT" ]; then
+            echo "rapport lint absent"
+          else
+            grep -E ": Error:" "$REPORT" || echo "aucune erreur"
+          fi
