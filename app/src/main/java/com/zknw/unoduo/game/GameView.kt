@@ -56,10 +56,15 @@ data class GameView(
     @SerialName("ry") val rematchYou: Boolean = false,
     @SerialName("ro") val rematchOpponent: Boolean = false,
     @SerialName("ys") val yourScore: Int = 0,
-    @SerialName("os") val opponentScore: Int = 0
+    @SerialName("os") val opponentScore: Int = 0,
+    @SerialName("ri") val roundId: Int = 0,
+    @SerialName("lp") val lastPlayedBy: Seat? = null
 ) {
     val yourTurn: Boolean get() = turn == youAre && phase != Phase.GAME_OVER
     val youWon: Boolean get() = winner == youAre
     val mustAnswerPenalty: Boolean get() = pendingDraw > 0 && yourTurn
     val canPass: Boolean get() = phase == Phase.DECIDE_AFTER_DRAW && yourTurn
+
+    /** True when the top card was played by the opponent, used to pick an animation. */
+    val topCameFromOpponent: Boolean get() = lastPlayedBy != null && lastPlayedBy != youAre
 }

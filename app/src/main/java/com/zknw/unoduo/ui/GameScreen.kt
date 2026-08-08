@@ -1,9 +1,13 @@
 package com.zknw.unoduo.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -11,13 +15,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,9 +32,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -41,13 +43,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zknw.unoduo.game.Card
@@ -65,17 +70,14 @@ import com.zknw.unoduo.ui.components.UnoCardFace
 import com.zknw.unoduo.ui.components.clickableNoRipple
 import com.zknw.unoduo.ui.theme.Palette
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.min
-
-private val HAND_CARD_WIDTH = 78.dp
-private val OPPONENT_CARD_WIDTH = 40.dp
 
 @Composable
 fun GameScreen(
     view: GameView,
     inputLocked: Boolean,
     onPlay: (Int, CardColor?) -> Unit,
-    onDraw: () -> Unit,
     onPass: () -> Unit,
     onRematch: () -> Unit,
     onQuit: () -> Unit
@@ -91,34 +93,29 @@ fun GameScreen(
     TableBackground {
         Column(Modifier.fillMaxSize()) {
 
-            OpponentRow(view)
+            OpponentRow(view, onQuit)
 
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                TableCenter(
-                    view = view,
-                    enabled = view.yourTurn && !inputLocked,
-                    onDraw = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onDraw()
-                    }
-                )
-                if (toast.isNotEmpty()) {
-                    EventToast(toast, Modifier.align(Alignment.BottomCenter))
-                }
+                TableCenter(view)
+                EventToast(toast, Modifier.align(Alignment.BottomCenter))
             }
 
             TurnBanner(view)
 
-            ActionRow(
-                view = view,
-                enabled = !inputLocked,
-                onDraw = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onDraw()
-                },
-                onPass = onPass,
-                onQuit = onQuit
-            )
+            // The only button left: declining the card you were just forced to draw.
+            AnimatedVisibility(visible = view.canPass) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 22.dp, vertical = 4.dp)
+                ) {
+                    PrimaryButton(
+                        text = "Passer mon tour",
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !inputLocked
+                    ) { onPass() }
+                }
+            }
 
             PlayerHand(
                 view = view,
@@ -128,6 +125,7 @@ fun GameScreen(
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         if (card.isWild) pendingWild = card else onPlay(card.id, null)
                     } else {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         toast = illegalReason(view)
                     }
                 }
@@ -171,11 +169,11 @@ private fun colorLabel(color: CardColor): String = when (color) {
 // ------------------------------------------------------------------ opponent
 
 @Composable
-private fun OpponentRow(view: GameView) {
+private fun OpponentRow(view: GameView, onQuit: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(top = 14.dp, start = 18.dp, end = 18.dp)
+            .padding(top = 10.dp, start = 16.dp, end = 16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Avatar(view.opponentName, active = !view.yourTurn && view.phase != Phase.GAME_OVER)
@@ -187,36 +185,57 @@ private fun OpponentRow(view: GameView) {
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    "${view.opponentCount} carte${if (view.opponentCount > 1) "s" else ""}",
-                    color = if (view.opponentCount == 1) Palette.Gold else Palette.TextDim,
-                    fontSize = 12.sp,
-                    fontWeight = if (view.opponentCount == 1) FontWeight.Bold else FontWeight.Normal
-                )
+                CardCountLine(view.opponentCount)
             }
             Spacer(Modifier.weight(1f))
             ScoreBadge(view.yourScore, view.opponentScore)
+            Spacer(Modifier.width(8.dp))
+            QuitChip(onQuit)
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
+        OpponentFan(view.opponentCount)
+    }
+}
 
-        // Fanned card backs; capped so a huge hand still fits on screen.
-        val shown = min(view.opponentCount, 12)
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Row(horizontalArrangement = Arrangement.spacedBy((-22).dp)) {
-                repeat(shown) { index ->
-                    val mid = (shown - 1) / 2f
-                    val delta = index - mid
-                    UnoCardBack(
-                        width = OPPONENT_CARD_WIDTH,
-                        modifier = Modifier
-                            .offset(y = (abs(delta) * 1.6f).dp)
-                            .graphicsLayer { rotationZ = delta * 3.2f }
-                    )
-                }
+@Composable
+private fun CardCountLine(count: Int) {
+    // A single card left is the thing you must not miss, so it shouts.
+    AnimatedContent(targetState = count, label = "opp-count") { value ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "$value carte${if (value > 1) "s" else ""}",
+                color = if (value == 1) Palette.Red else Palette.TextDim,
+                fontSize = 12.sp,
+                fontWeight = if (value == 1) FontWeight.Black else FontWeight.Normal
+            )
+            if (value == 1) {
+                Spacer(Modifier.width(6.dp))
+                UnoBadge()
             }
-            if (view.opponentCount == 1) {
-                UnoBadge(Modifier.align(Alignment.CenterEnd))
+        }
+    }
+}
+
+@Composable
+private fun OpponentFan(count: Int) {
+    val shown = min(count, 14)
+    val width by animateDpAsState(
+        targetValue = if (shown > 10) 30.dp else 38.dp,
+        label = "opp-card-width"
+    )
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Row(horizontalArrangement = Arrangement.spacedBy(-(width * 0.55f))) {
+            repeat(shown) { index ->
+                val mid = (shown - 1) / 2f
+                val delta = index - mid
+                UnoCardBack(
+                    width = width,
+                    modifier = Modifier
+                        .offset(y = (abs(delta) * 1.4f).dp)
+                        .graphicsLayer { rotationZ = delta * 3f },
+                    elevation = 3.dp
+                )
             }
         }
     }
@@ -225,12 +244,13 @@ private fun OpponentRow(view: GameView) {
 @Composable
 private fun Avatar(name: String, active: Boolean) {
     val ring by animateDpAsState(if (active) 3.dp else 0.dp, label = "avatar-ring")
+    val glow by animateFloatAsState(if (active) 1f else 0f, label = "avatar-glow")
     Box(
         Modifier
             .size(40.dp)
             .clip(CircleShape)
             .background(Palette.SlateHigh)
-            .border(ring, Palette.Gold, CircleShape),
+            .border(ring, Palette.Gold.copy(alpha = 0.4f + 0.6f * glow), CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -251,83 +271,124 @@ private fun ScoreBadge(you: Int, opponent: Int) {
             .border(1.dp, Palette.Line, RoundedCornerShape(12.dp))
             .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
-        Text(
-            "$you — $opponent",
-            color = Palette.TextDim,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold
-        )
+        AnimatedContent(targetState = "$you — $opponent", label = "score") { text ->
+            Text(text, color = Palette.TextDim, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
 @Composable
-private fun UnoBadge(modifier: Modifier = Modifier) {
+private fun QuitChip(onQuit: () -> Unit) {
+    Box(
+        Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(Palette.Ink.copy(alpha = 0.6f))
+            .border(1.dp, Palette.Line, CircleShape)
+            .clickableNoRipple { onQuit() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text("✕", color = Palette.TextDim, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun UnoBadge() {
     val transition = rememberInfiniteTransition(label = "uno")
     val scale by transition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.14f,
+        targetValue = 1.16f,
         animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
         label = "uno-scale"
     )
     Box(
-        modifier
+        Modifier
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Palette.Red)
-            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
-        Text("UNO !", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black)
+        Text("UNO !", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black)
     }
 }
 
 // -------------------------------------------------------------------- centre
 
 @Composable
-private fun TableCenter(view: GameView, enabled: Boolean, onDraw: () -> Unit) {
+private fun TableCenter(view: GameView) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(26.dp)
+        horizontalArrangement = Arrangement.spacedBy(22.dp)
     ) {
-        DrawPile(view.deckCount, enabled, onDraw)
+        DrawPile(view.deckCount)
         DiscardPile(view)
-        ActiveColorBadge(view)
     }
 }
 
 @Composable
-private fun DrawPile(count: Int, enabled: Boolean, onDraw: () -> Unit) {
+private fun DrawPile(count: Int) {
+    // A quick squash whenever the count drops tells you a card was just taken.
+    val bump = remember { Animatable(1f) }
+    var previous by remember { mutableStateOf(count) }
+    LaunchedEffect(count) {
+        if (count < previous) {
+            bump.snapTo(1.14f)
+            bump.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+        }
+        previous = count
+    }
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.graphicsLayer {
+                scaleX = bump.value
+                scaleY = bump.value
+            },
+            contentAlignment = Alignment.Center
+        ) {
             repeat(3) { index ->
                 UnoCardBack(
-                    width = 62.dp,
+                    width = 58.dp,
                     modifier = Modifier.offset(x = (index * 2).dp, y = -(index * 2).dp),
                     elevation = 2.dp
                 )
             }
             UnoCardBack(
-                width = 62.dp,
-                modifier = Modifier
-                    .offset(x = 6.dp, y = (-6).dp)
-                    .clickableNoRipple(enabled = enabled) { onDraw() }
+                width = 58.dp,
+                modifier = Modifier.offset(x = 6.dp, y = (-6).dp)
             )
         }
         Spacer(Modifier.height(8.dp))
-        Text("$count", color = Palette.TextDim, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(
+            "$count",
+            color = Palette.TextDim,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
 @Composable
 private fun DiscardPile(view: GameView) {
+    val fromOpponent = view.topCameFromOpponent
+
     Box(contentAlignment = Alignment.Center) {
-        // A couple of faint cards underneath so the pile has depth.
+        // Halo in the active colour: the clearest possible "what can I play" hint.
+        Box(
+            Modifier
+                .size(168.dp)
+                .blur(34.dp)
+                .clip(CircleShape)
+                .background(Palette.face(view.activeColor).copy(alpha = 0.34f))
+        )
+
         repeat(2) { index ->
             Box(
                 Modifier
-                    .size(76.dp, 76.dp * 1.52f)
+                    .size(78.dp, 78.dp * 1.52f)
                     .graphicsLayer { rotationZ = if (index == 0) -9f else 7f }
                     .clip(RoundedCornerShape(9.dp))
                     .background(Color.Black.copy(alpha = 0.28f))
@@ -337,209 +398,203 @@ private fun DiscardPile(view: GameView) {
         AnimatedContent(
             targetState = view.top,
             transitionSpec = {
-                (fadeIn(tween(180)) + scaleIn(initialScale = 0.75f, animationSpec = tween(220)))
-                    .togetherWith(fadeOut(tween(120)))
+                // The card slides in from whoever played it, so you see where it came from.
+                (
+                    slideInVertically(tween(260)) { h -> if (fromOpponent) -h * 3 else h * 3 } +
+                        fadeIn(tween(160)) +
+                        scaleIn(initialScale = 0.82f, animationSpec = tween(260))
+                    ).togetherWith(fadeOut(tween(120)))
             },
             label = "discard"
         ) { card ->
             UnoCardFace(
                 card = card,
-                width = 92.dp,
+                width = 94.dp,
                 modifier = Modifier.graphicsLayer { rotationZ = (card.id % 7 - 3) * 2.2f },
-                elevation = 14.dp
+                elevation = 16.dp
             )
         }
 
-        if (view.pendingDraw > 0) {
-            PendingBadge(view.pendingDraw, Modifier.offset(y = (-74).dp))
+        AnimatedVisibility(
+            visible = view.pendingDraw > 0,
+            modifier = Modifier.offset(y = (-78).dp),
+            enter = scaleIn(initialScale = 0.4f) + fadeIn(),
+            exit = fadeOut()
+        ) {
+            PendingBadge(view.pendingDraw)
         }
+
+        ColorChip(
+            color = view.activeColor,
+            chipSize = 26.dp,
+            modifier = Modifier
+                .offset(x = 62.dp, y = 62.dp)
+                .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+        )
     }
 }
 
 @Composable
-private fun PendingBadge(amount: Int, modifier: Modifier = Modifier) {
+private fun PendingBadge(amount: Int) {
     val transition = rememberInfiniteTransition(label = "pending")
     val scale by transition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.1f,
-        animationSpec = infiniteRepeatable(tween(620), RepeatMode.Reverse),
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
         label = "pending-scale"
     )
     Box(
-        modifier
+        Modifier
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
             .clip(RoundedCornerShape(14.dp))
             .background(Palette.Red)
-            .border(2.dp, Color.White.copy(alpha = 0.85f), RoundedCornerShape(14.dp))
+            .border(2.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape(14.dp))
             .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
         Text("+$amount", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
     }
 }
 
-@Composable
-private fun ActiveColorBadge(view: GameView) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            "COULEUR",
-            color = Palette.TextDim,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.2.sp
-        )
-        Spacer(Modifier.height(6.dp))
-        ColorChip(
-            color = view.activeColor,
-            chipSize = 34.dp,
-            modifier = Modifier.border(
-                2.dp,
-                Color.White.copy(alpha = 0.5f),
-                RoundedCornerShape(34.dp * 0.3f)
-            )
-        )
-    }
-}
-
-// ---------------------------------------------------------------- turn + acts
+// ---------------------------------------------------------------- turn banner
 
 @Composable
 private fun TurnBanner(view: GameView) {
     val yours = view.yourTurn
     val text = when {
-        view.phase == Phase.GAME_OVER -> if (view.youWon) "Tu as gagné !" else "${view.opponentName} a gagné"
+        view.phase == Phase.GAME_OVER ->
+            if (view.youWon) "Tu as gagné !" else "${view.opponentName} a gagné"
+
         view.mustAnswerPenalty && view.pendingType == Penalty.DRAW_FOUR ->
             "+${view.pendingDraw} — contre avec un +4 ou un +2 ${colorLabel(view.activeColor)}"
 
-        view.mustAnswerPenalty -> "+${view.pendingDraw} — contre ou pioche"
-        view.phase == Phase.DECIDE_AFTER_DRAW && yours -> "Pose la carte piochée ou passe"
+        view.mustAnswerPenalty -> "+${view.pendingDraw} — contre-attaque ou encaisse"
+        view.phase == Phase.DECIDE_AFTER_DRAW && yours -> "Carte piochée : pose-la ou passe"
         yours -> "À toi de jouer"
         else -> "Au tour de ${view.opponentName}"
     }
+
     Box(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 18.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
-        Box(
-            Modifier
-                .clip(RoundedCornerShape(14.dp))
-                .background(if (yours) Palette.Gold.copy(alpha = 0.16f) else Palette.Ink.copy(alpha = 0.5f))
-                .border(
-                    1.dp,
-                    if (yours) Palette.Gold.copy(alpha = 0.6f) else Palette.Line,
-                    RoundedCornerShape(14.dp)
+        AnimatedContent(
+            targetState = text,
+            transitionSpec = { fadeIn(tween(220)).togetherWith(fadeOut(tween(140))) },
+            label = "turn-banner"
+        ) { value ->
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        if (yours) Palette.Gold.copy(alpha = 0.18f)
+                        else Palette.Ink.copy(alpha = 0.5f)
+                    )
+                    .border(
+                        1.dp,
+                        if (yours) Palette.Gold.copy(alpha = 0.6f) else Palette.Line,
+                        RoundedCornerShape(14.dp)
+                    )
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    value,
+                    color = if (yours) Palette.Gold else Palette.TextDim,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
                 )
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            Text(
-                text,
-                color = if (yours) Palette.Gold else Palette.TextDim,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
-}
-
-@Composable
-private fun ActionRow(
-    view: GameView,
-    enabled: Boolean,
-    onDraw: () -> Unit,
-    onPass: () -> Unit,
-    onQuit: () -> Unit
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        GhostButton("Quitter", Modifier.width(104.dp)) { onQuit() }
-
-        if (view.canPass) {
-            PrimaryButton(
-                text = "Passer",
-                modifier = Modifier.weight(1f),
-                enabled = enabled
-            ) { onPass() }
-        } else {
-            PrimaryButton(
-                text = if (view.pendingDraw > 0) "Piocher +${view.pendingDraw}" else "Piocher",
-                modifier = Modifier.weight(1f),
-                enabled = enabled && view.yourTurn && view.phase == Phase.PLAYING,
-                container = if (view.pendingDraw > 0) Palette.Red else Palette.Gold,
-                onContainer = if (view.pendingDraw > 0) Color.White else Palette.Ink
-            ) { onDraw() }
+            }
         }
     }
 }
 
 // ------------------------------------------------------------------- my hand
 
-@Composable
-private fun PlayerHand(view: GameView, enabled: Boolean, onCardTap: (Card) -> Unit) {
-    val listState = rememberLazyListState()
+/** Everything needed to lay a whole hand out on one screen, without scrolling. */
+private data class HandMetrics(val cardWidth: Dp, val step: Dp, val perRow: Int)
 
-    LaunchedEffect(view.hand.size) {
-        if (view.hand.isNotEmpty()) {
-            listState.animateScrollToItem((view.hand.size - 1).coerceAtLeast(0))
-        }
+private val MAX_CARD_ONE_ROW = 74.dp
+private val MAX_CARD_TWO_ROWS = 54.dp
+private val MIN_CARD_ONE_ROW = 52.dp
+private val FLOOR_CARD = 32.dp
+
+/** A card must never be covered by more than this much of its own width. */
+private const val MIN_STEP_RATIO = 0.38f
+private const val PREF_STEP_RATIO = 0.78f
+
+private fun handMetrics(count: Int, available: Dp): HandMetrics {
+    if (count <= 1) return HandMetrics(MAX_CARD_ONE_ROW, MAX_CARD_ONE_ROW, 1)
+
+    fun widestThatFits(perRow: Int, ceiling: Dp): Dp =
+        if (perRow <= 1) ceiling
+        else minOf(ceiling, available / (1f + (perRow - 1) * MIN_STEP_RATIO))
+
+    // One row while the cards stay comfortably readable, two rows past that.
+    val oneRow = widestThatFits(count, MAX_CARD_ONE_ROW)
+    val (perRow, width) = if (oneRow >= MIN_CARD_ONE_ROW) {
+        count to oneRow
+    } else {
+        val half = ceil(count / 2f).toInt()
+        half to widestThatFits(half, MAX_CARD_TWO_ROWS)
     }
 
-    Box(
+    val cardWidth = width.coerceAtLeast(FLOOR_CARD)
+    val step = if (perRow <= 1) {
+        cardWidth
+    } else {
+        minOf(cardWidth * PREF_STEP_RATIO, (available - cardWidth) / (perRow - 1))
+            .coerceAtLeast(cardWidth * 0.26f)
+    }
+    return HandMetrics(cardWidth, step, perRow)
+}
+
+@Composable
+private fun PlayerHand(view: GameView, enabled: Boolean, onCardTap: (Card) -> Unit) {
+    // Freshly arrived cards animate in; the set resets between rounds.
+    var known by remember(view.roundId) { mutableStateOf(emptySet<Int>()) }
+    val ids = view.hand.map { it.id }
+    val fresh = ids.filterNot { it in known }.toSet()
+    LaunchedEffect(view.hand, view.roundId) { known = ids.toSet() }
+
+    BoxWithConstraints(
         Modifier
             .fillMaxWidth()
-            .height(HAND_CARD_WIDTH * 1.52f + 34.dp)
             .background(
-                androidx.compose.ui.graphics.Brush.verticalGradient(
-                    listOf(Color.Transparent, Palette.Ink.copy(alpha = 0.75f))
+                Brush.verticalGradient(
+                    listOf(Color.Transparent, Palette.Ink.copy(alpha = 0.8f))
                 )
             )
+            .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
-        LazyRow(
-            state = listState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomStart),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy((-26).dp),
-            verticalAlignment = Alignment.Bottom
+        // maxWidth is already the padded width; a few dp are kept for the card shadows.
+        val metrics = handMetrics(view.hand.size, maxWidth - 6.dp)
+        val rows = view.hand.chunked(metrics.perRow.coerceAtLeast(1))
+        var freshSeen = 0
+
+        Column(
+            Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(-(metrics.cardWidth * 0.30f)),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            itemsIndexed(view.hand, key = { _, card -> card.id }) { _, card ->
-                val playable = enabled && card.id in view.legal
-                val lift by animateDpAsState(
-                    targetValue = if (playable) (-16).dp else 0.dp,
-                    animationSpec = spring(),
-                    label = "lift"
-                )
-                Box(
-                    Modifier
-                        .offset(y = lift)
-                        .clickableNoRipple { onCardTap(card) }
-                ) {
-                    UnoCardFace(
-                        card = card,
-                        width = HAND_CARD_WIDTH,
-                        dimmed = enabled && !playable,
-                        elevation = if (playable) 14.dp else 6.dp
-                    )
-                    if (playable) {
-                        Box(
-                            Modifier
-                                .matchParentSize()
-                                .clip(RoundedCornerShape(HAND_CARD_WIDTH * 0.11f))
-                                .border(
-                                    2.dp,
-                                    Palette.Gold,
-                                    RoundedCornerShape(HAND_CARD_WIDTH * 0.11f)
-                                )
+            rows.forEach { rowCards ->
+                Row(horizontalArrangement = Arrangement.spacedBy(metrics.step - metrics.cardWidth)) {
+                    rowCards.forEach { card ->
+                        val isFresh = card.id in fresh
+                        val order = if (isFresh) freshSeen++ else 0
+                        HandCard(
+                            card = card,
+                            width = metrics.cardWidth,
+                            playable = enabled && card.id in view.legal,
+                            faded = !enabled,
+                            dimmed = enabled && card.id !in view.legal,
+                            fresh = isFresh,
+                            delayMillis = if (fresh.size > 2) order * 55 else 0,
+                            onTap = { onCardTap(card) }
                         )
                     }
                 }
@@ -548,18 +603,100 @@ private fun PlayerHand(view: GameView, enabled: Boolean, onCardTap: (Card) -> Un
     }
 }
 
+@Composable
+private fun HandCard(
+    card: Card,
+    width: Dp,
+    playable: Boolean,
+    faded: Boolean,
+    dimmed: Boolean,
+    fresh: Boolean,
+    delayMillis: Int,
+    onTap: () -> Unit
+) {
+    // Entrance: the card flies down from the deck and settles into the fan.
+    val entrance = remember(card.id) { Animatable(if (fresh) 0f else 1f) }
+    LaunchedEffect(card.id) {
+        if (fresh) {
+            if (delayMillis > 0) kotlinx.coroutines.delay(delayMillis.toLong())
+            entrance.animateTo(1f, tween(340))
+        }
+    }
+
+    val lift by animateDpAsState(
+        targetValue = if (playable) -(width * 0.22f) else 0.dp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
+        label = "lift"
+    )
+
+    Box(
+        Modifier
+            .offset(y = lift)
+            .graphicsLayer {
+                val t = entrance.value
+                alpha = t * (if (faded) 0.72f else 1f)
+                scaleX = 0.55f + 0.45f * t
+                scaleY = 0.55f + 0.45f * t
+                translationY = (1f - t) * -260f
+                rotationZ = (1f - t) * -22f
+            }
+            .clickableNoRipple { onTap() }
+    ) {
+        UnoCardFace(
+            card = card,
+            width = width,
+            dimmed = dimmed,
+            elevation = if (playable) 16.dp else 5.dp
+        )
+        if (playable) {
+            PlayableRing(width)
+        }
+    }
+}
+
+/** Breathing gold outline on the cards you are allowed to play. */
+@Composable
+private fun PlayableRing(width: Dp) {
+    val transition = rememberInfiniteTransition(label = "ring")
+    val alpha by transition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "ring-alpha"
+    )
+    val shape = RoundedCornerShape(width * 0.11f)
+    Box(
+        Modifier
+            .size(width, width * 1.52f)
+            .clip(shape)
+            .border(2.5.dp, Palette.Gold.copy(alpha = alpha), shape)
+    )
+}
+
 // ------------------------------------------------------------------ overlays
 
 @Composable
 private fun ColorPicker(onPick: (CardColor) -> Unit, onCancel: () -> Unit) {
+    val appear = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { appear.animateTo(1f, tween(200)) }
+
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.75f))
+            .background(Color.Black.copy(alpha = 0.78f * appear.value))
             .clickableNoRipple { onCancel() },
         contentAlignment = Alignment.Center
     ) {
-        Panel(Modifier.padding(horizontal = 32.dp)) {
+        Panel(
+            Modifier
+                .padding(horizontal = 32.dp)
+                .graphicsLayer {
+                    val t = appear.value
+                    alpha = t
+                    scaleX = 0.86f + 0.14f * t
+                    scaleY = 0.86f + 0.14f * t
+                }
+        ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "Choisis la couleur",
@@ -586,13 +723,25 @@ private fun ColorPicker(onPick: (CardColor) -> Unit, onCancel: () -> Unit) {
 
 @Composable
 private fun GameOverOverlay(view: GameView, onRematch: () -> Unit, onQuit: () -> Unit) {
+    val appear = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { appear.animateTo(1f, spring(dampingRatio = Spring.DampingRatioLowBouncy)) }
+
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.82f)),
+            .background(Color.Black.copy(alpha = 0.84f)),
         contentAlignment = Alignment.Center
     ) {
-        Panel(Modifier.padding(horizontal = 30.dp)) {
+        Panel(
+            Modifier
+                .padding(horizontal = 30.dp)
+                .graphicsLayer {
+                    val t = appear.value
+                    alpha = t.coerceIn(0f, 1f)
+                    scaleX = 0.7f + 0.3f * t
+                    scaleY = 0.7f + 0.3f * t
+                }
+        ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     if (view.youWon) "Gagné !" else "Perdu",
@@ -642,14 +791,27 @@ private fun GameOverOverlay(view: GameView, onRematch: () -> Unit, onQuit: () ->
 
 @Composable
 private fun EventToast(text: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .padding(bottom = 6.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Palette.Ink.copy(alpha = 0.85f))
-            .border(1.dp, Palette.Line, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 7.dp)
-    ) {
-        Text(text, color = Palette.Text.copy(alpha = 0.9f), fontSize = 12.sp)
+    AnimatedContent(
+        targetState = text,
+        modifier = modifier.padding(bottom = 4.dp),
+        transitionSpec = {
+            (slideInVertically(tween(200)) { it / 2 } + fadeIn(tween(200)))
+                .togetherWith(fadeOut(tween(140)))
+        },
+        label = "event"
+    ) { value ->
+        if (value.isEmpty()) {
+            Spacer(Modifier.height(1.dp))
+        } else {
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Palette.Ink.copy(alpha = 0.88f))
+                    .border(1.dp, Palette.Line, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 14.dp, vertical = 7.dp)
+            ) {
+                Text(value, color = Palette.Text.copy(alpha = 0.92f), fontSize = 12.sp)
+            }
+        }
     }
 }

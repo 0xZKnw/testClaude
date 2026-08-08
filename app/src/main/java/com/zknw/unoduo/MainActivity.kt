@@ -190,7 +190,6 @@ private fun App(vm: AppViewModel = viewModel()) {
                     view = view,
                     inputLocked = state.inputLocked,
                     onPlay = vm::playCard,
-                    onDraw = vm::drawCard,
                     onPass = vm::passTurn,
                     onRematch = vm::requestRematch,
                     onQuit = vm::leaveGame

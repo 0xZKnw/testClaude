@@ -18,7 +18,8 @@ object Rules {
             "Poser une carte",
             listOf(
                 "Même couleur, même chiffre ou même symbole que la carte du dessus.",
-                "Le Joker et le +4 se posent quand tu veux ; tu choisis la couleur juste avant de poser."
+                "Le Joker et le +4 se posent quand tu veux ; tu choisis la couleur juste avant de poser.",
+                "Ta main est rangée par couleur, et les cartes jouables sont surlignées en doré."
             )
         ),
         Section(
@@ -55,8 +56,9 @@ object Rules {
         Section(
             "Piocher",
             listOf(
-                "Rien à poser ? Tu pioches une carte.",
-                "Si elle est jouable, tu peux la poser tout de suite ou passer."
+                "Il n'y a pas de bouton pioche : quand tu n'as rien à poser, la carte est piochée automatiquement.",
+                "Si cette carte est jouable, tu choisis : la poser, ou passer ton tour.",
+                "Même chose pour un cumul que tu ne peux pas contrer : il est encaissé tout seul."
             )
         )
     )

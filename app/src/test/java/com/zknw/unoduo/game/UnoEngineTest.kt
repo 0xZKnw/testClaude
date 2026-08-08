@@ -470,6 +470,123 @@ class UnoEngineTest {
         assertTrue(e.handOf(Seat.HOST).size + e.handOf(Seat.GUEST).size <= 108)
     }
 
+    // ------------------------------------------------------- automatic drawing
+
+    @Test
+    fun `a player with nothing playable draws by itself and hands over the turn`() {
+        val e = engine()
+        e.forceState(
+            hostHand = listOf(card(1, CardColor.BLUE, CardKind.NUMBER, 2)),
+            guestHand = filler(3),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = Seat.HOST,
+            // Unplayable card on top of the deck, so the turn must move on.
+            deck = listOf(card(81, CardColor.GREEN, CardKind.NUMBER, 7))
+        )
+        assertTrue(e.legalCardIds(Seat.HOST).isEmpty())
+        e.autoAdvance()
+        assertEquals(2, e.handOf(Seat.HOST).size)
+        assertEquals(Seat.GUEST, e.turn)
+        assertEquals(Phase.PLAYING, e.phase)
+    }
+
+    @Test
+    fun `a playable drawn card stops the automatic pass and asks the player`() {
+        val e = engine()
+        e.forceState(
+            hostHand = listOf(card(1, CardColor.BLUE, CardKind.NUMBER, 2)),
+            guestHand = filler(3),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = Seat.HOST,
+            deck = listOf(card(81, CardColor.RED, CardKind.NUMBER, 7))
+        )
+        e.autoAdvance()
+        assertEquals(Phase.DECIDE_AFTER_DRAW, e.phase)
+        assertEquals(Seat.HOST, e.turn)
+        assertEquals(setOf(81), e.legalCardIds(Seat.HOST))
+    }
+
+    @Test
+    fun `an uncounterable stack is eaten automatically`() {
+        val e = engine()
+        e.forceState(
+            hostHand = listOf(card(1, CardColor.RED, CardKind.DRAW_TWO)) + filler(2, 700),
+            guestHand = listOf(card(2, CardColor.RED, CardKind.NUMBER, 5)),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = Seat.HOST,
+            deck = filler(20, 100)
+        )
+        e.playCard(Seat.HOST, 1, null)
+        e.autoAdvance()
+        // The guest holds no penalty card, so the +2 is taken without being asked.
+        assertEquals(0, e.pendingDraw)
+        assertEquals(3, e.handOf(Seat.GUEST).size)
+        // A +2 does not cost the turn, and the guest now has something playable.
+        assertEquals(Seat.GUEST, e.turn)
+        assertTrue(e.legalCardIds(Seat.GUEST).isNotEmpty())
+    }
+
+    @Test
+    fun `autoAdvance always leaves the player on turn with a real choice`() {
+        for (seed in 0 until 40) {
+            val e = engine(seed.toLong())
+            e.startRound(if (seed % 2 == 0) Seat.HOST else Seat.GUEST)
+            var guard = 0
+            while (e.phase != Phase.GAME_OVER && guard++ < 2000) {
+                e.autoAdvance()
+                if (e.phase == Phase.GAME_OVER) break
+                val legal = e.legalCardIds(e.turn)
+                assertTrue(
+                    "graine $seed : joueur bloque sans action possible",
+                    legal.isNotEmpty() || e.phase == Phase.DECIDE_AFTER_DRAW
+                )
+                if (legal.isEmpty()) {
+                    e.pass(e.turn)
+                } else {
+                    e.playCard(e.turn, legal.first(), CardColor.RED)
+                }
+            }
+            assertEquals("graine $seed", Phase.GAME_OVER, e.phase)
+        }
+    }
+
+    // -------------------------------------------------------------- hand order
+
+    @Test
+    fun `the hand is grouped by colour then by symbol`() {
+        val e = engine()
+        e.forceState(
+            hostHand = listOf(
+                card(1, CardColor.BLUE, CardKind.NUMBER, 4),
+                card(2, CardColor.WILD, CardKind.WILD_DRAW_FOUR),
+                card(3, CardColor.RED, CardKind.DRAW_TWO),
+                card(4, CardColor.RED, CardKind.NUMBER, 9),
+                card(5, CardColor.WILD, CardKind.WILD),
+                card(6, CardColor.RED, CardKind.NUMBER, 2),
+                card(7, CardColor.GREEN, CardKind.SKIP)
+            ),
+            guestHand = filler(3),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = Seat.HOST
+        )
+        val ordered = e.viewFor(Seat.HOST, rematchSelf = false, rematchOther = false).hand
+        // red 2, red 9, red +2, green skip, blue 4, joker, +4
+        assertEquals(listOf(6, 4, 3, 7, 1, 5, 2), ordered.map { it.id })
+    }
+
+    @Test
+    fun `sorting never loses or duplicates a card`() {
+        val e = engine(5)
+        e.startRound(Seat.HOST)
+        val view = e.viewFor(Seat.HOST, rematchSelf = false, rematchOther = false)
+        assertEquals(e.handOf(Seat.HOST).size, view.hand.size)
+        assertEquals(e.handOf(Seat.HOST).toSet(), view.hand.toSet())
+    }
+
     // ------------------------------------------------------------------ end
 
     @Test
@@ -497,12 +614,13 @@ class UnoEngineTest {
         val e = engine()
         e.startRound(Seat.HOST)
         val hostView = e.viewFor(Seat.HOST, rematchSelf = false, rematchOther = false)
-        assertEquals(e.handOf(Seat.HOST), hostView.hand)
+        // Same cards, but the view groups them by colour for display.
+        assertEquals(e.handOf(Seat.HOST).toSet(), hostView.hand.toSet())
         assertEquals(e.handOf(Seat.GUEST).size, hostView.opponentCount)
         assertTrue(hostView.yourTurn)
 
         val guestView = e.viewFor(Seat.GUEST, rematchSelf = false, rematchOther = false)
-        assertEquals(e.handOf(Seat.GUEST), guestView.hand)
+        assertEquals(e.handOf(Seat.GUEST).toSet(), guestView.hand.toSet())
         assertFalse(guestView.yourTurn)
         assertTrue(guestView.legal.isEmpty())
     }

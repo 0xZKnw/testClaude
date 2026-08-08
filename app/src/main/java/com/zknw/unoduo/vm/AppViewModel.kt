@@ -204,6 +204,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun broadcast() {
         val e = engine ?: return
+        // The player on turn must always have a real choice: anything forced (drawing
+        // because nothing is playable, eating a stack you cannot counter) happens here.
+        e.autoAdvance()
         _state.update {
             it.copy(
                 screen = Screen.GAME,
@@ -317,18 +320,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             lockInput()
             guest?.send(NetMsg.Play(cardId, color))
-        }
-    }
-
-    fun drawCard() {
-        val view = _state.value.view ?: return
-        if (!view.yourTurn || _state.value.inputLocked) return
-        if (_state.value.isHost) {
-            val e = engine ?: return
-            if (e.draw(Seat.HOST)) broadcast()
-        } else {
-            lockInput()
-            guest?.send(NetMsg.Draw)
         }
     }
 

@@ -45,6 +45,14 @@ class UnoEngine(private val rng: Random) {
     var eventId: Int = 0
         private set
 
+    /** Bumped on every deal, so the UI can reset its per-round animation state. */
+    var roundId: Int = 0
+        private set
+
+    /** Who put the current top card there, or null if it landed by a deal. */
+    var lastPlayedBy: Seat? = null
+        private set
+
     private val scores = mutableMapOf(Seat.HOST to 0, Seat.GUEST to 0)
 
     fun score(seat: Seat): Int = scores.getValue(seat)
@@ -95,6 +103,8 @@ class UnoEngine(private val rng: Random) {
         phase = Phase.PLAYING
         winner = null
         drawnCardId = -1
+        lastPlayedBy = null
+        roundId++
         pushEvent("Nouvelle manche")
     }
 
@@ -158,6 +168,7 @@ class UnoEngine(private val rng: Random) {
         val card = hand.removeAt(index)
         discardPile.add(card)
         drawnCardId = -1
+        lastPlayedBy = seat
         phase = Phase.PLAYING
 
         val name = seatName(seat)
@@ -283,6 +294,18 @@ class UnoEngine(private val rng: Random) {
         drawPile.shuffle(rng)
     }
 
+    /**
+     * Resolves everything the player has no say in: with nothing playable you draw,
+     * and an unplayable drawn card ends your turn. Called after every action so the
+     * player on turn always has a real decision to make — hence no "draw" button.
+     */
+    fun autoAdvance() {
+        var guard = 0
+        while (phase == Phase.PLAYING && legalCardIds(turn).isEmpty() && guard++ < AUTO_GUARD) {
+            if (!draw(turn)) return
+        }
+    }
+
     // ------------------------------------------------------------------- view
 
     private val names = mutableMapOf(Seat.HOST to "Hôte", Seat.GUEST to "Invité")
@@ -296,7 +319,7 @@ class UnoEngine(private val rng: Random) {
 
     fun viewFor(seat: Seat, rematchSelf: Boolean, rematchOther: Boolean): GameView = GameView(
         youAre = seat,
-        hand = hands.getValue(seat).toList(),
+        hand = hands.getValue(seat).sortedWith(HAND_ORDER),
         legal = legalCardIds(seat).toList(),
         opponentCount = hands.getValue(seat.other).size,
         top = discardPile.last(),
@@ -315,7 +338,9 @@ class UnoEngine(private val rng: Random) {
         rematchYou = rematchSelf,
         rematchOpponent = rematchOther,
         yourScore = scores.getValue(seat),
-        opponentScore = scores.getValue(seat.other)
+        opponentScore = scores.getValue(seat.other),
+        roundId = roundId,
+        lastPlayedBy = lastPlayedBy
     )
 
     private fun pushEvent(text: String) {
@@ -329,6 +354,17 @@ class UnoEngine(private val rng: Random) {
         CardColor.GREEN -> "vert"
         CardColor.BLUE -> "bleu"
         CardColor.WILD -> "-"
+    }
+
+    private companion object {
+        const val AUTO_GUARD = 300
+
+        /** Hands are shown grouped by colour, then by symbol, then by number. */
+        val HAND_ORDER: Comparator<Card> = compareBy(
+            { it.color.ordinal },
+            { it.kind.ordinal },
+            { it.number }
+        )
     }
 
     // ------------------------------------------------------- test entry points
