@@ -648,6 +648,91 @@ class UnoEngineTest {
         assertEquals(Seat.HOST, e.penaltyVictim)
     }
 
+    // ------------------------------------------------------------------ stats
+
+    @Test
+    fun `the engine counts what each seat actually did`() {
+        val e = engine()
+        e.forceState(
+            hostHand = listOf(
+                card(1, CardColor.RED, CardKind.DRAW_TWO),
+                // Blue, because the guest's counter below turns the active colour blue.
+                card(3, CardColor.BLUE, CardKind.SKIP),
+                card(4, CardColor.WILD, CardKind.WILD)
+            ) + filler(2, 700),
+            guestHand = listOf(card(2, CardColor.BLUE, CardKind.DRAW_TWO)) + filler(2, 800),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = Seat.HOST,
+            deck = filler(30, 100)
+        )
+        e.playCard(Seat.HOST, 1, null)          // +2, stack of 2
+        e.playCard(Seat.GUEST, 2, null)         // +2 en contre, stack of 4
+        e.autoAdvance()                         // the host swallows 4
+
+        val host = e.statsOf(Seat.HOST)
+        assertEquals(1, host.cardsPlayed)
+        assertEquals(1, host.drawTwosPlayed)
+        assertEquals(0, host.countersPlayed)
+        assertEquals(2, host.biggestStackDealt)
+        assertEquals(4, host.penaltyCardsTaken)
+        assertEquals(4, host.biggestStackTaken)
+        assertEquals(4, host.cardsDrawn)
+
+        val guest = e.statsOf(Seat.GUEST)
+        assertEquals(1, guest.cardsPlayed)
+        assertEquals(1, guest.countersPlayed)
+        assertEquals(4, guest.biggestStackDealt)
+        assertEquals(0, guest.penaltyCardsTaken)
+
+        // The host keeps the turn after a +2 and can carry on.
+        assertTrue(e.playCard(Seat.HOST, 3, null))
+        assertEquals(1, e.statsOf(Seat.HOST).skipsPlayed)
+        assertTrue(e.playCard(Seat.HOST, 4, CardColor.GREEN))
+        assertEquals(1, e.statsOf(Seat.HOST).wildsPlayed)
+    }
+
+    @Test
+    fun `stats reset between rounds and travel in the view`() {
+        val e = engine(4)
+        e.startRound(Seat.HOST)
+        val legal = e.legalCardIds(Seat.HOST)
+        if (legal.isNotEmpty()) e.playCard(Seat.HOST, legal.first(), CardColor.RED)
+        assertTrue(e.statsOf(Seat.HOST).cardsPlayed > 0)
+        assertEquals(
+            e.statsOf(Seat.HOST),
+            e.viewFor(Seat.HOST, rematchSelf = false, rematchOther = false).yourStats
+        )
+
+        e.startRound(Seat.GUEST)
+        assertEquals(RoundStats(), e.statsOf(Seat.HOST))
+        assertEquals(RoundStats(), e.statsOf(Seat.GUEST))
+    }
+
+    @Test
+    fun `stats add up across rounds`() {
+        val a = RoundStats(cardsPlayed = 3, penaltyCardsTaken = 4, biggestStackTaken = 4)
+        val b = RoundStats(cardsPlayed = 5, penaltyCardsTaken = 2, biggestStackTaken = 10)
+        val total = a + b
+        assertEquals(8, total.cardsPlayed)
+        assertEquals(6, total.penaltyCardsTaken)
+        // Records are kept, not summed.
+        assertEquals(10, total.biggestStackTaken)
+    }
+
+    @Test
+    fun `each player sees their own avatar and the other one`() {
+        val e = engine()
+        e.setAvatars(host = 2, guest = 7)
+        e.startRound(Seat.HOST)
+        val hostView = e.viewFor(Seat.HOST, rematchSelf = false, rematchOther = false)
+        assertEquals(2, hostView.yourAvatar)
+        assertEquals(7, hostView.opponentAvatar)
+        val guestView = e.viewFor(Seat.GUEST, rematchSelf = false, rematchOther = false)
+        assertEquals(7, guestView.yourAvatar)
+        assertEquals(2, guestView.opponentAvatar)
+    }
+
     // -------------------------------------------------------------- hand order
 
     @Test

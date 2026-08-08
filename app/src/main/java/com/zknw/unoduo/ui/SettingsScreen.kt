@@ -268,7 +268,7 @@ private fun TokenField(token: String, onTokenChange: (String) -> Unit) {
                 focusedTextColor = Palette.Text,
                 unfocusedTextColor = Palette.Text,
                 focusedBorderColor = Palette.Gold,
-                unfocusedBorderColor = Palette.Line,
+                unfocusedBorderColor = Palette.Outline,
                 cursorColor = Palette.Gold,
                 focusedContainerColor = Palette.Ink,
                 unfocusedContainerColor = Palette.Ink

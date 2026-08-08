@@ -25,6 +25,7 @@ import com.zknw.unoduo.game.Rules
 import com.zknw.unoduo.ui.components.MenuBackground
 import com.zknw.unoduo.ui.components.Panel
 import com.zknw.unoduo.ui.components.ScreenHeader
+import com.zknw.unoduo.ui.components.SectionLabel
 import com.zknw.unoduo.ui.theme.Palette
 
 @Composable
@@ -43,13 +44,7 @@ fun RulesScreen(onBack: () -> Unit) {
                 items(Rules.sections) { section ->
                     Panel(Modifier.fillMaxWidth()) {
                         Column {
-                            Text(
-                                section.title.uppercase(),
-                                color = Palette.Gold,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 1.4.sp
-                            )
+                            SectionLabel(section.title.uppercase())
                             Spacer(Modifier.height(12.dp))
                             section.lines.forEach { line ->
                                 Row(Modifier.padding(bottom = 10.dp)) {

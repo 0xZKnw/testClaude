@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -62,7 +63,11 @@ import com.zknw.unoduo.game.CardColor
 import com.zknw.unoduo.game.GameView
 import com.zknw.unoduo.game.Penalty
 import com.zknw.unoduo.game.Phase
+import com.zknw.unoduo.ui.components.AvatarLook
 import com.zknw.unoduo.ui.components.ColorChip
+import com.zknw.unoduo.ui.components.InkChip
+import com.zknw.unoduo.ui.components.InkIconButton
+import com.zknw.unoduo.ui.components.PlayerAvatar
 import com.zknw.unoduo.ui.components.GhostButton
 import com.zknw.unoduo.ui.components.Panel
 import com.zknw.unoduo.ui.components.PrimaryButton
@@ -293,7 +298,14 @@ private fun OpponentRow(view: GameView, onQuit: () -> Unit) {
             .padding(top = 10.dp, start = 16.dp, end = 16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(view.opponentName, active = !view.yourTurn && view.phase != Phase.GAME_OVER)
+            val opponentTurn = !view.yourTurn && view.phase != Phase.GAME_OVER
+            PlayerAvatar(
+                name = view.opponentName,
+                look = AvatarLook(view.opponentAvatar),
+                size = 44.dp,
+                ring = if (opponentTurn) 4.dp else 3.dp,
+                ringColor = if (opponentTurn) Palette.Gold else Palette.Outline
+            )
             Spacer(Modifier.width(10.dp))
             Column {
                 Text(
@@ -305,9 +317,12 @@ private fun OpponentRow(view: GameView, onQuit: () -> Unit) {
                 CardCountLine(view.opponentCount)
             }
             Spacer(Modifier.weight(1f))
-            ScoreBadge(view.yourScore, view.opponentScore)
+            InkChip(
+                text = "${view.yourScore} — ${view.opponentScore}",
+                color = Palette.SlateHigh
+            )
             Spacer(Modifier.width(8.dp))
-            QuitChip(onQuit)
+            InkIconButton("✕", size = 40.dp) { onQuit() }
         }
 
         Spacer(Modifier.height(6.dp))
@@ -355,57 +370,6 @@ private fun OpponentFan(count: Int) {
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun Avatar(name: String, active: Boolean) {
-    val ring by animateDpAsState(if (active) 3.dp else 0.dp, label = "avatar-ring")
-    val glow by animateFloatAsState(if (active) 1f else 0f, label = "avatar-glow")
-    Box(
-        Modifier
-            .size(40.dp)
-            .clip(CircleShape)
-            .background(Palette.SlateHigh)
-            .border(ring, Palette.Gold.copy(alpha = 0.4f + 0.6f * glow), CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            name.take(1).uppercase().ifBlank { "?" },
-            color = Palette.Text,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Black
-        )
-    }
-}
-
-@Composable
-private fun ScoreBadge(you: Int, opponent: Int) {
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Palette.Ink.copy(alpha = 0.6f))
-            .border(1.dp, Palette.Line, RoundedCornerShape(12.dp))
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-    ) {
-        AnimatedContent(targetState = "$you — $opponent", label = "score") { text ->
-            Text(text, color = Palette.TextDim, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun QuitChip(onQuit: () -> Unit) {
-    Box(
-        Modifier
-            .size(34.dp)
-            .clip(CircleShape)
-            .background(Palette.Ink.copy(alpha = 0.6f))
-            .border(1.dp, Palette.Line, CircleShape)
-            .clickableNoRipple { onQuit() },
-        contentAlignment = Alignment.Center
-    ) {
-        Text("✕", color = Palette.TextDim, fontSize = 15.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -847,7 +811,8 @@ private fun ColorPicker(onPick: (CardColor) -> Unit, onCancel: () -> Unit) {
     ) {
         Panel(
             Modifier
-                .padding(horizontal = 32.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 26.dp)
                 .graphicsLayer {
                     val t = appear.value
                     alpha = t
@@ -863,12 +828,17 @@ private fun ColorPicker(onPick: (CardColor) -> Unit, onCancel: () -> Unit) {
                     fontWeight = FontWeight.ExtraBold
                 )
                 Spacer(Modifier.height(18.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     CardColor.playable.forEach { color ->
                         ColorChip(
                             color = color,
-                            chipSize = 62.dp,
-                            modifier = Modifier.clickableNoRipple { onPick(color) }
+                            modifier = Modifier
+                                .weight(1f)
+                                .aspectRatio(1f)
+                                .clickableNoRipple { onPick(color) }
                         )
                     }
                 }
@@ -966,15 +936,7 @@ private fun EventToast(text: String, modifier: Modifier = Modifier) {
         if (value.isEmpty()) {
             Spacer(Modifier.height(1.dp))
         } else {
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Palette.Ink.copy(alpha = 0.88f))
-                    .border(1.dp, Palette.Line, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 7.dp)
-            ) {
-                Text(value, color = Palette.Text.copy(alpha = 0.92f), fontSize = 12.sp)
-            }
+            InkChip(text = value, color = Palette.Slate, fontSize = 12)
         }
     }
 }

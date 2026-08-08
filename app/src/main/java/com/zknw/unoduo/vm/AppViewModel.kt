@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.zknw.unoduo.game.CardColor
 import com.zknw.unoduo.game.GameView
+import com.zknw.unoduo.game.Phase
 import com.zknw.unoduo.game.Seat
 import com.zknw.unoduo.game.UnoEngine
 import com.zknw.unoduo.net.BleGuest
@@ -13,6 +14,8 @@ import com.zknw.unoduo.net.BleHost
 import com.zknw.unoduo.net.JoinLink
 import com.zknw.unoduo.net.NetMsg
 import com.zknw.unoduo.net.RoomCode
+import com.zknw.unoduo.profile.Profile
+import com.zknw.unoduo.profile.ProfileStore
 import com.zknw.unoduo.update.Updater
 import com.zknw.unoduo.BuildConfig
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +29,7 @@ import kotlinx.coroutines.withContext
 import java.security.SecureRandom
 import kotlin.random.Random
 
-enum class Screen { HOME, RULES, SETTINGS, HOST, JOIN, GAME }
+enum class Screen { HOME, RULES, PROFILE, SETTINGS, HOST, JOIN, GAME }
 
 /** Where the in-app updater is in its little state machine. */
 sealed interface UpdateState {
@@ -43,7 +46,6 @@ enum class LinkStatus { IDLE, ADVERTISING, SEARCHING, CONNECTING, CONNECTED, LOS
 
 data class UiState(
     val screen: Screen = Screen.HOME,
-    val playerName: String = "",
     val isHost: Boolean = false,
     val roomCode: String = "",
     val joinLink: String = "",
@@ -53,17 +55,22 @@ data class UiState(
     val view: GameView? = null,
     val inputLocked: Boolean = false,
     val update: UpdateState = UpdateState.Idle,
-    val updateToken: String = ""
-)
+    val updateToken: String = "",
+    val profile: Profile = Profile()
+) {
+    val playerName: String get() = profile.name
+}
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val prefs = app.getSharedPreferences("unoduo", Context.MODE_PRIVATE)
 
+    private val profileStore = ProfileStore(prefs)
+
     private val _state = MutableStateFlow(
         UiState(
-            playerName = prefs.getString("name", "") ?: "",
-            updateToken = prefs.getString("updateToken", "") ?: ""
+            updateToken = prefs.getString("updateToken", "") ?: "",
+            profile = profileStore.load()
         )
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -73,6 +80,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private var engine: UnoEngine? = null
     private var guestName: String = "Invité"
+    private var guestAvatar: Int = 5
+    private var lastRecordedRound: Int = -1
     private var nextStarter: Seat = Seat.GUEST
     private var rematchHost = false
     private var rematchGuest = false
@@ -80,16 +89,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------- navigation
 
-    fun setName(name: String) {
-        val trimmed = name.take(14)
-        prefs.edit().putString("name", trimmed).apply()
-        _state.update { it.copy(playerName = trimmed) }
+    fun saveProfile(name: String, avatarColor: Int, photoUri: String?) {
+        profileStore.saveIdentity(name.trim().take(14), avatarColor, photoUri)
+        _state.update { it.copy(profile = profileStore.load()) }
     }
+
+    fun resetStats() {
+        _state.update { it.copy(profile = profileStore.resetStats()) }
+    }
+
+    fun openProfile() = _state.update { it.copy(screen = Screen.PROFILE) }
+
+    fun closeProfile() = _state.update { it.copy(screen = Screen.HOME) }
 
     fun goHome() {
         teardown()
         _state.update {
-            UiState(playerName = it.playerName)
+            UiState(profile = it.profile, updateToken = it.updateToken)
         }
     }
 
@@ -210,7 +226,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     return
                 }
                 guestName = msg.name.ifBlank { "Invité" }
-                host?.send(NetMsg.Welcome(ok = true, hostName = displayName()))
+                guestAvatar = msg.avatar
+                host?.send(
+                    NetMsg.Welcome(
+                        ok = true,
+                        hostName = displayName(),
+                        hostAvatar = _state.value.profile.avatarColor
+                    )
+                )
                 _state.update { it.copy(screen = Screen.GAME, link = LinkStatus.CONNECTED) }
                 val running = engine
                 if (running == null) {
@@ -218,6 +241,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     // The guest reconnected mid-game: resume instead of redealing.
                     running.setNames(displayName(), guestName)
+                    running.setAvatars(_state.value.profile.avatarColor, guestAvatar)
                     broadcast()
                 }
             }
@@ -262,6 +286,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             engine = e
         }
         e.setNames(displayName(), guestName)
+        e.setAvatars(_state.value.profile.avatarColor, guestAvatar)
         val starter = if (firstRound) Seat.HOST else nextStarter
         nextStarter = starter.other
         rematchHost = false
@@ -270,18 +295,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         broadcast()
     }
 
+    /** Adds a finished round to this device's totals, exactly once. */
+    private fun maybeRecordRound(view: GameView) {
+        if (view.phase != Phase.GAME_OVER) return
+        if (view.roundId == lastRecordedRound) return
+        lastRecordedRound = view.roundId
+        val updated = profileStore.recordRound(view.youWon, view.yourStats)
+        _state.update { it.copy(profile = updated) }
+    }
+
     private fun broadcast() {
         val e = engine ?: return
         // The player on turn must always have a real choice: anything forced (drawing
         // because nothing is playable, eating a stack you cannot counter) happens here.
         e.autoAdvance()
+        val hostView = e.viewFor(Seat.HOST, rematchHost, rematchGuest)
         _state.update {
-            it.copy(
-                screen = Screen.GAME,
-                view = e.viewFor(Seat.HOST, rematchHost, rematchGuest),
-                inputLocked = false
-            )
+            it.copy(screen = Screen.GAME, view = hostView, inputLocked = false)
         }
+        maybeRecordRound(hostView)
         host?.send(NetMsg.State(e.viewFor(Seat.GUEST, rematchGuest, rematchHost)))
     }
 
@@ -328,7 +360,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
         override fun onReady() = post {
             _state.update { it.copy(statusText = "Entrée dans le salon…") }
-            guest?.send(NetMsg.Hello(_state.value.roomCode, displayName()))
+            guest?.send(
+                NetMsg.Hello(
+                    code = _state.value.roomCode,
+                    name = displayName(),
+                    avatar = _state.value.profile.avatarColor
+                )
+            )
         }
 
         override fun onMessage(msg: NetMsg) = post { handleFromHost(msg) }
@@ -366,6 +404,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         inputLocked = false
                     )
                 }
+                maybeRecordRound(msg.view)
             }
 
             NetMsg.Bye -> _state.update {
@@ -458,6 +497,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         rematchGuest = false
         nextStarter = Seat.GUEST
         guestName = "Invité"
+        guestAvatar = 5
+        lastRecordedRound = -1
     }
 
     private fun post(block: () -> Unit) {

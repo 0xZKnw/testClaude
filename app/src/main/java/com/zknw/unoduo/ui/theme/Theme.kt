@@ -36,9 +36,11 @@ object Palette {
     /** Solid dark wash used to mute a card without making it transparent. */
     val Scrim = Color(0xFF0C1018)
 
-    val FeltLight = Color(0xFF2CA55C)
-    val Felt = Color(0xFF1B7D45)
-    val FeltDark = Color(0xFF0C4527)
+    // An indigo table: green felt fought with the green cards, and every colour of
+    // the deck pops against it.
+    val FeltLight = Color(0xFF4B3B96)
+    val Felt = Color(0xFF33286E)
+    val FeltDark = Color(0xFF1A1342)
 
     val Red = Color(0xFFF23B2E)
     val RedDeep = Color(0xFFC01C12)
@@ -74,11 +76,30 @@ object Palette {
         else -> faceDeep(color)
     }
 
-    /** Flat green felt with a heavy vignette — a table, not a gradient wallpaper. */
+    /** Flat table with a heavy vignette — a table, not a gradient wallpaper. */
     fun feltBrush(): Brush = Brush.radialGradient(
         colors = listOf(FeltLight, Felt, FeltDark),
         radius = 1500f
     )
+
+    /** Menu backdrop, same family as the table so screens feel like one place. */
+    fun menuBrush(): Brush = Brush.verticalGradient(
+        colors = listOf(Color(0xFF2A2159), Color(0xFF15102F))
+    )
+
+    /** Avatar backgrounds. Same flat, saturated logic as the cards. */
+    val avatarColors: List<Color> = listOf(
+        Color(0xFFF23B2E),
+        Color(0xFFFF8A1E),
+        Color(0xFFFFC21A),
+        Color(0xFF41C258),
+        Color(0xFF19B79B),
+        Color(0xFF2E9CF2),
+        Color(0xFF7A5CF0),
+        Color(0xFFF25DA8)
+    )
+
+    fun avatarColor(index: Int): Color = avatarColors[index.mod(avatarColors.size)]
 }
 
 private val scheme = darkColorScheme(

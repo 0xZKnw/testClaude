@@ -282,21 +282,24 @@ fun UnoCardBack(width: Dp, modifier: Modifier = Modifier, elevation: Dp = 6.dp) 
     }
 }
 
-/** Solid swatch used by the colour picker and the active-colour badge. */
+/**
+ * Solid swatch. Sizing is left to the caller — the picker gives each chip an equal
+ * share of the row, which is what stops the last one being squeezed on narrow phones.
+ */
 @Composable
-fun ColorChip(color: CardColor, chipSize: Dp, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(chipSize * 0.3f)
+fun ColorChip(color: CardColor, modifier: Modifier = Modifier) {
+    // Percent corners keep the shape right whatever size the caller settles on.
+    val shape = RoundedCornerShape(percent = 28)
     Box(
         modifier
-            .size(chipSize)
             .clip(shape)
             .background(Palette.Outline)
+            .padding(4.dp)
     ) {
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(chipSize * 0.09f)
-                .clip(RoundedCornerShape(chipSize * 0.24f))
+                .clip(RoundedCornerShape(percent = 26))
                 .background(
                     Brush.verticalGradient(
                         listOf(Palette.face(color), Palette.faceDeep(color))

@@ -14,6 +14,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,6 +41,7 @@ import com.zknw.unoduo.ui.GameScreen
 import com.zknw.unoduo.ui.HomeScreen
 import com.zknw.unoduo.ui.HostScreen
 import com.zknw.unoduo.ui.JoinScreen
+import com.zknw.unoduo.ui.ProfileScreen
 import com.zknw.unoduo.ui.RulesScreen
 import com.zknw.unoduo.ui.SettingsScreen
 import com.zknw.unoduo.ui.components.MenuBackground
@@ -112,6 +114,22 @@ private fun App(vm: AppViewModel = viewModel()) {
         }
     }
 
+    // The photo picker needs no permission, and a persisted grant keeps the avatar
+    // readable after a restart.
+    val pickPhoto = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            vm.saveProfile(state.profile.name, state.profile.avatarColor, uri.toString())
+        }
+    }
+
     val requestCamera = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -145,6 +163,7 @@ private fun App(vm: AppViewModel = viewModel()) {
         when (state.screen) {
             Screen.RULES -> vm.closeRules()
             Screen.SETTINGS -> vm.closeSettings()
+            Screen.PROFILE -> vm.closeProfile()
             Screen.GAME -> vm.leaveGame()
             else -> vm.goHome()
         }
@@ -152,12 +171,24 @@ private fun App(vm: AppViewModel = viewModel()) {
 
     when (state.screen) {
         Screen.HOME -> HomeScreen(
-            playerName = state.playerName,
-            onNameChange = vm::setName,
+            profile = state.profile,
             onHost = { withBle(asHost = true) { vm.startHosting() } },
             onJoin = { withBle(asHost = false) { vm.openJoin() } },
             onRules = vm::openRules,
+            onProfile = vm::openProfile,
             onSettings = vm::openSettings
+        )
+
+        Screen.PROFILE -> ProfileScreen(
+            profile = state.profile,
+            onSave = vm::saveProfile,
+            onPickPhoto = {
+                pickPhoto.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            },
+            onResetStats = vm::resetStats,
+            onBack = vm::closeProfile
         )
 
         Screen.RULES -> RulesScreen(onBack = vm::closeRules)

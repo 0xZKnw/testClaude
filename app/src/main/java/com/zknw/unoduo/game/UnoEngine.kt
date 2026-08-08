@@ -62,6 +62,15 @@ class UnoEngine(private val rng: Random) {
         private set
 
     private val scores = mutableMapOf(Seat.HOST to 0, Seat.GUEST to 0)
+    private val stats = mapOf(Seat.HOST to StatsBuilder(), Seat.GUEST to StatsBuilder())
+    private val avatars = mutableMapOf(Seat.HOST to 0, Seat.GUEST to 5)
+
+    fun statsOf(seat: Seat): RoundStats = stats.getValue(seat).snapshot()
+
+    fun setAvatars(host: Int, guest: Int) {
+        avatars[Seat.HOST] = host
+        avatars[Seat.GUEST] = guest
+    }
 
     fun score(seat: Seat): Int = scores.getValue(seat)
 
@@ -113,6 +122,7 @@ class UnoEngine(private val rng: Random) {
         drawnCardId = -1
         lastPlayedBy = null
         clearPenaltyMark()
+        stats.values.forEach { it.reset() }
         roundId++
         pushEvent("Nouvelle manche")
     }
@@ -174,12 +184,31 @@ class UnoEngine(private val rng: Random) {
         if (index < 0) return false
         // A wild is only accepted together with a valid colour choice.
         if (hand[index].isWild && (chosenColor == null || !chosenColor.isRealColor)) return false
+        val wasCountering = pendingDraw > 0
         val card = hand.removeAt(index)
         discardPile.add(card)
         drawnCardId = -1
         lastPlayedBy = seat
         clearPenaltyMark()
         phase = Phase.PLAYING
+
+        val tally = stats.getValue(seat)
+        tally.cardsPlayed++
+        when (card.kind) {
+            CardKind.DRAW_TWO -> {
+                tally.drawTwosPlayed++
+                if (wasCountering) tally.countersPlayed++
+            }
+
+            CardKind.WILD_DRAW_FOUR -> {
+                tally.drawFoursPlayed++
+                if (wasCountering) tally.countersPlayed++
+            }
+
+            CardKind.WILD -> tally.wildsPlayed++
+            CardKind.SKIP, CardKind.REVERSE -> tally.skipsPlayed++
+            CardKind.NUMBER -> Unit
+        }
 
         val name = seatName(seat)
         when (card.kind) {
@@ -204,6 +233,7 @@ class UnoEngine(private val rng: Random) {
                 activeColor = card.color
                 pendingDraw += 2
                 pendingType = Penalty.DRAW_TWO
+                tally.biggestStackDealt = maxOf(tally.biggestStackDealt, pendingDraw)
                 turn = seat.other
                 pushEvent("$name pose +2 — total +$pendingDraw")
             }
@@ -218,6 +248,7 @@ class UnoEngine(private val rng: Random) {
                 activeColor = chosenColor!!
                 pendingDraw += 4
                 pendingType = Penalty.DRAW_FOUR
+                tally.biggestStackDealt = maxOf(tally.biggestStackDealt, pendingDraw)
                 turn = seat.other
                 pushEvent("$name pose +4 ${colorName(activeColor)} — total +$pendingDraw")
             }
@@ -248,6 +279,9 @@ class UnoEngine(private val rng: Random) {
             drawnCardId = -1
             penaltyTaken = amount
             penaltyVictim = seat
+            val hit = stats.getValue(seat)
+            hit.penaltyCardsTaken += amount
+            hit.biggestStackTaken = maxOf(hit.biggestStackTaken, amount)
             if (skipTurn) {
                 // House rule: eating a +4 also costs you your turn.
                 turn = seat.other
@@ -300,6 +334,7 @@ class UnoEngine(private val rng: Random) {
         if (drawPile.isEmpty()) return null
         val card = drawPile.removeAt(drawPile.size - 1)
         hands.getValue(seat).add(card)
+        stats.getValue(seat).cardsDrawn++
         return card
     }
 
@@ -365,7 +400,10 @@ class UnoEngine(private val rng: Random) {
         roundId = roundId,
         lastPlayedBy = lastPlayedBy,
         penaltyTaken = penaltyTaken,
-        penaltyVictim = penaltyVictim
+        penaltyVictim = penaltyVictim,
+        yourStats = stats.getValue(seat).snapshot(),
+        yourAvatar = avatars.getValue(seat),
+        opponentAvatar = avatars.getValue(seat.other)
     )
 
     private fun pushEvent(text: String) {

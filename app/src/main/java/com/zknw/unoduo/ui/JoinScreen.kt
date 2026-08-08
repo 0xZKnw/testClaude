@@ -69,7 +69,7 @@ fun JoinScreen(
                     .aspectRatio(1f)
                     .clip(RoundedCornerShape(24.dp))
                     .background(Palette.Ink)
-                    .border(1.dp, Palette.Line, RoundedCornerShape(24.dp))
+                    .border(3.dp, Palette.Outline, RoundedCornerShape(24.dp))
             ) {
                 when {
                     connecting -> Box(
@@ -131,10 +131,10 @@ fun JoinScreen(
                                 focusedTextColor = Palette.Text,
                                 unfocusedTextColor = Palette.Text,
                                 focusedBorderColor = Palette.Gold,
-                                unfocusedBorderColor = Palette.Line,
+                                unfocusedBorderColor = Palette.Outline,
                                 cursorColor = Palette.Gold,
-                                focusedContainerColor = Palette.Ink.copy(alpha = 0.5f),
-                                unfocusedContainerColor = Palette.Ink.copy(alpha = 0.5f)
+                                focusedContainerColor = Palette.Ink,
+                                unfocusedContainerColor = Palette.Ink
                             )
                         )
                         Spacer(Modifier.width(12.dp))

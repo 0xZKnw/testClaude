@@ -60,7 +60,10 @@ data class GameView(
     @SerialName("ri") val roundId: Int = 0,
     @SerialName("lp") val lastPlayedBy: Seat? = null,
     @SerialName("pk") val penaltyTaken: Int = 0,
-    @SerialName("pv") val penaltyVictim: Seat? = null
+    @SerialName("pv") val penaltyVictim: Seat? = null,
+    @SerialName("st") val yourStats: RoundStats = RoundStats(),
+    @SerialName("ya") val yourAvatar: Int = 0,
+    @SerialName("oa") val opponentAvatar: Int = 5
 ) {
     val yourTurn: Boolean get() = turn == youAre && phase != Phase.GAME_OVER
     val youWon: Boolean get() = winner == youAre

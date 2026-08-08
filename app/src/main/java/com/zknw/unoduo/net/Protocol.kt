@@ -32,7 +32,8 @@ sealed class NetMsg {
     @SerialName("hello")
     data class Hello(
         @SerialName("c") val code: String,
-        @SerialName("n") val name: String
+        @SerialName("n") val name: String,
+        @SerialName("a") val avatar: Int = 0
     ) : NetMsg()
 
     /** Host accepts or rejects the guest. */
@@ -41,6 +42,7 @@ sealed class NetMsg {
     data class Welcome(
         @SerialName("ok") val ok: Boolean,
         @SerialName("n") val hostName: String = "",
+        @SerialName("a") val hostAvatar: Int = 0,
         @SerialName("r") val reason: String = ""
     ) : NetMsg()
 

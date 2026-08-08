@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -80,11 +81,13 @@ fun HostScreen(
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         roomCode.forEach { char ->
+                            val tile = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
                             Box(
                                 Modifier
                                     .size(38.dp, 48.dp)
-                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                                    .background(Palette.Ink),
+                                    .clip(tile)
+                                    .background(Palette.Ink)
+                                    .border(3.dp, Palette.Outline, tile),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
