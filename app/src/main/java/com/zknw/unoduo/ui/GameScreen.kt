@@ -7,10 +7,7 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.tween
@@ -379,21 +376,23 @@ private fun OpponentFan(count: Int) {
  * would draw sixty times a second to show something perfectly still.
  */
 @Composable
-private fun breathing(active: Boolean, from: Float, to: Float, periodMillis: Int, label: String): Float {
-    if (!active) return from
-    val transition = rememberInfiniteTransition(label = label)
-    val value by transition.animateFloat(
-        initialValue = from,
-        targetValue = to,
-        animationSpec = infiniteRepeatable(tween(periodMillis), RepeatMode.Reverse),
-        label = "$label-value"
-    )
-    return value
+private fun breathing(active: Boolean, from: Float, to: Float, periodMillis: Int): Float {
+    val value = remember { Animatable(from) }
+    LaunchedEffect(active) {
+        if (active) {
+            value.animateTo(to, infiniteRepeatable(tween(periodMillis), RepeatMode.Reverse))
+        } else if (value.value != from) {
+            // Eases back to rest rather than snapping: an always-running transition used
+            // to settle on its own when its target changed, and that is what the eye saw.
+            value.animateTo(from, tween(periodMillis))
+        }
+    }
+    return value.value
 }
 
 @Composable
 private fun UnoBadge() {
-    val scale = breathing(active = true, from = 1f, to = 1.16f, periodMillis = 700, label = "uno")
+    val scale = breathing(active = true, from = 1f, to = 1.16f, periodMillis = 700)
     Box(
         Modifier
             .graphicsLayer {
@@ -441,7 +440,7 @@ private fun DrawPile(count: Int, enabled: Boolean, urgent: Boolean, onDraw: () -
     }
 
     // Nothing playable: the deck is the only move left, so it asks to be tapped.
-    val pulse = breathing(urgent, from = 1f, to = 1.07f, periodMillis = 760, label = "deck")
+    val pulse = breathing(urgent, from = 1f, to = 1.07f, periodMillis = 760)
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
@@ -557,7 +556,7 @@ private fun DiscardPile(view: GameView) {
 
 @Composable
 private fun PendingBadge(amount: Int) {
-    val scale = breathing(active = true, from = 1f, to = 1.12f, periodMillis = 600, label = "pending")
+    val scale = breathing(active = true, from = 1f, to = 1.12f, periodMillis = 600)
     Box(
         Modifier
             .graphicsLayer {
@@ -706,8 +705,7 @@ private fun PlayerHand(view: GameView, enabled: Boolean, onCardTap: (Card) -> Un
             active = enabled && view.legal.isNotEmpty(),
             from = 0.55f,
             to = 1f,
-            periodMillis = 900,
-            label = "ring"
+            periodMillis = 900
         )
 
         Column(

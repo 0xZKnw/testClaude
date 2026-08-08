@@ -56,6 +56,7 @@ class BleGuest(
     private var ready = false
     private var mtu = 23
     private var connectAttempts = 0
+    private var linkFast = false
 
     private val reassembler = Framing.Reassembler()
     private val outbox = ArrayDeque<ByteArray>()
@@ -201,18 +202,8 @@ class BleGuest(
                 }
                 ready = true
                 listener.onReady()
+                keepLinkFast()
                 pump()
-                // The high-priority interval is worth it for the handshake and the first
-                // board, then it is pure drain: a card game sends a few hundred bytes per
-                // turn, and BALANCED delivers those in well under the time it takes to
-                // notice. Posted rather than immediate so the opening exchange stays snappy.
-                handler.postDelayed({
-                    if (!stopped) {
-                        runCatching {
-                            gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED)
-                        }
-                    }
-                }, RELAX_LINK_AFTER_MS)
             }
         }
 
@@ -248,8 +239,37 @@ class BleGuest(
         }
     }
 
+    /**
+     * Holding the fastest connection interval for a whole game drains the radio for
+     * nothing: a turn is seconds of thinking followed by a few hundred bytes. So the
+     * link runs fast whenever anything is moving and relaxes once it falls silent —
+     * and any traffic, sent or received, snaps it straight back. A play is preceded by
+     * the tap that sends it, so the interval is already tight by the time the answer
+     * comes back: the table reacts exactly as it did before.
+     */
+    private fun keepLinkFast() {
+        handler.removeCallbacks(relaxLink)
+        handler.postDelayed(relaxLink, IDLE_BEFORE_RELAX_MS)
+        setLinkPriority(fast = true)
+    }
+
+    private val relaxLink = Runnable { setLinkPriority(fast = false) }
+
+    private fun setLinkPriority(fast: Boolean) {
+        if (stopped || fast == linkFast) return
+        val g = gatt ?: return
+        linkFast = fast
+        runCatching {
+            g.requestConnectionPriority(
+                if (fast) BluetoothGatt.CONNECTION_PRIORITY_HIGH
+                else BluetoothGatt.CONNECTION_PRIORITY_BALANCED
+            )
+        }
+    }
+
     private fun handleIncoming(characteristic: BluetoothGattCharacteristic, value: ByteArray) {
         if (characteristic.uuid != Ble.TX_UUID) return
+        keepLinkFast()
         val payload = reassembler.feed(value) ?: return
         val msg = Wire.decode(payload)
         if (msg != null) listener.onMessage(msg)
@@ -258,6 +278,7 @@ class BleGuest(
 
     fun send(msg: NetMsg) = handler.post {
         if (stopped) return@post
+        keepLinkFast()
         outbox.addAll(Framing.split(Wire.encode(msg), mtu))
         pump()
     }
@@ -312,6 +333,8 @@ class BleGuest(
     }
 
     private fun cleanupGatt() {
+        handler.removeCallbacks(relaxLink)
+        linkFast = false
         ready = false
         writing = false
         outbox.clear()
@@ -339,6 +362,6 @@ class BleGuest(
         const val REQUESTED_MTU = 247
         const val SCAN_TIMEOUT_MS = 25_000L
         const val MAX_CONNECT_ATTEMPTS = 2
-        const val RELAX_LINK_AFTER_MS = 3_000L
+        const val IDLE_BEFORE_RELAX_MS = 5_000L
     }
 }

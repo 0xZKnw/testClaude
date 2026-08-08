@@ -121,13 +121,13 @@ class BleHost(
         }
         advertiser = le
 
-        // BALANCED emits every 250 ms instead of every 100 ms, and MEDIUM power carries
-        // well past the couple of metres between two phones reading the same QR code.
-        // The lobby can stay open for a while, and the guest scans at low latency, so
-        // this costs nothing in join time and a lot less in battery.
+        // BALANCED emits every 250 ms instead of every 100 ms: the lobby can stay open a
+        // long while, and since the guest scans continuously it still finds the room on
+        // its first sweep. Transmit power stays at maximum — the saving is in how often
+        // the radio wakes, not how loud it speaks, and range is not worth trading.
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
             .setConnectable(true)
             .setTimeout(0)
             .build()
