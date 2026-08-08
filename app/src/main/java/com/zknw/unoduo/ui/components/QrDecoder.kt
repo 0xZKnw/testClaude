@@ -2,6 +2,7 @@ package com.zknw.unoduo.ui.components
 
 import androidx.camera.core.ImageProxy
 import com.google.zxing.BinaryBitmap
+import com.google.zxing.LuminanceSource
 import com.google.zxing.DecodeHintType
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.common.HybridBinarizer
@@ -34,7 +35,10 @@ class QrDecoder {
         val needed = window.side * rowStride
         if (scratch.size < needed) scratch = ByteArray(needed)
         val start = window.top * rowStride
-        if (buffer.capacity() < start + needed) return null
+        // The buffer may arrive part-consumed, and its last row can be shorter than a
+        // full stride, so both are checked before reading.
+        buffer.rewind()
+        if (buffer.remaining() < start + needed) return null
         buffer.position(start)
         buffer.get(scratch, 0, needed)
 
@@ -56,7 +60,7 @@ class QrDecoder {
         return null
     }
 
-    private fun read(source: PlanarYUVLuminanceSource) = try {
+    private fun read(source: LuminanceSource) = try {
         reader.decode(BinaryBitmap(HybridBinarizer(source)), hints).text
     } catch (_: Exception) {
         null

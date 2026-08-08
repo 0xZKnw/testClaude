@@ -18,17 +18,21 @@ import androidx.compose.ui.platform.LocalContext
  */
 @Composable
 fun BrightScreen() {
-    val context = LocalContext.current
-    DisposableEffect(Unit) {
-        val window = context.findActivity()?.window
+    val window = LocalContext.current.findActivity()?.window
+
+    DisposableEffect(window) {
         val previous = window?.attributes?.screenBrightness
-        window?.attributes = window?.attributes?.apply {
-            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
+        window?.let { w ->
+            w.attributes = w.attributes.apply {
+                screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
+            }
         }
         onDispose {
-            window?.attributes = window?.attributes?.apply {
-                // BRIGHTNESS_OVERRIDE_NONE hands control back to the system setting.
-                screenBrightness = previous ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            window?.let { w ->
+                w.attributes = w.attributes.apply {
+                    // BRIGHTNESS_OVERRIDE_NONE hands control back to the system setting.
+                    screenBrightness = previous ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                }
             }
         }
     }
