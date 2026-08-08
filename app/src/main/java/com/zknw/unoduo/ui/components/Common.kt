@@ -42,8 +42,8 @@ fun TableBackground(content: @Composable () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Palette.Ink)
-            .background(Palette.tableBrush())
+            .background(Palette.Felt)
+            .background(Palette.feltBrush())
     ) { content() }
 }
 
@@ -67,8 +67,8 @@ fun Panel(
     Box(
         modifier
             .clip(RoundedCornerShape(22.dp))
-            .background(Palette.Slate.copy(alpha = 0.92f))
-            .border(1.dp, Palette.Line, RoundedCornerShape(22.dp))
+            .background(Palette.Slate)
+            .border(3.dp, Palette.Outline, RoundedCornerShape(22.dp))
             .padding(padding)
     ) { content() }
 }
@@ -110,7 +110,7 @@ fun GhostButton(
         enabled = enabled,
         modifier = modifier.height(54.dp),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, Palette.Line),
+        border = BorderStroke(2.5.dp, Palette.Outline),
         colors = ButtonDefaults.outlinedButtonColors(
             contentColor = Palette.Text,
             disabledContentColor = Palette.TextDim

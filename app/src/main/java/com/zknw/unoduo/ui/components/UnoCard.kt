@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +23,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import com.zknw.unoduo.game.Card
 import com.zknw.unoduo.game.CardColor
@@ -30,7 +32,11 @@ import com.zknw.unoduo.ui.theme.Palette
 
 const val CARD_ASPECT = 1.52f
 
-/** A full card face. [width] drives every internal proportion. */
+/**
+ * A cartoon card face: ink keyline, warm white stock, flat colour, and a slanted oval
+ * carrying an outlined glyph. [dimmed] darkens the card with a solid wash instead of
+ * lowering its opacity — a half-transparent card just looks broken.
+ */
 @Composable
 fun UnoCardFace(
     card: Card,
@@ -40,36 +46,53 @@ fun UnoCardFace(
     elevation: Dp = 8.dp
 ) {
     val height = width * CARD_ASPECT
+    val outer = RoundedCornerShape(width * 0.13f)
     val stock = RoundedCornerShape(width * 0.11f)
     val inner = RoundedCornerShape(width * 0.085f)
 
     Box(
         modifier
             .size(width, height)
-            .shadow(elevation, stock, clip = false)
-            .clip(stock)
-            .background(Color(0xFFFAFAFA))
-            .graphicsLayer { alpha = if (dimmed) 0.45f else 1f }
+            .shadow(elevation, outer, clip = false)
+            .clip(outer)
+            .background(Palette.Outline)
     ) {
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(width * 0.065f)
-                .clip(inner)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Palette.face(card.color), Palette.faceDeep(card.color))
-                    )
-                )
+                .padding(width * 0.035f)
+                .clip(stock)
+                .background(Palette.Stock)
         ) {
-            if (!card.isWild) {
-                Canvas(Modifier.fillMaxSize()) {
-                    drawFaceOval(Color(0xFFFAFAFA), inset = size.width * 0.10f)
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(width * 0.062f)
+                    .clip(inner)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Palette.face(card.color), Palette.faceDeep(card.color))
+                        )
+                    )
+            ) {
+                if (!card.isWild) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        drawFaceOval(Palette.Stock, Palette.Outline)
+                    }
                 }
+                CenterMark(card, width)
+                CornerMark(card, width, Alignment.TopStart)
+                CornerMark(card, width, Alignment.BottomEnd, flipped = true)
             }
-            CenterMark(card, width)
-            CornerMark(card, width, Alignment.TopStart)
-            CornerMark(card, width, Alignment.BottomEnd, flipped = true)
+        }
+
+        if (dimmed) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clip(outer)
+                    .background(Palette.Scrim.copy(alpha = 0.62f))
+            )
         }
     }
 }
@@ -81,12 +104,12 @@ private fun BoxScope.CenterMark(card: Card, width: Dp) {
     val box = Modifier.align(Alignment.Center)
 
     when (card.kind) {
-        CardKind.NUMBER -> Text(
+        CardKind.NUMBER -> OutlinedGlyphText(
             text = card.number.toString(),
-            modifier = box,
-            color = glyphColor,
-            fontWeight = FontWeight.Black,
-            fontSize = with(density) { (width * 0.66f).toSp() }
+            fontSize = with(density) { (width * 0.64f).toSp() },
+            fill = glyphColor,
+            outlineWidth = width * 0.045f,
+            modifier = box
         )
 
         CardKind.SKIP -> SkipGlyph(width * 0.5f, glyphColor, box)
@@ -97,22 +120,22 @@ private fun BoxScope.CenterMark(card: Card, width: Dp) {
             Canvas(Modifier.fillMaxSize()) {
                 drawMiniCards(
                     colors = listOf(Palette.face(card.color), Palette.face(card.color)),
-                    outline = Color(0xFFFAFAFA),
+                    outline = Palette.Outline,
                     boxSize = size,
                     origin = Offset.Zero
                 )
             }
         }
 
-        CardKind.WILD -> Box(box.size(width * 0.56f)) {
+        CardKind.WILD -> Box(box.size(width * 0.58f)) {
             Canvas(Modifier.fillMaxSize()) {
-                drawWildWheel(Rect(Offset.Zero, size), Color(0xFFFAFAFA))
+                drawWildWheel(Rect(Offset.Zero, size), Palette.Outline)
             }
         }
 
-        CardKind.WILD_DRAW_FOUR -> Box(box.size(width * 0.60f)) {
+        CardKind.WILD_DRAW_FOUR -> Box(box.size(width * 0.62f)) {
             Canvas(Modifier.fillMaxSize()) {
-                drawWildFour(size, Offset.Zero, Color(0xFFFAFAFA))
+                drawWildFour(size, Offset.Zero, Palette.Outline)
             }
         }
     }
@@ -126,43 +149,83 @@ private fun BoxScope.CornerMark(
     flipped: Boolean = false
 ) {
     val density = LocalDensity.current
-    val tint = Color(0xFFFAFAFA)
     val base = Modifier
         .align(alignment)
-        .padding(width * 0.055f)
+        .padding(width * 0.05f)
         .graphicsLayer { rotationZ = if (flipped) 180f else 0f }
+    val small = with(density) { (width * 0.2f).toSp() }
 
     when (card.kind) {
-        CardKind.NUMBER -> Text(
+        CardKind.NUMBER -> OutlinedGlyphText(
             text = card.number.toString(),
-            modifier = base,
-            color = tint,
-            fontWeight = FontWeight.Black,
-            fontSize = with(density) { (width * 0.22f).toSp() }
+            fontSize = small,
+            fill = Palette.Stock,
+            outlineWidth = width * 0.022f,
+            modifier = base
         )
 
-        CardKind.SKIP -> SkipGlyph(width * 0.19f, tint, base)
+        CardKind.SKIP -> SkipGlyph(width * 0.2f, Palette.Stock, base)
 
-        CardKind.REVERSE -> ReverseGlyph(width * 0.19f, tint, base)
+        CardKind.REVERSE -> ReverseGlyph(width * 0.2f, Palette.Stock, base)
 
-        CardKind.DRAW_TWO -> Text(
+        CardKind.DRAW_TWO -> OutlinedGlyphText(
             text = "+2",
-            modifier = base,
-            color = tint,
-            fontWeight = FontWeight.Black,
-            fontSize = with(density) { (width * 0.19f).toSp() }
+            fontSize = small,
+            fill = Palette.Stock,
+            outlineWidth = width * 0.022f,
+            modifier = base
         )
 
-        CardKind.WILD -> Box(base.size(width * 0.2f)) {
-            Canvas(Modifier.fillMaxSize()) { drawWildWheel(Rect(Offset.Zero, size), tint) }
+        CardKind.WILD -> Box(base.size(width * 0.21f)) {
+            Canvas(Modifier.fillMaxSize()) {
+                drawWildWheel(Rect(Offset.Zero, size), Palette.Outline)
+            }
         }
 
-        CardKind.WILD_DRAW_FOUR -> Text(
+        CardKind.WILD_DRAW_FOUR -> OutlinedGlyphText(
             text = "+4",
-            modifier = base,
-            color = tint,
+            fontSize = small,
+            fill = Palette.Stock,
+            outlineWidth = width * 0.022f,
+            modifier = base
+        )
+    }
+}
+
+/**
+ * Cartoon lettering: the same text drawn four times in ink, offset around the fill.
+ * Deliberately low-tech — no experimental text API, and predictable on every device.
+ */
+@Composable
+fun OutlinedGlyphText(
+    text: String,
+    fontSize: TextUnit,
+    fill: Color,
+    outlineWidth: Dp,
+    modifier: Modifier = Modifier,
+    outline: Color = Palette.Outline
+) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        val shifts = listOf(
+            outlineWidth to 0.dp,
+            -outlineWidth to 0.dp,
+            0.dp to outlineWidth,
+            0.dp to -outlineWidth
+        )
+        shifts.forEach { (dx, dy) ->
+            Text(
+                text = text,
+                modifier = Modifier.offset(x = dx, y = dy),
+                color = outline,
+                fontWeight = FontWeight.Black,
+                fontSize = fontSize
+            )
+        }
+        Text(
+            text = text,
+            color = fill,
             fontWeight = FontWeight.Black,
-            fontSize = with(density) { (width * 0.19f).toSp() }
+            fontSize = fontSize
         )
     }
 }
@@ -171,6 +234,7 @@ private fun BoxScope.CornerMark(
 @Composable
 fun UnoCardBack(width: Dp, modifier: Modifier = Modifier, elevation: Dp = 6.dp) {
     val height = width * CARD_ASPECT
+    val outer = RoundedCornerShape(width * 0.13f)
     val stock = RoundedCornerShape(width * 0.11f)
     val inner = RoundedCornerShape(width * 0.085f)
     val density = LocalDensity.current
@@ -178,49 +242,68 @@ fun UnoCardBack(width: Dp, modifier: Modifier = Modifier, elevation: Dp = 6.dp) 
     Box(
         modifier
             .size(width, height)
-            .shadow(elevation, stock, clip = false)
-            .clip(stock)
-            .background(Color(0xFFFAFAFA))
+            .shadow(elevation, outer, clip = false)
+            .clip(outer)
+            .background(Palette.Outline)
     ) {
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(width * 0.065f)
-                .clip(inner)
-                .background(
-                    Brush.verticalGradient(listOf(Color(0xFF1C222D), Color(0xFF0B0E13)))
-                )
+                .padding(width * 0.035f)
+                .clip(stock)
+                .background(Palette.Stock)
         ) {
-            Canvas(Modifier.fillMaxSize()) {
-                drawFaceOval(Palette.Red, inset = size.width * 0.06f, tilt = -28f)
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(width * 0.062f)
+                    .clip(inner)
+                    .background(
+                        Brush.verticalGradient(listOf(Color(0xFF2B3242), Color(0xFF161A24)))
+                    )
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    drawFaceOval(Palette.Red, Palette.Outline, tilt = -28f)
+                }
+                OutlinedGlyphText(
+                    text = "UNO",
+                    fontSize = with(density) { (width * 0.25f).toSp() },
+                    fill = Palette.Stock,
+                    outlineWidth = width * 0.022f,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .graphicsLayer { rotationZ = -28f }
+                )
             }
-            Text(
-                text = "UNO",
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .graphicsLayer { rotationZ = -28f },
-                color = Color(0xFFFAFAFA),
-                fontWeight = FontWeight.Black,
-                fontSize = with(density) { (width * 0.27f).toSp() }
-            )
         }
     }
 }
 
-/** Small solid swatch used by the colour picker and the "current colour" badge. */
+/** Solid swatch used by the colour picker and the active-colour badge. */
 @Composable
 fun ColorChip(color: CardColor, chipSize: Dp, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(chipSize * 0.3f)
     Box(
         modifier
             .size(chipSize)
-            .clip(RoundedCornerShape(chipSize * 0.3f))
-            .background(
-                Brush.verticalGradient(listOf(Palette.face(color), Palette.faceDeep(color)))
-            )
+            .clip(shape)
+            .background(Palette.Outline)
     ) {
-        if (color == CardColor.WILD) {
-            Canvas(Modifier.fillMaxSize()) {
-                drawWildWheel(Rect(Offset.Zero, this.size), Color.White)
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(chipSize * 0.09f)
+                .clip(RoundedCornerShape(chipSize * 0.24f))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Palette.face(color), Palette.faceDeep(color))
+                    )
+                )
+        ) {
+            if (color == CardColor.WILD) {
+                Canvas(Modifier.fillMaxSize()) {
+                    drawWildWheel(Rect(Offset.Zero, size), Palette.Outline)
+                }
             }
         }
     }

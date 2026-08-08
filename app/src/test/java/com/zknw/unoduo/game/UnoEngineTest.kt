@@ -473,7 +473,7 @@ class UnoEngineTest {
     // ------------------------------------------------------- automatic drawing
 
     @Test
-    fun `a player with nothing playable draws by itself and hands over the turn`() {
+    fun `a normal draw is never done automatically`() {
         val e = engine()
         e.forceState(
             hostHand = listOf(card(1, CardColor.BLUE, CardKind.NUMBER, 2)),
@@ -481,18 +481,22 @@ class UnoEngineTest {
             top = card(50, CardColor.RED, CardKind.NUMBER, 5),
             color = CardColor.RED,
             turnSeat = Seat.HOST,
-            // Unplayable card on top of the deck, so the turn must move on.
             deck = listOf(card(81, CardColor.GREEN, CardKind.NUMBER, 7))
         )
         assertTrue(e.legalCardIds(Seat.HOST).isEmpty())
         e.autoAdvance()
+        // Nothing playable, but no stack pending: the player must draw themselves.
+        assertEquals(1, e.handOf(Seat.HOST).size)
+        assertEquals(Seat.HOST, e.turn)
+
+        assertTrue(e.draw(Seat.HOST))
         assertEquals(2, e.handOf(Seat.HOST).size)
         assertEquals(Seat.GUEST, e.turn)
         assertEquals(Phase.PLAYING, e.phase)
     }
 
     @Test
-    fun `a playable drawn card stops the automatic pass and asks the player`() {
+    fun `drawing a playable card hands the choice back to the player`() {
         val e = engine()
         e.forceState(
             hostHand = listOf(card(1, CardColor.BLUE, CardKind.NUMBER, 2)),
@@ -502,7 +506,7 @@ class UnoEngineTest {
             turnSeat = Seat.HOST,
             deck = listOf(card(81, CardColor.RED, CardKind.NUMBER, 7))
         )
-        e.autoAdvance()
+        assertTrue(e.draw(Seat.HOST))
         assertEquals(Phase.DECIDE_AFTER_DRAW, e.phase)
         assertEquals(Seat.HOST, e.turn)
         assertEquals(setOf(81), e.legalCardIds(Seat.HOST))
@@ -530,7 +534,7 @@ class UnoEngineTest {
     }
 
     @Test
-    fun `autoAdvance always leaves the player on turn with a real choice`() {
+    fun `a player is never left with no action at all`() {
         for (seed in 0 until 40) {
             val e = engine(seed.toLong())
             e.startRound(if (seed % 2 == 0) Seat.HOST else Seat.GUEST)
@@ -539,18 +543,45 @@ class UnoEngineTest {
                 e.autoAdvance()
                 if (e.phase == Phase.GAME_OVER) break
                 val legal = e.legalCardIds(e.turn)
+                val view = e.viewFor(e.turn, rematchSelf = false, rematchOther = false)
+                // Either a card to play, a drawn card to decide on, or the deck to tap.
                 assertTrue(
                     "graine $seed : joueur bloque sans action possible",
-                    legal.isNotEmpty() || e.phase == Phase.DECIDE_AFTER_DRAW
+                    legal.isNotEmpty() || view.canPass || view.canDraw
                 )
-                if (legal.isEmpty()) {
-                    e.pass(e.turn)
-                } else {
-                    e.playCard(e.turn, legal.first(), CardColor.RED)
+                when {
+                    legal.isNotEmpty() -> e.playCard(e.turn, legal.first(), CardColor.RED)
+                    view.canPass -> e.pass(e.turn)
+                    else -> e.draw(e.turn)
                 }
             }
             assertEquals("graine $seed", Phase.GAME_OVER, e.phase)
         }
+    }
+
+    @Test
+    fun `the view exposes the deck only when a normal draw is allowed`() {
+        val e = engine()
+        e.forceState(
+            hostHand = listOf(card(1, CardColor.RED, CardKind.DRAW_TWO)) + filler(2, 700),
+            guestHand = listOf(card(2, CardColor.BLUE, CardKind.NUMBER, 3)),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = Seat.HOST,
+            deck = filler(20, 100)
+        )
+        val hostTurn = e.viewFor(Seat.HOST, rematchSelf = false, rematchOther = false)
+        assertTrue(hostTurn.canDraw)
+        assertFalse(hostTurn.mustDraw)
+
+        // Off turn, the deck is not an option.
+        val guestWaiting = e.viewFor(Seat.GUEST, rematchSelf = false, rematchOther = false)
+        assertFalse(guestWaiting.canDraw)
+
+        // Facing a stack, the deck is not tapped either: it resolves on its own.
+        e.playCard(Seat.HOST, 1, null)
+        val facingStack = e.viewFor(Seat.GUEST, rematchSelf = false, rematchOther = false)
+        assertFalse(facingStack.canDraw)
     }
 
     // -------------------------------------------------------------- hand order

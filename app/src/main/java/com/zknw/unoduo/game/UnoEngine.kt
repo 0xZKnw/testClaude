@@ -295,13 +295,17 @@ class UnoEngine(private val rng: Random) {
     }
 
     /**
-     * Resolves everything the player has no say in: with nothing playable you draw,
-     * and an unplayable drawn card ends your turn. Called after every action so the
-     * player on turn always has a real decision to make — hence no "draw" button.
+     * Resolves only what the player has genuinely no say in: a +2/+4 stack they cannot
+     * counter is taken for them. A normal draw stays a deliberate act — tapping the
+     * deck — because doing it silently reads as the game playing itself.
      */
     fun autoAdvance() {
         var guard = 0
-        while (phase == Phase.PLAYING && legalCardIds(turn).isEmpty() && guard++ < AUTO_GUARD) {
+        while (phase == Phase.PLAYING &&
+            pendingDraw > 0 &&
+            legalCardIds(turn).isEmpty() &&
+            guard++ < AUTO_GUARD
+        ) {
             if (!draw(turn)) return
         }
     }

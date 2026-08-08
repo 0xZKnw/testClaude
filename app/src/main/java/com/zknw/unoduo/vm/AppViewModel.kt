@@ -323,6 +323,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Tapping the deck. Only a normal draw: penalties resolve on their own. */
+    fun drawCard() {
+        val view = _state.value.view ?: return
+        if (!view.canDraw || _state.value.inputLocked) return
+        if (_state.value.isHost) {
+            val e = engine ?: return
+            if (e.draw(Seat.HOST)) broadcast()
+        } else {
+            lockInput()
+            guest?.send(NetMsg.Draw)
+        }
+    }
+
     fun passTurn() {
         val view = _state.value.view ?: return
         if (!view.canPass || _state.value.inputLocked) return

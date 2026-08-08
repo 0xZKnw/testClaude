@@ -65,6 +65,12 @@ data class GameView(
     val mustAnswerPenalty: Boolean get() = pendingDraw > 0 && yourTurn
     val canPass: Boolean get() = phase == Phase.DECIDE_AFTER_DRAW && yourTurn
 
+    /** The deck is tappable on your turn, once any pending stack is settled. */
+    val canDraw: Boolean get() = yourTurn && phase == Phase.PLAYING && pendingDraw == 0
+
+    /** Nothing to play and no stack pending: drawing is the only way forward. */
+    val mustDraw: Boolean get() = canDraw && legal.isEmpty()
+
     /** True when the top card was played by the opponent, used to pick an animation. */
     val topCameFromOpponent: Boolean get() = lastPlayedBy != null && lastPlayedBy != youAre
 }

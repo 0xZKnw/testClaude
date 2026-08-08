@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -44,7 +45,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -80,6 +80,7 @@ fun GameScreen(
     view: GameView,
     inputLocked: Boolean,
     onPlay: (Int, CardColor?) -> Unit,
+    onDraw: () -> Unit,
     onPass: () -> Unit,
     onRematch: () -> Unit,
     onQuit: () -> Unit
@@ -98,7 +99,14 @@ fun GameScreen(
             OpponentRow(view, onQuit)
 
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                TableCenter(view)
+                TableCenter(
+                    view = view,
+                    drawEnabled = view.canDraw && !inputLocked,
+                    onDraw = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onDraw()
+                    }
+                )
                 EventToast(toast, Modifier.align(Alignment.BottomCenter))
             }
 
@@ -157,6 +165,7 @@ private fun illegalReason(view: GameView): String = when {
 
     view.pendingDraw > 0 -> "Il te faut un +2 (ou un +4) pour continuer la pile."
     view.phase == Phase.DECIDE_AFTER_DRAW -> "Tu ne peux poser que la carte piochée."
+    view.legal.isEmpty() -> "Rien à poser : touche la pioche."
     else -> "Carte non jouable."
 }
 
@@ -311,27 +320,33 @@ private fun UnoBadge() {
             }
             .clip(RoundedCornerShape(8.dp))
             .background(Palette.Red)
+            .border(2.dp, Palette.Outline, RoundedCornerShape(8.dp))
             .padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
-        Text("UNO !", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black)
+        Text("UNO !", color = Palette.Stock, fontSize = 11.sp, fontWeight = FontWeight.Black)
     }
 }
 
 // -------------------------------------------------------------------- centre
 
 @Composable
-private fun TableCenter(view: GameView) {
+private fun TableCenter(view: GameView, drawEnabled: Boolean, onDraw: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(22.dp)
     ) {
-        DrawPile(view.deckCount)
+        DrawPile(
+            count = view.deckCount,
+            enabled = drawEnabled,
+            urgent = view.mustDraw,
+            onDraw = onDraw
+        )
         DiscardPile(view)
     }
 }
 
 @Composable
-private fun DrawPile(count: Int) {
+private fun DrawPile(count: Int, enabled: Boolean, urgent: Boolean, onDraw: () -> Unit) {
     // A quick squash whenever the count drops tells you a card was just taken.
     val bump = remember { Animatable(1f) }
     var previous by remember { mutableStateOf(count) }
@@ -343,12 +358,24 @@ private fun DrawPile(count: Int) {
         previous = count
     }
 
+    // Nothing playable: the deck is the only move left, so it asks to be tapped.
+    val nudge = rememberInfiniteTransition(label = "deck")
+    val pulse by nudge.animateFloat(
+        initialValue = 1f,
+        targetValue = if (urgent) 1.07f else 1f,
+        animationSpec = infiniteRepeatable(tween(760), RepeatMode.Reverse),
+        label = "deck-pulse"
+    )
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.graphicsLayer {
-                scaleX = bump.value
-                scaleY = bump.value
-            },
+            Modifier
+                .graphicsLayer {
+                    val s = bump.value * pulse
+                    scaleX = s
+                    scaleY = s
+                }
+                .clickableNoRipple(enabled = enabled) { onDraw() },
             contentAlignment = Alignment.Center
         ) {
             repeat(3) { index ->
@@ -362,13 +389,22 @@ private fun DrawPile(count: Int) {
                 width = 58.dp,
                 modifier = Modifier.offset(x = 6.dp, y = (-6).dp)
             )
+            if (urgent) {
+                Box(
+                    Modifier
+                        .offset(x = 6.dp, y = (-6).dp)
+                        .size(58.dp, 58.dp * 1.52f)
+                        .clip(RoundedCornerShape(58.dp * 0.13f))
+                        .border(3.dp, Palette.Gold, RoundedCornerShape(58.dp * 0.13f))
+                )
+            }
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "$count",
-            color = Palette.TextDim,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold
+            if (urgent) "Pioche" else "$count",
+            color = if (urgent) Palette.Gold else Palette.Stock.copy(alpha = 0.85f),
+            fontSize = if (urgent) 13.sp else 12.sp,
+            fontWeight = FontWeight.Black
         )
     }
 }
@@ -378,22 +414,32 @@ private fun DiscardPile(view: GameView) {
     val fromOpponent = view.topCameFromOpponent
 
     Box(contentAlignment = Alignment.Center) {
-        // Halo in the active colour: the clearest possible "what can I play" hint.
+        // A fat ring in the active colour beats a soft glow: you read it instantly.
+        val ring by animateColorAsState(
+            targetValue = Palette.face(view.activeColor),
+            animationSpec = tween(320),
+            label = "active-colour"
+        )
         Box(
             Modifier
-                .size(168.dp)
-                .blur(34.dp)
+                .size(184.dp)
                 .clip(CircleShape)
-                .background(Palette.face(view.activeColor).copy(alpha = 0.34f))
+                .background(Palette.Outline.copy(alpha = 0.35f))
+        )
+        Box(
+            Modifier
+                .size(172.dp)
+                .clip(CircleShape)
+                .border(9.dp, ring, CircleShape)
         )
 
         repeat(2) { index ->
             Box(
                 Modifier
-                    .size(78.dp, 78.dp * 1.52f)
+                    .size(80.dp, 80.dp * 1.52f)
                     .graphicsLayer { rotationZ = if (index == 0) -9f else 7f }
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(Color.Black.copy(alpha = 0.28f))
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(Palette.Outline.copy(alpha = 0.55f))
             )
         }
 
@@ -430,14 +476,6 @@ private fun DiscardPile(view: GameView) {
         ) {
             PendingBadge(view.pendingDraw)
         }
-
-        ColorChip(
-            color = view.activeColor,
-            chipSize = 26.dp,
-            modifier = Modifier
-                .offset(x = 62.dp, y = 62.dp)
-                .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-        )
     }
 }
 
@@ -458,10 +496,10 @@ private fun PendingBadge(amount: Int) {
             }
             .clip(RoundedCornerShape(14.dp))
             .background(Palette.Red)
-            .border(2.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape(14.dp))
+            .border(3.dp, Palette.Outline, RoundedCornerShape(14.dp))
             .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
-        Text("+$amount", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
+        Text("+$amount", color = Palette.Stock, fontSize = 20.sp, fontWeight = FontWeight.Black)
     }
 }
 
@@ -479,6 +517,7 @@ private fun TurnBanner(view: GameView) {
 
         view.mustAnswerPenalty -> "+${view.pendingDraw} — contre-attaque ou encaisse"
         view.phase == Phase.DECIDE_AFTER_DRAW && yours -> "Carte piochée : pose-la ou passe"
+        view.mustDraw -> "Rien à poser — touche la pioche"
         yours -> "À toi de jouer"
         else -> "Au tour de ${view.opponentName}"
     }
@@ -581,7 +620,7 @@ private fun PlayerHand(view: GameView, enabled: Boolean, onCardTap: (Card) -> Un
             .fillMaxWidth()
             .background(
                 Brush.verticalGradient(
-                    listOf(Color.Transparent, Palette.Ink.copy(alpha = 0.8f))
+                    listOf(Color.Transparent, Palette.FeltDark)
                 )
             )
             .padding(horizontal = 14.dp, vertical = 12.dp)
@@ -605,7 +644,6 @@ private fun PlayerHand(view: GameView, enabled: Boolean, onCardTap: (Card) -> Un
                             card = card,
                             width = metrics.cardWidth,
                             playable = enabled && card.id in view.legal,
-                            faded = !enabled,
                             dimmed = enabled && card.id !in view.legal,
                             fresh = isFresh,
                             delayMillis = if (fresh.size > 2) order * 55 else 0,
@@ -623,7 +661,6 @@ private fun HandCard(
     card: Card,
     width: Dp,
     playable: Boolean,
-    faded: Boolean,
     dimmed: Boolean,
     fresh: Boolean,
     delayMillis: Int,
@@ -649,7 +686,7 @@ private fun HandCard(
             .offset(y = lift)
             .graphicsLayer {
                 val t = entrance.value
-                alpha = t * (if (faded) 0.72f else 1f)
+                alpha = t
                 scaleX = 0.55f + 0.45f * t
                 scaleY = 0.55f + 0.45f * t
                 translationY = (1f - t) * -260f

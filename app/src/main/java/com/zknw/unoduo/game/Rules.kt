@@ -56,9 +56,9 @@ object Rules {
         Section(
             "Piocher",
             listOf(
-                "Il n'y a pas de bouton pioche : quand tu n'as rien à poser, la carte est piochée automatiquement.",
-                "Si cette carte est jouable, tu choisis : la poser, ou passer ton tour.",
-                "Même chose pour un cumul que tu ne peux pas contrer : il est encaissé tout seul."
+                "Rien à poser ? Touche la pioche au centre de la table.",
+                "Si la carte piochée est jouable, tu choisis : la poser, ou passer ton tour.",
+                "En revanche, un cumul de +2 ou +4 que tu ne peux pas contrer est encaissé automatiquement — inutile de le confirmer."
             )
         )
     )

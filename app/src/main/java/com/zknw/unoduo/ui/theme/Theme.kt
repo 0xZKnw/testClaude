@@ -12,30 +12,44 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.zknw.unoduo.game.CardColor
 
-/** The table palette. Deliberately dark and desaturated so the cards carry the colour. */
+/**
+ * Cartoon palette: flat saturated colours, a warm white card stock and one near-black
+ * used as an ink outline everywhere. Nothing relies on transparency to convey state —
+ * see-through elements read as rendering glitches rather than as design.
+ */
 object Palette {
-    val Ink = Color(0xFF0A0D12)
-    val Night = Color(0xFF11161F)
-    val Slate = Color(0xFF1A2230)
-    val SlateHigh = Color(0xFF243043)
-    val Line = Color(0xFF2E3A4E)
-    val Text = Color(0xFFEDF1F7)
-    val TextDim = Color(0xFF95A2B6)
-    val Gold = Color(0xFFF2C14E)
+    /** The single ink colour used for every cartoon outline. */
+    val Outline = Color(0xFF14161D)
 
-    val FeltCore = Color(0xFF16513F)
-    val FeltEdge = Color(0xFF0A241D)
+    /** Warm white paper, never pure #FFFFFF: it would glare against the felt. */
+    val Stock = Color(0xFFFDFBF4)
 
-    val Red = Color(0xFFE0342C)
-    val RedDeep = Color(0xFFB2211B)
-    val Yellow = Color(0xFFF6B819)
-    val YellowDeep = Color(0xFFCE930A)
-    val Green = Color(0xFF3BA34C)
-    val GreenDeep = Color(0xFF2A7838)
-    val Blue = Color(0xFF2A7CD8)
-    val BlueDeep = Color(0xFF1B5AA6)
-    val Wild = Color(0xFF181C24)
-    val WildDeep = Color(0xFF0B0E13)
+    val Ink = Color(0xFF0B0E14)
+    val Night = Color(0xFF161A25)
+    val Slate = Color(0xFF212836)
+    val SlateHigh = Color(0xFF2E3749)
+    val Line = Color(0xFF3B475D)
+    val Text = Color(0xFFF3F6FB)
+    val TextDim = Color(0xFF9DAABF)
+    val Gold = Color(0xFFFFC531)
+
+    /** Solid dark wash used to mute a card without making it transparent. */
+    val Scrim = Color(0xFF0C1018)
+
+    val FeltLight = Color(0xFF2CA55C)
+    val Felt = Color(0xFF1B7D45)
+    val FeltDark = Color(0xFF0C4527)
+
+    val Red = Color(0xFFF23B2E)
+    val RedDeep = Color(0xFFC01C12)
+    val Yellow = Color(0xFFFFC21A)
+    val YellowDeep = Color(0xFFDC9200)
+    val Green = Color(0xFF41C258)
+    val GreenDeep = Color(0xFF259A3C)
+    val Blue = Color(0xFF2E9CF2)
+    val BlueDeep = Color(0xFF1668C4)
+    val Wild = Color(0xFF262C39)
+    val WildDeep = Color(0xFF151A24)
 
     fun face(color: CardColor): Color = when (color) {
         CardColor.RED -> Red
@@ -53,22 +67,23 @@ object Palette {
         CardColor.WILD -> WildDeep
     }
 
-    /** Ink used for the glyph printed inside the white oval. */
+    /** Ink used for the glyph sitting inside the white oval. */
     fun glyph(color: CardColor): Color = when (color) {
         CardColor.YELLOW -> YellowDeep
-        CardColor.WILD -> Color(0xFF20252F)
+        CardColor.WILD -> Color(0xFF2B3240)
         else -> faceDeep(color)
     }
 
-    fun tableBrush(): Brush = Brush.radialGradient(
-        colors = listOf(FeltCore, FeltEdge, Ink),
-        radius = 1400f
+    /** Flat green felt with a heavy vignette — a table, not a gradient wallpaper. */
+    fun feltBrush(): Brush = Brush.radialGradient(
+        colors = listOf(FeltLight, Felt, FeltDark),
+        radius = 1500f
     )
 }
 
 private val scheme = darkColorScheme(
     primary = Palette.Gold,
-    onPrimary = Palette.Ink,
+    onPrimary = Palette.Outline,
     secondary = Palette.Blue,
     background = Palette.Night,
     onBackground = Palette.Text,
@@ -89,12 +104,12 @@ private val typography = Typography(
     ),
     titleLarge = TextStyle(
         fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 22.sp
+        fontWeight = FontWeight.Black,
+        fontSize = 23.sp
     ),
     titleMedium = TextStyle(
         fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.ExtraBold,
         fontSize = 17.sp
     ),
     bodyLarge = TextStyle(
@@ -109,7 +124,7 @@ private val typography = Typography(
     ),
     labelLarge = TextStyle(
         fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.Black,
         fontSize = 14.sp,
         letterSpacing = 0.6.sp
     )
