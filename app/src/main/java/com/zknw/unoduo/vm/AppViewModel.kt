@@ -4,7 +4,10 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.zknw.unoduo.game.Bot
+import com.zknw.unoduo.game.BotMove
 import com.zknw.unoduo.game.CardColor
+import com.zknw.unoduo.game.Difficulty
 import com.zknw.unoduo.game.GameView
 import com.zknw.unoduo.game.HOST_SEAT
 import com.zknw.unoduo.game.MAX_PLAYERS
@@ -34,7 +37,7 @@ import kotlinx.coroutines.withContext
 import java.security.SecureRandom
 import kotlin.random.Random
 
-enum class Screen { HOME, RULES, PROFILE, SETTINGS, HOST, JOIN, LOBBY, GAME }
+enum class Screen { HOME, RULES, PROFILE, SETTINGS, SOLO, HOST, JOIN, LOBBY, GAME }
 
 /** Where the in-app updater is in its little state machine. */
 sealed interface UpdateState {
@@ -68,7 +71,9 @@ data class UiState(
     val photos: Map<Seat, String> = emptyMap(),
     val mySeat: Seat = HOST_SEAT,
     /** Seats whose phone has dropped off mid-game. */
-    val offline: Set<Seat> = emptySet()
+    val offline: Set<Seat> = emptySet(),
+    /** Set while playing against the machine; null for a real table. */
+    val solo: Difficulty? = null
 ) {
     val playerName: String get() = profile.name
     val canStart: Boolean get() = isHost && players.size >= MIN_PLAYERS
@@ -97,6 +102,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var nextStarter: Seat = HOST_SEAT
     private var rematch = mutableSetOf<Seat>()
     private var unlockJob: kotlinx.coroutines.Job? = null
+    private var botJob: kotlinx.coroutines.Job? = null
+    private val botRng = Random(SecureRandom().nextLong())
 
     /** Host-side seating: a Bluetooth address on one side, a seat on the other. */
     private val seatOfKey = mutableMapOf<String, Seat>()
@@ -128,6 +135,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             UiState(profile = it.profile, updateToken = it.updateToken)
         }
     }
+
+    fun openSolo() = _state.update { it.copy(screen = Screen.SOLO) }
+
+    fun closeSolo() = _state.update { it.copy(screen = Screen.HOME) }
 
     fun openRules() = _state.update { it.copy(screen = Screen.RULES) }
 
@@ -435,6 +446,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Adds a finished round to this device's totals, exactly once. */
     private fun maybeRecordRound(view: GameView) {
         if (view.phase != Phase.GAME_OVER) return
+        // A round against the machine is still a game, but it is not a result: the
+        // profile is a record against real people, and padding it would empty it of
+        // meaning.
+        if (_state.value.solo != null) return
         if (view.roundId == lastRecordedRound) return
         lastRecordedRound = view.roundId
         val updated = profileStore.recordRound(view.youWon, view.yourStats)
@@ -454,6 +469,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         keyOfSeat.forEach { (seat, key) ->
             host?.send(key, NetMsg.State(e.viewFor(seat, rematch)))
         }
+        scheduleBot()
     }
 
     private fun resend(seat: Seat) {
@@ -465,6 +481,67 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun endGame(reason: String) {
         engine = null
         _state.update { it.copy(link = LinkStatus.LOST, error = reason) }
+    }
+
+    // ------------------------------------------------------------------ solo
+
+    /**
+     * A game against the machine. It runs the very same engine as a real table — the
+     * bot simply takes the second seat and is handed the same snapshot a human would
+     * get, so it plays by the same rules and sees no more than you do.
+     */
+    fun startSolo(difficulty: Difficulty) {
+        teardown()
+        val me = LobbyPlayer(HOST_SEAT, displayName(), _state.value.profile.avatarColor)
+        // A colour of its own, so the bot is never your twin at the table.
+        val botColor = if (me.avatar == BOT_AVATAR) BOT_AVATAR_ALT else BOT_AVATAR
+        _state.update {
+            it.copy(
+                screen = Screen.GAME,
+                isHost = true,
+                solo = difficulty,
+                mySeat = HOST_SEAT,
+                link = LinkStatus.IDLE,
+                statusText = "",
+                roomCode = "",
+                joinLink = "",
+                view = null,
+                players = listOf(me, LobbyPlayer(1, difficulty.botName, botColor)),
+                photos = emptyMap(),
+                offline = emptySet(),
+                error = null
+            )
+        }
+        encodeMyPhoto()
+        startNewRound(firstRound = true)
+    }
+
+    /**
+     * Hands the turn to the bot once it is its own, after a pause. Without the pause
+     * its cards land in the same frame as yours and the table reads as a glitch rather
+     * than as an opponent.
+     */
+    private fun scheduleBot() {
+        val difficulty = _state.value.solo ?: return
+        val e = engine ?: return
+        if (e.phase == Phase.GAME_OVER || e.turn == HOST_SEAT) return
+        botJob?.cancel()
+        botJob = viewModelScope.launch {
+            delay(BOT_THINK_MS)
+            val current = engine ?: return@launch
+            if (current.phase == Phase.GAME_OVER || current.turn == HOST_SEAT) return@launch
+            val seat = current.turn
+            val move = Bot.decide(current.viewFor(seat), difficulty, botRng)
+            val acted = when (move) {
+                is BotMove.Play -> current.playCard(seat, move.cardId, move.color)
+                BotMove.Draw -> current.draw(seat)
+                BotMove.Pass -> current.pass(seat)
+            }
+            // A refused move would leave the table frozen on the bot's turn. Drawing is
+            // always available to whoever is on turn, so it is the safe way out.
+            if (!acted && !current.draw(seat)) return@launch
+            broadcast()
+        }
     }
 
     // ----------------------------------------------------------------- guest
@@ -635,6 +712,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun requestRematch() {
+        if (_state.value.solo != null) {
+            startNewRound(firstRound = false)
+            return
+        }
         if (_state.value.isHost) {
             rematch += HOST_SEAT
             if (rematch.size >= (engine?.playerCount ?: Int.MAX_VALUE)) {
@@ -671,6 +752,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun teardown() {
         unlockJob?.cancel()
+        botJob?.cancel()
+        botJob = null
         host?.stop()
         host = null
         guest?.stop()
@@ -681,6 +764,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         keyOfSeat.clear()
         nextStarter = HOST_SEAT
         lastRecordedRound = -1
+    }
+
+    private companion object {
+        /** Long enough to read the bot's move as a move, short enough not to drag. */
+        const val BOT_THINK_MS = 750L
+        const val BOT_AVATAR = 5
+        const val BOT_AVATAR_ALT = 2
     }
 
     private fun post(block: () -> Unit) {

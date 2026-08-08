@@ -45,6 +45,7 @@ import com.zknw.unoduo.ui.LobbyScreen
 import com.zknw.unoduo.ui.ProfileScreen
 import com.zknw.unoduo.ui.RulesScreen
 import com.zknw.unoduo.ui.SettingsScreen
+import com.zknw.unoduo.ui.SoloScreen
 import com.zknw.unoduo.ui.components.MenuBackground
 import com.zknw.unoduo.ui.components.StatusRow
 import com.zknw.unoduo.ui.theme.Palette
@@ -165,6 +166,7 @@ private fun App(vm: AppViewModel = viewModel()) {
             Screen.RULES -> vm.closeRules()
             Screen.SETTINGS -> vm.closeSettings()
             Screen.PROFILE -> vm.closeProfile()
+            Screen.SOLO -> vm.closeSolo()
             Screen.GAME -> vm.leaveGame()
             else -> vm.goHome()
         }
@@ -175,6 +177,8 @@ private fun App(vm: AppViewModel = viewModel()) {
             profile = state.profile,
             onHost = { withBle(asHost = true) { vm.startHosting() } },
             onJoin = { withBle(asHost = false) { vm.openJoin() } },
+            // Solo needs no radio at all, so it skips the permission dance.
+            onSolo = vm::openSolo,
             onRules = vm::openRules,
             onProfile = vm::openProfile,
             onSettings = vm::openSettings
@@ -191,6 +195,8 @@ private fun App(vm: AppViewModel = viewModel()) {
             onResetStats = vm::resetStats,
             onBack = vm::closeProfile
         )
+
+        Screen.SOLO -> SoloScreen(onPick = vm::startSolo, onBack = vm::closeSolo)
 
         Screen.RULES -> RulesScreen(onBack = vm::closeRules)
 

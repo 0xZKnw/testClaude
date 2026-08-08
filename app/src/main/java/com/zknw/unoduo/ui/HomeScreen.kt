@@ -43,6 +43,7 @@ fun HomeScreen(
     profile: Profile,
     onHost: () -> Unit,
     onJoin: () -> Unit,
+    onSolo: () -> Unit,
     onRules: () -> Unit,
     onProfile: () -> Unit,
     onSettings: () -> Unit
@@ -86,6 +87,8 @@ fun HomeScreen(
                 container = Palette.Blue,
                 onContainer = Palette.Stock
             ) { onJoin() }
+            Spacer(Modifier.height(12.dp))
+            GhostButton("Jouer en solo", Modifier.fillMaxWidth()) { onSolo() }
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 GhostButton("Règles", Modifier.weight(1f)) { onRules() }
