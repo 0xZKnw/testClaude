@@ -1,32 +1,47 @@
 package com.zknw.unoduo.ui.components
 
+import android.util.Size
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.BinaryBitmap
-import com.google.zxing.DecodeHintType
-import com.google.zxing.MultiFormatReader
-import com.google.zxing.PlanarYUVLuminanceSource
-import com.google.zxing.common.HybridBinarizer
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Live camera preview that reports the first QR code it decodes, exactly once.
- * The decoding runs on a dedicated single-thread executor.
+ *
+ * Three things decide whether this feels instant or sluggish, and all three are handled
+ * here rather than left to defaults:
+ *
+ *  - **How much image is examined.** Only the square the viewfinder draws is decoded,
+ *    not the whole frame. Fewer pixels to threshold, and the code fills more of what is
+ *    examined, so it is both faster and more likely to succeed.
+ *  - **How often.** The frame buffer is reused instead of allocated per frame, and the
+ *    inverted second pass — which used to run on every frame that failed, meaning nearly
+ *    all of them — now runs once in a while. That roughly doubles the frames actually
+ *    looked at.
+ *  - **Focus.** A phone screen held close is exactly where continuous autofocus hunts.
+ *    The centre is metered on start, and tapping re-focuses wherever you touch.
  */
 @Composable
 fun QrScanner(modifier: Modifier = Modifier, onResult: (String) -> Unit) {
@@ -35,6 +50,8 @@ fun QrScanner(modifier: Modifier = Modifier, onResult: (String) -> Unit) {
     val callback = rememberUpdatedState(onResult)
     val delivered = remember { AtomicBoolean(false) }
     val executor = remember { Executors.newSingleThreadExecutor() }
+    val decoder = remember { QrDecoder() }
+    val camera = remember { arrayOfNulls<Camera>(1) }
     val previewView = remember {
         PreviewView(context).apply {
             scaleType = PreviewView.ScaleType.FILL_CENTER
@@ -45,14 +62,6 @@ fun QrScanner(modifier: Modifier = Modifier, onResult: (String) -> Unit) {
     DisposableEffect(Unit) {
         val future = ProcessCameraProvider.getInstance(context)
         var provider: ProcessCameraProvider? = null
-        val reader = MultiFormatReader().apply {
-            setHints(
-                mapOf(
-                    DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
-                    DecodeHintType.TRY_HARDER to true
-                )
-            )
-        }
 
         future.addListener({
             val cameraProvider = runCatching { future.get() }.getOrNull() ?: return@addListener
@@ -61,13 +70,29 @@ fun QrScanner(modifier: Modifier = Modifier, onResult: (String) -> Unit) {
             val preview = Preview.Builder().build().also {
                 it.setSurfaceProvider(previewView.surfaceProvider)
             }
+
+            // 1280x720 rather than the 640x480 default: a QR photographed off another
+            // phone's screen is small in frame, and the extra pixels are what let it
+            // resolve. The crop below keeps the cost down anyway.
+            val resolution = ResolutionSelector.Builder()
+                .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
+                .setResolutionStrategy(
+                    ResolutionStrategy(
+                        Size(1280, 720),
+                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                    )
+                )
+                .build()
+
             val analysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .setResolutionSelector(resolution)
                 .build()
+
             analysis.setAnalyzer(executor) { image ->
                 try {
                     if (!delivered.get()) {
-                        val text = decode(reader, image)
+                        val text = decoder.decode(image)
                         if (text != null && delivered.compareAndSet(false, true)) {
                             ContextCompat.getMainExecutor(context).execute {
                                 callback.value(text)
@@ -81,12 +106,14 @@ fun QrScanner(modifier: Modifier = Modifier, onResult: (String) -> Unit) {
 
             runCatching {
                 cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
+                val bound = cameraProvider.bindToLifecycle(
                     lifecycleOwner,
                     CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
                     analysis
                 )
+                camera[0] = bound
+                focusOnCentre(bound, previewView)
             }
         }, ContextCompat.getMainExecutor(context))
 
@@ -96,43 +123,33 @@ fun QrScanner(modifier: Modifier = Modifier, onResult: (String) -> Unit) {
         }
     }
 
-    AndroidView(factory = { previewView }, modifier = modifier)
+    AndroidView(
+        factory = { previewView },
+        modifier = modifier.pointerInput(Unit) {
+            detectTapGestures { offset ->
+                val control = camera[0]?.cameraControl ?: return@detectTapGestures
+                val point = previewView.meteringPointFactory.createPoint(offset.x, offset.y)
+                runCatching {
+                    control.startFocusAndMetering(
+                        FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
+                            .setAutoCancelDuration(3, TimeUnit.SECONDS)
+                            .build()
+                    )
+                }
+            }
+        }
+    )
 }
 
-/** Pulls the luma plane out of the frame and hands it to ZXing. */
-private fun decode(reader: MultiFormatReader, image: ImageProxy): String? {
-    val plane = image.planes.firstOrNull() ?: return null
-    val buffer = plane.buffer
-    val width = image.width
-    val height = image.height
-    val rowStride = plane.rowStride
-
-    val luma = ByteArray(width * height)
-    buffer.rewind()
-    if (rowStride == width) {
-        buffer.get(luma, 0, minOf(luma.size, buffer.remaining()))
-    } else {
-        val row = ByteArray(rowStride)
-        var offset = 0
-        for (y in 0 until height) {
-            if (buffer.remaining() < rowStride) break
-            buffer.get(row, 0, rowStride)
-            System.arraycopy(row, 0, luma, offset, width)
-            offset += width
-        }
-    }
-
-    val source = PlanarYUVLuminanceSource(luma, width, height, 0, 0, width, height, false)
-    return try {
-        reader.decodeWithState(BinaryBitmap(HybridBinarizer(source))).text
-    } catch (_: Exception) {
-        try {
-            // A rotated / inverted frame sometimes decodes only on the second pass.
-            reader.decodeWithState(BinaryBitmap(HybridBinarizer(source.invert()))).text
-        } catch (_: Exception) {
-            null
-        }
-    } finally {
-        reader.reset()
+/** Nudges autofocus onto the middle of the frame, which is where the viewfinder is. */
+private fun focusOnCentre(camera: Camera, previewView: PreviewView) {
+    val point = previewView.meteringPointFactory.createPoint(
+        previewView.width / 2f,
+        previewView.height / 2f
+    )
+    runCatching {
+        camera.cameraControl.startFocusAndMetering(
+            FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF).build()
+        )
     }
 }

@@ -42,20 +42,28 @@ fun QrCode(
             .size(size)
             .clip(RoundedCornerShape(20.dp))
             .background(background)
-            .padding(14.dp)
+            .padding(10.dp)
     ) {
         if (matrix == null) return@Box
         Canvas(Modifier.fillMaxSize()) {
             val modules = matrix.width
             val cell = this.size.minDimension / modules
-            val radius = CornerRadius(cell * 0.28f, cell * 0.28f)
+            // Rounding softens the corner a scanner uses to find a module edge, so it
+            // stays subtle. And each module is snapped to the same grid its neighbours
+            // use: computed independently, the rounding leaves hairline seams that read
+            // as noise.
+            val radius = CornerRadius(cell * 0.12f, cell * 0.12f)
             for (y in 0 until modules) {
                 for (x in 0 until modules) {
                     if (!matrix.get(x, y)) continue
+                    val left = (x * cell).toInt().toFloat()
+                    val top = (y * cell).toInt().toFloat()
+                    val right = ((x + 1) * cell).toInt().toFloat()
+                    val bottom = ((y + 1) * cell).toInt().toFloat()
                     drawRoundRect(
                         color = foreground,
-                        topLeft = Offset(x * cell, y * cell),
-                        size = Size(cell, cell),
+                        topLeft = Offset(left, top),
+                        size = Size(right - left, bottom - top),
                         cornerRadius = radius
                     )
                 }
@@ -72,7 +80,11 @@ private fun encode(content: String): BitMatrix? = try {
         0,
         mapOf(
             EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
-            EncodeHintType.MARGIN to 0,
+            // The standard asks for four blank modules around the code, and a decoder
+            // really does need them to find its edges. Zero here left barely one and a
+            // half — which is exactly the kind of thing that makes a scanner hesitate
+            // for seconds instead of locking on at once.
+            EncodeHintType.MARGIN to 4,
             EncodeHintType.CHARACTER_SET to "UTF-8"
         )
     )

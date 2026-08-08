@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import com.zknw.unoduo.game.HOST_SEAT
 import com.zknw.unoduo.game.Seat
 import com.zknw.unoduo.net.LobbyPlayer
+import com.zknw.unoduo.ui.components.BrightScreen
 import com.zknw.unoduo.ui.components.GhostButton
 import com.zknw.unoduo.ui.components.MenuBackground
 import com.zknw.unoduo.ui.components.Panel
@@ -55,6 +56,9 @@ fun HostScreen(
     onStart: () -> Unit,
     onBack: () -> Unit
 ) {
+    // The guest's camera has to read this screen; a dim one is what makes that slow.
+    BrightScreen()
+
     MenuBackground {
         Column(
             Modifier
