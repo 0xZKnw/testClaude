@@ -30,7 +30,7 @@ try {
     page.on('pageerror', (e) => fail.push(`${name} : ${e.message}`));
   }
 
-  await hostPage.goto(`http://localhost:${PORT}/index.html`);
+  await hostPage.goto(`http://localhost:${PORT}/diagnostic.html`);
   await hostPage.click('#beHost');
   await hostPage.waitForFunction(() => document.getElementById('qrText').value.length > 20);
   const offerUrl = await hostPage.inputValue('#qrText');

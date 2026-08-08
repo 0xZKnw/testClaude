@@ -1,67 +1,52 @@
-# Maquette : jouer avec un iPhone, sans serveur
+# UNO sur le web
 
-Une version iOS de l'app coûterait 99 $/an de compte développeur Apple. L'alternative
-est une page web : Safari ne fait pas de Bluetooth, mais il fait du WebRTC, qui est du
-pair-à-pair. Le seul obstacle est l'**appairage** — normalement confié à un serveur, et
-ici transporté par QR code.
+Le jeu complet, jouable dans un navigateur — iPhone compris — et connecté en direct
+d'un téléphone à l'autre, **sans aucun serveur**.
 
-Ce dossier existe pour répondre à une seule question avant d'écrire quoi que ce soit
-de sérieux : **est-ce que ça tient ?**
+**En ligne : https://uno-test-liaison.vercel.app**
 
-## Ce qui est déjà vérifié, ici, pour de vrai
+## Pourquoi cette version existe
 
-Deux vrais navigateurs, deux vraies `RTCPeerConnection`, et entre les deux rien d'autre
-que les chaînes qu'un QR code transporterait.
+Safari ne fait pas de Bluetooth, donc l'app Android ne pourra jamais parler à un iPhone.
+Une app iOS native coûterait 99 $/an de compte développeur Apple. Le web contourne les
+deux : Safari fait du WebRTC, qui est du pair-à-pair, et il ne manquait que l'appairage —
+normalement confié à un serveur, ici transporté par QR code.
+
+## Ce sont bien les mêmes règles, et c'est prouvé
+
+Le moteur existe désormais deux fois : en Kotlin pour l'app, en JavaScript ici. Des
+règles « équivalentes » ne suffisent pas — la seule façon d'en être sûr est de faire
+jouer les deux moteurs aux mêmes parties et de comparer.
+
+C'est ce que font les tests. `src/random.js` reproduit le générateur aléatoire de Kotlin
+au bit près, ce qui donne des mélanges identiques ; les deux moteurs rejouent alors
+240 parties complètes (2 à 5 joueurs, moteur seul puis bot aux trois niveaux) et chacun
+des 22 767 états intermédiaires est comparé. Le résultat est verrouillé par une empreinte
+dans `test/trace-reference.sha256`.
 
 ```
-node web/spike/pairing-test.mjs   # le protocole d'appairage
-node web/spike/page-test.mjs      # la page elle-même, pilotée comme par deux personnes
-node web/spike/dist-test.mjs      # le fichier unique livré
+node web/test/random-conformance.mjs   # le générateur, contre une capture de Kotlin
+node web/test/engine-conformance.mjs   # les 240 parties, contre l'empreinte
+node web/test/game-test.mjs            # la page : solo, puis deux navigateurs appairés
+node web/spike/pairing-test.mjs        # l'appairage seul, et la taille des QR
 ```
 
-Résultats :
+## Comment on joue
 
-| | |
-|---|---|
-| Appairage sans aucun serveur | fonctionne, canal de données ouvert, messages dans les deux sens |
-| QR de l'hôte (URL + offre) | 183 octets — la limite est 2953 |
-| QR de la réponse | 154 octets |
-| Pire cas simulé, 8 adresses réseau | 480 octets |
+1. Un joueur ouvre le site et fait *Créer une partie* : un QR s'affiche.
+2. Les autres le scannent avec l'appareil photo de leur téléphone. La page s'ouvre chez
+   eux et affiche un QR de réponse.
+3. L'hôte scanne chaque réponse, puis lance quand tout le monde est là.
 
-La description brute fait 587 octets et jusqu'à 1493 dans le pire cas ; `sdp-codec.js`
-la réduit en ne gardant que ce qui varie d'une session à l'autre et en reconstruisant
-le reste à l'identique de l'autre côté.
+Tous les téléphones doivent être sur le **même WiFi** : sans serveur relais, seules les
+adresses locales sont échangées. L'isolation des clients, courante sur un WiFi public,
+bloque la connexion — un partage de connexion depuis l'un des téléphones la contourne.
 
-## Ce qui n'est PAS vérifié
+`diagnostic.html` teste la liaison toute seule, sans le jeu, et dit où ça bloque le cas
+échéant : le réseau, ou le navigateur.
 
-- **Safari.** Le moteur WebKit n'est pas téléchargeable dans l'environnement où ces
-  tests tournent. C'est précisément ce que la page sert à tester sur un vrai iPhone.
-- **Deux appareils réellement séparés.** Ici les deux pairs sont sur la même machine.
-  Sur un vrai réseau, chaque navigateur cache son IP locale derrière un nom mDNS
-  (`....local`) qu'il faut résoudre en multicast — ça marche sur un WiFi domestique,
-  et c'est bloqué par l'isolation des clients d'un WiFi public.
-- **Android natif.** L'app devra embarquer libwebrtc, environ 10 Mo.
+## Ce qui reste non vérifié
 
-## Comment tester
-
-**En ligne : https://uno-test-liaison.vercel.app** — accès libre, rien à installer.
-
-1. Sur le premier téléphone : ouvrir la page, *Créer la partie*. Un QR s'affiche.
-2. Sur l'iPhone : le scanner avec l'appareil photo. La page s'ouvre et affiche un
-   deuxième QR, la réponse.
-3. Revenir au premier téléphone : *Ouvrir la caméra* et scanner cette réponse.
-
-Les deux téléphones doivent être sur le **même WiFi**.
-
-Si « canal de données » passe au vert et qu'un aller-retour s'affiche en millisecondes,
-la voie web est ouverte et l'app iOS payante devient inutile. Si ça bloque sur ICE,
-c'est le réseau. Si ça bloque avant, c'est Safari — et là, seule l'app native reste.
-
-## Héberger soi-même
-
-`node web/build.mjs` produit `web/dist/index.html`, un fichier unique sans aucune
-dépendance externe, déposable tel quel sur n'importe quel hébergeur statique. HTTPS est
-obligatoire : sans lui, le navigateur refuse WebRTC.
-
-Le déploiement Vercel, lui, sert les trois fichiers séparément et récupère l'encodeur QR
-depuis npm au moment du build — c'est la configuration que les tests d'ici vérifient.
+Safari lui-même. Le moteur WebKit n'est pas téléchargeable dans l'environnement où ces
+tests tournent, donc tout ce qui est écrit ici a été vérifié sur Chromium. C'est
+précisément ce que le premier essai sur un vrai iPhone tranchera.

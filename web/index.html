@@ -2,295 +2,407 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>UNO — test de liaison</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#15102f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>UNO</title>
 <style>
-  :root {
-    --ink: #14161d;
-    --stock: #fdfbf4;
-    --text: #f3f6fb;
-    --dim: #9daabf;
-    --gold: #ffc531;
-    --red: #f23b2e;
-    --green: #41c258;
-    --slate: #212836;
-    --line: #3b475d;
-  }
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body {
-    margin: 0;
-    padding: 20px 18px 40px;
-    background: linear-gradient(#2a2159, #15102f);
-    color: var(--text);
-    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-    min-height: 100vh;
-  }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  p.lead { color: var(--dim); margin: 0 0 22px; font-size: 14px; }
-  .panel {
-    background: var(--slate);
-    border: 3px solid var(--ink);
-    border-radius: 16px;
-    padding: 16px;
-    margin-bottom: 14px;
-  }
-  h2 { font-size: 13px; letter-spacing: 1.2px; color: var(--dim); margin: 0 0 12px; text-transform: uppercase; }
-  button {
-    font: inherit;
-    font-weight: 700;
-    width: 100%;
-    padding: 14px;
-    border: 3px solid var(--ink);
-    border-radius: 12px;
-    background: var(--gold);
-    color: var(--ink);
-    margin-bottom: 10px;
-  }
-  button.ghost { background: transparent; color: var(--text); border-color: var(--line); }
-  button:disabled { opacity: .45; }
-  #qr { background: var(--stock); padding: 12px; border-radius: 12px; display: none; }
-  #qr img, #qr canvas { width: 100%; height: auto; display: block; image-rendering: pixelated; }
-  textarea {
-    width: 100%; height: 76px; font: 12px/1.4 ui-monospace, Menlo, monospace;
-    background: #171d2a; color: var(--dim); border: 2px solid var(--line);
-    border-radius: 10px; padding: 8px; resize: vertical;
-  }
-  video { width: 100%; border-radius: 12px; display: none; background: #000; }
-  .row { display: flex; gap: 10px; align-items: baseline; font-size: 13px; padding: 3px 0; }
-  .row b { color: var(--dim); font-weight: 600; min-width: 130px; }
-  .ok { color: var(--green); font-weight: 700; }
-  .bad { color: var(--red); font-weight: 700; }
-  .wait { color: var(--gold); font-weight: 700; }
-  #log { font: 11px/1.5 ui-monospace, Menlo, monospace; color: var(--dim); white-space: pre-wrap; margin-top: 8px; }
-  .hidden { display: none !important; }
+/* Same palette as the Android app, so the two look like one game. */
+:root {
+  --ink: #14161d;
+  --stock: #fdfbf4;
+  --night: #161a25;
+  --slate: #212836;
+  --slate-high: #2e3749;
+  --line: #3b475d;
+  --text: #f3f6fb;
+  --dim: #9daabf;
+  --gold: #ffc531;
+  --red: #f23b2e;
+  --green: #41c258;
+  --blue: #2e9cf2;
+  --felt-light: #4b3b96;
+  --felt: #33286e;
+  --felt-dark: #1a1342;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: linear-gradient(#2a2159, #15102f);
+  color: var(--text);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  overscroll-behavior: none;
+  user-select: none;
+}
+/* dvh keeps the table clear of Safari's floating toolbar; vh is the fallback. */
+.screen { display: none; height: 100vh; height: 100dvh; flex-direction: column; }
+.screen.on { display: flex; }
+.scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 22px 20px 32px; flex: 1; }
+
+/* --------------------------------------------------------------- ink furniture */
+.panel {
+  background: var(--slate);
+  border: 3px solid var(--ink);
+  border-radius: 18px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 0 var(--ink);
+}
+.btn {
+  font: inherit; font-weight: 800; width: 100%; padding: 15px 14px;
+  border: 3px solid var(--ink); border-radius: 14px;
+  background: var(--gold); color: var(--ink);
+  box-shadow: 0 4px 0 var(--ink); margin-bottom: 12px; cursor: pointer;
+  transition: transform .06s, box-shadow .06s;
+}
+.btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 0 0 var(--ink); }
+.btn:disabled { opacity: .45; }
+.btn.blue { background: var(--blue); color: var(--stock); }
+.btn.ghost { background: transparent; color: var(--text); border-color: var(--line); box-shadow: 0 4px 0 #10131b; }
+.btn.row2 { width: auto; flex: 1; }
+.flex { display: flex; gap: 12px; }
+h1.logo {
+  font-size: 48px; font-weight: 900; margin: 6px 0; text-align: center;
+  color: var(--gold); letter-spacing: 3px;
+  -webkit-text-stroke: 6px var(--ink);
+  paint-order: stroke fill;
+}
+.lead { color: var(--dim); font-size: 13.5px; margin: 0 0 18px; text-align: center; }
+.label { font-size: 11px; letter-spacing: 1.4px; font-weight: 800; color: var(--dim); text-transform: uppercase; }
+.chip {
+  display: inline-block; background: var(--slate-high); color: var(--text);
+  border: 2px solid var(--ink); border-radius: 12px; padding: 3px 9px;
+  font-size: 12px; font-weight: 700;
+}
+.chip.gold { background: var(--gold); color: var(--ink); }
+.chip.red { background: var(--red); color: var(--stock); }
+.head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.head h2 { font-size: 21px; margin: 0; }
+.head p { margin: 2px 0 0; color: var(--dim); font-size: 12.5px; }
+.icon-btn {
+  width: 42px; height: 42px; flex: 0 0 42px; border-radius: 13px;
+  border: 3px solid var(--ink); background: var(--slate-high); color: var(--text);
+  font-size: 20px; font-weight: 800; cursor: pointer; box-shadow: 0 3px 0 var(--ink);
+}
+input[type=text] {
+  width: 100%; font: inherit; padding: 12px; border-radius: 12px;
+  border: 3px solid var(--ink); background: var(--night); color: var(--text);
+}
+textarea {
+  width: 100%; height: 70px; font: 12px/1.4 ui-monospace, Menlo, monospace;
+  background: var(--night); color: var(--dim); border: 3px solid var(--ink);
+  border-radius: 12px; padding: 8px; resize: none;
+}
+
+/* ---------------------------------------------------------------------- avatar */
+.avatar {
+  border-radius: 50%; border: 3px solid var(--ink); overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; color: var(--stock); flex: none; background-size: cover;
+  background-position: center;
+}
+.avatar.turn { border-color: var(--gold); border-width: 4px; }
+
+/* ----------------------------------------------------------------------- cards */
+.card { position: relative; flex: none; transition: transform .18s ease-out; }
+.card-svg { display: block; width: 100%; height: auto; filter: drop-shadow(0 3px 2px rgba(0,0,0,.45)); }
+.card.playable { transform: translateY(-14%); }
+.card.playable::after {
+  content: ''; position: absolute; inset: 0; border-radius: 11%;
+  border: 3px solid var(--gold); animation: breathe 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes breathe { 0%,100% { opacity: .55 } 50% { opacity: 1 } }
+.card.fresh { animation: deal .34s ease-out both; }
+@keyframes deal {
+  from { opacity: 0; transform: translate(0, -70px) scale(.55) rotate(-22deg); }
+  to { opacity: 1; transform: none; }
+}
+.chip-svg { display: block; width: 100%; height: auto; }
+
+/* ------------------------------------------------------------------ game table */
+#screen-game { background: radial-gradient(circle at 50% 38%, var(--felt-light), var(--felt) 45%, var(--felt-dark)); }
+.rivals { display: flex; align-items: center; gap: 10px; padding: 10px 14px 0; }
+.rival { display: flex; flex-direction: column; align-items: center; width: 64px; }
+.rival .name { font-size: 11px; font-weight: 700; color: var(--dim); max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rival.turn .name { color: var(--gold); }
+.rival .count { margin-top: -12px; align-self: flex-end; }
+.fan { display: flex; justify-content: center; align-items: flex-start; height: 62px; margin-top: 4px; }
+.fan .card { width: 38px; margin-left: -21px; }
+.fan .card:first-child { margin-left: 0; }
+.middle { flex: 1; display: flex; align-items: center; justify-content: center; gap: 22px; position: relative; }
+#deck { width: 62px; cursor: pointer; position: relative; }
+#deck.urgent { animation: nudge .76s ease-in-out infinite; }
+@keyframes nudge { 0%,100% { transform: scale(1) } 50% { transform: scale(1.07) } }
+#deck .ring { position: absolute; inset: 0; border: 3px solid var(--gold); border-radius: 13%; }
+#discard { width: 96px; position: relative; }
+#discard .active-ring {
+  position: absolute; inset: -9px; border-radius: 16%; border: 5px solid currentColor;
+}
+.deck-label { text-align: center; font-size: 12px; font-weight: 800; margin-top: 6px; color: var(--stock); }
+#pending {
+  position: absolute; top: calc(50% - 96px); left: 50%; transform: translateX(-50%);
+  background: var(--red); color: var(--stock); border: 3px solid var(--ink);
+  border-radius: 14px; padding: 5px 14px; font-size: 20px; font-weight: 900;
+  animation: breathe 1.2s ease-in-out infinite;
+}
+#toast {
+  position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+  background: rgba(11,14,20,.82); border: 2px solid var(--line); border-radius: 12px;
+  padding: 5px 12px; font-size: 12px; color: var(--text); white-space: nowrap;
+  max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
+}
+#banner { text-align: center; padding: 4px 16px 8px; }
+#banner span {
+  display: inline-block; border-radius: 14px; padding: 7px 15px;
+  font-size: 13.5px; font-weight: 800; border: 1px solid var(--line);
+  background: rgba(11,14,20,.5); color: var(--dim);
+}
+#banner span.mine { background: rgba(255,197,49,.18); border-color: rgba(255,197,49,.6); color: var(--gold); }
+#hand {
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  padding: 8px 12px 14px;
+  background: linear-gradient(transparent, var(--felt-dark));
+}
+#hand .row { display: flex; justify-content: center; }
+#pass-wrap { padding: 0 20px; }
+
+/* -------------------------------------------------------------------- overlays */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.78);
+  display: none; align-items: center; justify-content: center; padding: 24px; z-index: 20;
+}
+.overlay.on { display: flex; }
+.overlay .panel { width: 100%; max-width: 420px; margin: 0; }
+#picker-chips { display: flex; gap: 12px; }
+#picker-chips > div { flex: 1; cursor: pointer; }
+#slam { flex-direction: column; text-align: center; }
+#slam .amount { font-size: 84px; font-weight: 900; color: var(--red); -webkit-text-stroke: 5px var(--ink); }
+#qrbox { background: var(--stock); border-radius: 14px; padding: 10px; }
+#qrbox svg { display: block; width: 100%; height: auto; }
+video { width: 100%; border-radius: 12px; background: #000; display: none; }
+.stat { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13.5px; }
+.stat b { color: var(--dim); font-weight: 600; }
+.row-line { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
+.grow { flex: 1; min-width: 0; }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hidden { display: none !important; }
+.spinner {
+  width: 16px; height: 16px; border: 3px solid var(--line); border-top-color: var(--gold);
+  border-radius: 50%; animation: spin 1s linear infinite; flex: none;
+}
+@keyframes spin { to { transform: rotate(360deg) } }
 </style>
 </head>
 <body>
 
-<h1>UNO — test de liaison</h1>
-<p class="lead">
-  Vérifie si deux téléphones peuvent se parler en direct, sans serveur : un iPhone et
-  un Android, sur le même WiFi. C'est le seul point qui décide si une version iOS est
-  possible sans payer de compte développeur.
-</p>
+<!-- ------------------------------------------------------------------- accueil -->
+<section class="screen on" id="screen-home">
+  <div class="scroll">
+    <div class="panel" id="profile-bar" style="cursor:pointer">
+      <div class="row-line">
+        <div class="avatar" id="home-avatar" style="width:52px;height:52px;font-size:23px"></div>
+        <div class="grow">
+          <div style="font-weight:900;font-size:18px" id="home-name" class="ellipsis"></div>
+          <div style="color:var(--dim);font-size:13px;font-weight:700" id="home-record"></div>
+        </div>
+        <span class="chip">Profil</span>
+      </div>
+    </div>
 
-<div class="panel" id="choice">
-  <h2>Sur ce téléphone</h2>
-  <button id="beHost">Créer la partie · afficher le QR</button>
-  <button class="ghost" id="paste">J'ai un code de réponse à coller</button>
+    <div id="logo-fan" style="display:flex;justify-content:center;gap:-20px;margin:14px 0 4px"></div>
+    <h1 class="logo">UNO</h1>
+    <p class="lead">De 2 à 5 joueurs, un QR code, zéro serveur.</p>
+
+    <button class="btn" id="go-host">Créer une partie</button>
+    <button class="btn blue" id="go-join">Rejoindre une partie</button>
+    <button class="btn ghost" id="go-solo">Jouer en solo</button>
+    <div class="flex">
+      <button class="btn ghost row2" id="go-rules">Règles</button>
+      <button class="btn ghost row2" id="go-diag">Diagnostic</button>
+    </div>
+    <p class="lead" style="margin-top:16px">
+      Connexion directe entre navigateurs. Les téléphones doivent être sur le même WiFi.
+    </p>
+  </div>
+</section>
+
+<!-- ------------------------------------------------------------------- profil -->
+<section class="screen" id="screen-profile">
+  <div class="scroll">
+    <div class="head">
+      <button class="icon-btn" data-back>‹</button>
+      <div><h2>Ton profil</h2><p>Visible par les autres joueurs.</p></div>
+    </div>
+    <div class="panel">
+      <div style="display:flex;justify-content:center;margin-bottom:14px">
+        <div class="avatar" id="profile-avatar" style="width:96px;height:96px;font-size:42px"></div>
+      </div>
+      <div class="flex" style="margin-bottom:12px">
+        <button class="btn row2 ghost" id="pick-photo" style="margin:0">Choisir une photo</button>
+        <button class="btn row2 ghost" id="drop-photo" style="margin:0">Retirer</button>
+      </div>
+      <input type="file" id="photo-input" accept="image/*" class="hidden">
+      <div class="label" style="margin-bottom:6px">PSEUDO</div>
+      <input type="text" id="name-input" maxlength="14" placeholder="Ton pseudo">
+      <div class="label" style="margin:14px 0 6px">COULEUR</div>
+      <div id="color-picker" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+    </div>
+    <div class="panel">
+      <div class="label" style="margin-bottom:10px">STATISTIQUES</div>
+      <div id="stats-list"></div>
+      <button class="btn ghost" id="reset-stats" style="margin-top:12px">Remettre à zéro</button>
+    </div>
+    <button class="btn" id="save-profile">Enregistrer</button>
+  </div>
+</section>
+
+<!-- --------------------------------------------------------------------- solo -->
+<section class="screen" id="screen-solo">
+  <div class="scroll">
+    <div class="head">
+      <button class="icon-btn" data-back>‹</button>
+      <div><h2>Jouer en solo</h2><p>Contre la machine. Mêmes règles maison.</p></div>
+    </div>
+    <div id="difficulty-list"></div>
+    <p class="lead" style="text-align:left">
+      Le bot ne voit que ce que tu vois : ta main lui est cachée, comme la sienne l'est
+      pour toi. Les parties solo ne comptent pas dans les statistiques.
+    </p>
+  </div>
+</section>
+
+<!-- -------------------------------------------------------------------- règles -->
+<section class="screen" id="screen-rules">
+  <div class="scroll">
+    <div class="head">
+      <button class="icon-btn" data-back>‹</button>
+      <div><h2>Les règles</h2><p>Le UNO classique, avec les règles maison.</p></div>
+    </div>
+    <div id="rules-list"></div>
+  </div>
+</section>
+
+<!-- ---------------------------------------------------------------------- hôte -->
+<section class="screen" id="screen-host">
+  <div class="scroll">
+    <div class="head">
+      <button class="icon-btn" data-back>‹</button>
+      <div><h2>Ton salon</h2><p>Fais scanner ce QR par l'autre téléphone.</p></div>
+    </div>
+    <div class="panel" id="host-qr-panel">
+      <div id="qrbox"></div>
+      <p class="lead" style="margin:12px 0 0;text-align:left">
+        Avec l'appareil photo, tout simplement. La page s'ouvrira chez lui et affichera
+        un QR de réponse à scanner ici.
+      </p>
+      <button class="btn ghost" id="host-scan" style="margin-top:12px">Scanner sa réponse</button>
+      <video id="host-video" playsinline muted></video>
+      <textarea id="host-answer" placeholder="…ou colle son code de réponse ici"></textarea>
+      <button class="btn" id="host-accept">Valider la réponse</button>
+    </div>
+    <div class="panel">
+      <div class="label" id="roster-label">JOUEURS</div>
+      <div id="host-roster" style="margin-top:10px"></div>
+    </div>
+    <div class="row-line" id="host-status" style="justify-content:center"></div>
+    <button class="btn" id="host-start">Lancer la partie</button>
+    <button class="btn ghost" id="host-invite-more">Inviter un joueur de plus</button>
+  </div>
+</section>
+
+<!-- -------------------------------------------------------------------- invité -->
+<section class="screen" id="screen-join">
+  <div class="scroll">
+    <div class="head">
+      <button class="icon-btn" data-back>‹</button>
+      <div><h2>Rejoindre</h2><p>Scanne le QR affiché par l'hôte.</p></div>
+    </div>
+    <div class="panel">
+      <button class="btn" id="join-scan">Ouvrir la caméra</button>
+      <video id="join-video" playsinline muted></video>
+      <p class="lead" style="text-align:left;margin:10px 0">
+        Le plus simple : scanne le QR de l'hôte avec l'appareil photo de ton téléphone,
+        la page s'ouvrira toute seule.
+      </p>
+      <textarea id="join-code" placeholder="…ou colle son code d'invitation ici"></textarea>
+      <button class="btn ghost" id="join-go">Utiliser ce code</button>
+    </div>
+  </div>
+</section>
+
+<!-- ------------------------------------------------------------ salon d'attente -->
+<section class="screen" id="screen-lobby">
+  <div class="scroll">
+    <div class="head">
+      <button class="icon-btn" data-back>‹</button>
+      <div><h2>Ta réponse</h2><p>Montre ce QR à l'hôte pour finir la connexion.</p></div>
+    </div>
+    <div class="panel" id="lobby-qr-panel">
+      <div id="lobby-qrbox"></div>
+      <textarea id="lobby-answer" readonly style="margin-top:10px"></textarea>
+      <button class="btn ghost" id="lobby-copy">Copier le code</button>
+    </div>
+    <div class="panel">
+      <div class="label">JOUEURS</div>
+      <div id="lobby-roster" style="margin-top:10px"></div>
+    </div>
+    <div class="row-line" id="lobby-status" style="justify-content:center"></div>
+  </div>
+</section>
+
+<!-- --------------------------------------------------------------------- table -->
+<section class="screen" id="screen-game">
+  <div class="rivals" id="rivals"></div>
+  <div class="fan" id="rival-fan"></div>
+  <div class="middle">
+    <div>
+      <div id="deck"></div>
+      <div class="deck-label" id="deck-label"></div>
+    </div>
+    <div id="discard"></div>
+    <div id="pending" class="hidden"></div>
+    <div id="toast" class="hidden"></div>
+  </div>
+  <div id="banner"></div>
+  <div id="pass-wrap" class="hidden"><button class="btn" id="pass-btn">Passer mon tour</button></div>
+  <div id="hand"></div>
+</section>
+
+<!-- ------------------------------------------------------------------ overlays -->
+<div class="overlay" id="picker">
+  <div class="panel">
+    <div class="label" style="text-align:center;margin-bottom:14px">CHOISIS LA COULEUR</div>
+    <div id="picker-chips"></div>
+  </div>
 </div>
 
-<div class="panel hidden" id="showQr">
-  <h2 id="qrTitle">Fais scanner ce QR</h2>
-  <div id="qr"></div>
-  <p class="lead" id="qrHint" style="margin:12px 0 0"></p>
-  <textarea id="qrText" readonly></textarea>
-  <button class="ghost" id="copy" style="margin-top:10px">Copier le code</button>
+<div class="overlay" id="slam">
+  <div class="amount" id="slam-amount"></div>
+  <div style="font-size:19px;font-weight:800" id="slam-who"></div>
 </div>
 
-<div class="panel hidden" id="scanBox">
-  <h2>Scanne la réponse de l'autre téléphone</h2>
-  <video id="video" playsinline muted></video>
-  <button class="ghost" id="startScan">Ouvrir la caméra</button>
-  <textarea id="answerIn" placeholder="…ou colle le code de réponse ici"></textarea>
-  <button id="useAnswer">Valider la réponse</button>
+<div class="overlay" id="over">
+  <div class="panel" style="text-align:center">
+    <div style="font-size:34px;font-weight:900" id="over-title"></div>
+    <p class="lead" id="over-sub" style="margin:8px 0 16px"></p>
+    <div id="over-scores" style="margin-bottom:18px"></div>
+    <button class="btn" id="rematch-btn">Revanche</button>
+    <button class="btn ghost" id="quit-btn">Quitter</button>
+  </div>
 </div>
 
-<div class="panel">
-  <h2>État</h2>
-  <div class="row"><b>Rôle</b><span id="sRole">—</span></div>
-  <div class="row"><b>Signalisation</b><span id="sSig">—</span></div>
-  <div class="row"><b>ICE</b><span id="sIce">—</span></div>
-  <div class="row"><b>Canal de données</b><span id="sChan">—</span></div>
-  <div class="row"><b>Aller-retour</b><span id="sPing">—</span></div>
-  <div class="row"><b>Adresses annoncées</b><span id="sCand">—</span></div>
-  <div id="log"></div>
-</div>
-
-<div class="panel">
-  <h2>Ce que ça prouve</h2>
-  <p class="lead" style="margin:0">
-    Si « canal de données » passe au vert et que l'aller-retour affiche un temps, alors
-    deux navigateurs peuvent échanger des données en direct sans aucun serveur — et
-    donc un iPhone peut jouer. Si ça bloque sur ICE, c'est le réseau : WiFi avec
-    isolation des clients, ou téléphones sur deux réseaux différents.
-  </p>
+<div class="overlay" id="dialog">
+  <div class="panel">
+    <div style="font-weight:900;font-size:18px;margin-bottom:8px" id="dialog-title"></div>
+    <p class="lead" style="text-align:left;margin-bottom:14px" id="dialog-body"></p>
+    <button class="btn" id="dialog-ok">OK</button>
+  </div>
 </div>
 
 <script src="vendor/qrcode.js"></script>
-<script type="module">
-import { pack, unpack } from './sdp-codec.js';
-
-const $ = (id) => document.getElementById(id);
-const log = (line) => { $('log').textContent += line + '\n'; };
-const set = (id, text, cls) => { const e = $(id); e.textContent = text; e.className = cls || ''; };
-
-let pc = null;
-let channel = null;
-let pingSentAt = 0;
-
-function drawQr(text) {
-  // Error correction M: enough margin for a phone screen photographed by another.
-  const qr = qrcode(0, 'M');
-  qr.addData(text);
-  qr.make();
-  $('qr').innerHTML = qr.createSvgTag({ scalable: true, margin: 2 });
-  $('qr').style.display = 'block';
-  $('qrText').value = text;
-  $('showQr').classList.remove('hidden');
-}
-
-function watch(connection) {
-  connection.oniceconnectionstatechange = () => {
-    const s = connection.iceConnectionState;
-    set('sIce', s, s === 'connected' || s === 'completed' ? 'ok'
-      : s === 'failed' || s === 'disconnected' ? 'bad' : 'wait');
-  };
-  connection.onicecandidate = (e) => {
-    if (!e.candidate) return;
-    const c = e.candidate.candidate;
-    const kind = c.includes('.local') ? 'mDNS' : c.includes(' typ host') ? 'IP locale' : 'autre';
-    log(`candidat ${kind} : ${c.split(' ').slice(4, 6).join(':')}`);
-  };
-}
-
-function wireChannel(c) {
-  channel = c;
-  c.onopen = () => {
-    set('sChan', 'ouvert', 'ok');
-    pingSentAt = performance.now();
-    c.send('ping');
-  };
-  c.onclose = () => set('sChan', 'fermé', 'bad');
-  c.onmessage = (e) => {
-    if (e.data === 'ping') {
-      c.send('pong');
-    } else if (e.data === 'pong') {
-      set('sPing', `${Math.round(performance.now() - pingSentAt)} ms`, 'ok');
-    }
-  };
-}
-
-/** Vanilla ICE: no server to trickle through, so wait for the full list. */
-async function describe(kind) {
-  const description = kind === 'offer' ? await pc.createOffer() : await pc.createAnswer();
-  await pc.setLocalDescription(description);
-  if (pc.iceGatheringState !== 'complete') {
-    await new Promise((resolve) => {
-      const done = () => pc.iceGatheringState === 'complete' && resolve();
-      pc.addEventListener('icegatheringstatechange', done);
-      setTimeout(resolve, 4000);
-    });
-  }
-  const packed = pack(pc.localDescription);
-  set('sCand', `${(packed.split('|')[5] || '').split('~').filter(Boolean).length} adresse(s)`);
-  log(`${kind} compacte : ${packed.length} octets`);
-  return packed;
-}
-
-// ------------------------------------------------------------------------ host
-
-$('beHost').onclick = async () => {
-  $('choice').classList.add('hidden');
-  set('sRole', 'hôte (crée la partie)');
-  set('sSig', 'offre générée', 'wait');
-  pc = new RTCPeerConnection({ iceServers: [] });
-  watch(pc);
-  wireChannel(pc.createDataChannel('uno', { ordered: true }));
-  const packed = await describe('offer');
-  $('qrTitle').textContent = "Fais scanner ce QR par l'autre téléphone";
-  $('qrHint').textContent =
-    "Avec l'appareil photo, tout simplement. La page s'ouvrira chez lui et affichera " +
-    'un code de réponse à te renvoyer.';
-  drawQr(location.href.split('#')[0] + '#' + packed);
-  $('scanBox').classList.remove('hidden');
-};
-
-// ----------------------------------------------------------------------- guest
-
-async function joinWith(packedOffer) {
-  $('choice').classList.add('hidden');
-  set('sRole', 'invité (rejoint)');
-  set('sSig', 'offre reçue', 'wait');
-  pc = new RTCPeerConnection({ iceServers: [] });
-  watch(pc);
-  pc.ondatachannel = (e) => wireChannel(e.channel);
-  try {
-    await pc.setRemoteDescription(unpack(packedOffer));
-  } catch (err) {
-    set('sSig', 'offre refusée', 'bad');
-    log('échec setRemoteDescription : ' + err.message);
-    return;
-  }
-  const packed = await describe('answer');
-  set('sSig', 'réponse prête', 'wait');
-  $('qrTitle').textContent = "Montre ce QR à celui qui a créé la partie";
-  $('qrHint').textContent = "C'est le retour : sans lui, la liaison ne peut pas s'établir.";
-  drawQr(packed);
-}
-
-async function acceptAnswer(packed) {
-  try {
-    await pc.setRemoteDescription(unpack(packed.trim()));
-    set('sSig', 'réponse acceptée', 'ok');
-    $('scanBox').classList.add('hidden');
-  } catch (err) {
-    set('sSig', 'réponse refusée', 'bad');
-    log('échec : ' + err.message);
-  }
-}
-
-$('useAnswer').onclick = () => $('answerIn').value.trim() && acceptAnswer($('answerIn').value);
-$('paste').onclick = () => { $('choice').classList.add('hidden'); $('scanBox').classList.remove('hidden'); };
-$('copy').onclick = async () => {
-  try {
-    await navigator.clipboard.writeText($('qrText').value);
-    $('copy').textContent = 'Copié';
-  } catch { $('qrText').select(); }
-};
-
-// Scanning the answer back. BarcodeDetector exists on Chrome Android, which is what the
-// host runs; Safari has no such thing, so the guest never needs to scan — it only shows.
-$('startScan').onclick = async () => {
-  if (!('BarcodeDetector' in window)) {
-    log("Ce navigateur ne sait pas lire un QR : colle le code de réponse à la main.");
-    return;
-  }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    const video = $('video');
-    video.style.display = 'block';
-    video.srcObject = stream;
-    await video.play();
-    const detector = new BarcodeDetector({ formats: ['qr_code'] });
-    const tick = async () => {
-      if (!pc || pc.remoteDescription) {
-        stream.getTracks().forEach((t) => t.stop());
-        video.style.display = 'none';
-        return;
-      }
-      const found = await detector.detect(video).catch(() => []);
-      if (found.length) {
-        await acceptAnswer(found[0].rawValue);
-        stream.getTracks().forEach((t) => t.stop());
-        video.style.display = 'none';
-        return;
-      }
-      requestAnimationFrame(tick);
-    };
-    tick();
-  } catch (err) {
-    log('caméra indisponible : ' + err.message);
-  }
-};
-
-// Arriving with an offer in the URL means this phone was the one that scanned.
-if (location.hash.length > 2) {
-  joinWith(decodeURIComponent(location.hash.slice(1)));
-}
-
-log('navigateur : ' + (navigator.userAgent.match(/(CriOS|Chrome|Firefox|Version)\/[\d.]+/) || ['?'])[0]);
-log('WebRTC : ' + (window.RTCPeerConnection ? 'disponible' : 'ABSENT'));
-</script>
+<script type="module" src="src/app.js"></script>
 </body>
 </html>

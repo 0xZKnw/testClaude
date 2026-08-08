@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const codec = readFileSync(join(here, '..', 'sdp-codec.js'), 'utf8').replace(/^export /gm, '');
+const codec = readFileSync(join(here, '..', 'src', 'sdp-codec.js'), 'utf8').replace(/^export /gm, '');
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
