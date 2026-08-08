@@ -1,0 +1,74 @@
+name: Build APK
+
+on:
+  push:
+    branches:
+      - claude/uno-ble-multiplayer-m6nnxx
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests (game rules)
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Lint (fail on real errors)
+        run: ./gradlew --no-daemon :app:lintDebug
+
+      - name: Build APKs
+        run: ./gradlew --no-daemon assembleDebug assembleRelease
+
+      - name: Rename artifacts
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/debug/app-debug.apk out/uno-duo-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk out/uno-duo.apk
+          ls -la out
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uno-duo-apk
+          path: out/*.apk
+          if-no-files-found: error
+
+      - name: Upload test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            app/build/reports/tests/**
+            app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
+
+      - name: Publish a downloadable release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="apk-latest"
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" out/uno-duo.apk out/uno-duo-debug.apk \
+            --title "UNO Duo — dernier APK" \
+            --notes "APK construit depuis \`${GITHUB_SHA::7}\`. Installe \`uno-duo.apk\` sur les deux téléphones." \
+            --prerelease
