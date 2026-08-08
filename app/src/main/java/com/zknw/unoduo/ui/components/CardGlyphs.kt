@@ -12,10 +12,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.Dp
 import com.zknw.unoduo.game.CardColor
 import com.zknw.unoduo.ui.theme.Palette
@@ -27,7 +27,20 @@ import com.zknw.unoduo.ui.theme.Palette
  */
 
 private const val OUTLINE_GROW = 1.9f
-private const val SHAPE_GROW = 1.16f
+
+/**
+ * Ink keyline then fill, in that order. Stroking the very same path is what makes the
+ * outline the same thickness the whole way round — growing the shape and drawing it
+ * behind itself only works for a blob, and leaves concave parts with no keyline at all.
+ */
+private fun DrawScope.inkThenFill(path: Path, color: Color, outline: Color, keyline: Float) {
+    drawPath(
+        path = path,
+        color = outline,
+        style = Stroke(width = keyline * 2f, join = StrokeJoin.Round, cap = StrokeCap.Round)
+    )
+    drawPath(path, color)
+}
 
 @Composable
 fun SkipGlyph(glyphSize: Dp, color: Color, modifier: Modifier = Modifier) {
@@ -39,7 +52,9 @@ fun SkipGlyph(glyphSize: Dp, color: Color, modifier: Modifier = Modifier) {
 fun DrawScope.drawSkip(color: Color, outline: Color) {
     val stroke = size.minDimension * 0.15f
     val radius = (size.minDimension - stroke * OUTLINE_GROW) / 2f
-    val d = radius * 0.72f
+    // Half the chord at 45°, so the bar lands exactly on the ring instead of stopping
+    // short of it or poking out the other side.
+    val d = radius * 0.7071f
     val c = center
 
     fun ring(width: Float, tint: Color) {
@@ -64,46 +79,66 @@ fun ReverseGlyph(glyphSize: Dp, color: Color, modifier: Modifier = Modifier) {
     }
 }
 
-/** Two stacked arrows pointing opposite ways — the classic "sens interdit" mark. */
+/** Two arrows chasing each other in opposite directions — the "sens interdit" mark. */
 fun DrawScope.drawReverse(color: Color, outline: Color) {
-    val path = reversePath()
-    scale(SHAPE_GROW, SHAPE_GROW, center) { drawPath(path, outline) }
-    drawPath(path, color)
+    val keyline = size.minDimension * 0.075f
+    // Each arrow is stroked and filled on its own. Drawn as one path, the ink of the
+    // upper arrow would run across the lower one where they nearly touch.
+    val (top, bottom) = reverseArrows(keyline)
+    inkThenFill(top, color, outline, keyline)
+    inkThenFill(bottom, color, outline, keyline)
 }
 
-private fun DrawScope.reversePath(): Path {
-    val w = size.width
-    val h = size.height
-    val bar = h * 0.15f
-    val head = h * 0.30f
-    val gap = h * 0.14f
-    val path = Path()
+/**
+ * The arrows are inset by the keyline so the ink stays inside the glyph box, and the
+ * head is built from the shaft outwards so the barbs always overhang by the same
+ * amount whatever the size.
+ */
+private fun DrawScope.reverseArrows(keyline: Float): Pair<Path, Path> {
+    val w = size.width - keyline * 2f
+    val h = size.height - keyline * 2f
+    val ox = keyline
+    val oy = keyline
 
-    fun arrow(topY: Float, pointsRight: Boolean) {
-        val left = w * 0.08f
-        val right = w * 0.92f
+    val shaft = h * 0.17f
+    val head = h * 0.34f
+    val gap = h * 0.16f
+
+    fun arrow(topY: Float, pointsRight: Boolean): Path {
+        val path = Path()
+        val left = ox
+        val right = ox + w
         val tail = if (pointsRight) left else right
         val tip = if (pointsRight) right else left
-        val bodyEnd = if (pointsRight) tip - head else tip + head
-        val midY = topY + bar / 2f
+        // The barbs sit one head-length back along the shaft.
+        val neck = if (pointsRight) tip - head * 0.72f else tip + head * 0.72f
+        val midY = topY + shaft / 2f
+        val barb = head / 2f
+
         path.moveTo(tail, topY)
-        path.lineTo(bodyEnd, topY)
-        path.lineTo(bodyEnd, topY - head / 2f + bar / 2f)
+        path.lineTo(neck, topY)
+        path.lineTo(neck, midY - barb)
         path.lineTo(tip, midY)
-        path.lineTo(bodyEnd, topY + head / 2f + bar / 2f)
-        path.lineTo(bodyEnd, topY + bar)
-        path.lineTo(tail, topY + bar)
+        path.lineTo(neck, midY + barb)
+        path.lineTo(neck, topY + shaft)
+        path.lineTo(tail, topY + shaft)
         path.close()
+        return path
     }
 
-    val totalHeight = bar * 2 + gap
-    val startY = (h - totalHeight) / 2f
-    arrow(startY, pointsRight = true)
-    arrow(startY + bar + gap, pointsRight = false)
-    return path
+    val total = shaft * 2 + gap
+    val startY = oy + (h - total) / 2f
+    return arrow(startY, pointsRight = true) to
+        arrow(startY + shaft + gap, pointsRight = false)
 }
 
-/** Overlapping mini-cards, each with its own ink keyline: the +2 and +4 marks. */
+/**
+ * The little fan of cards that stands for +2 and +4.
+ *
+ * They have to look like *cards*: upright, in the same 1.45 proportion as the real
+ * ones, overlapping and splayed like a hand. Laid out square and staggered diagonally
+ * they read as loose rectangles instead, which is what they used to do.
+ */
 fun DrawScope.drawMiniCards(
     colors: List<Color>,
     outline: Color,
@@ -111,28 +146,36 @@ fun DrawScope.drawMiniCards(
     origin: Offset
 ) {
     val count = colors.size
-    val cardW = boxSize.width * (if (count > 2) 0.42f else 0.52f)
-    val cardH = boxSize.height * (if (count > 2) 0.46f else 0.62f)
-    val stepX = (boxSize.width - cardW) / (count - 1).coerceAtLeast(1)
-    val stepY = (boxSize.height - cardH) / (count - 1).coerceAtLeast(1)
-    val corner = CornerRadius(cardW * 0.24f, cardW * 0.24f)
-    val border = cardW * 0.16f
+    // Breathing room for the tilt, so a rotated corner never gets clipped.
+    val pad = boxSize.width * 0.06f
+    val span = boxSize.width - pad * 2f
+
+    val cardW = span * (if (count > 2) 0.40f else 0.58f)
+    val cardH = cardW * 1.45f
+    val stepX = if (count > 1) (span - cardW) / (count - 1) else 0f
+    val top = origin.y + (boxSize.height - cardH) / 2f
+    val corner = CornerRadius(cardW * 0.22f, cardW * 0.22f)
+    val border = cardW * 0.15f
+    val spread = if (count > 2) 8f else 11f
+    val middle = (count - 1) / 2f
 
     colors.forEachIndexed { index, color ->
-        val x = origin.x + stepX * index
-        val y = origin.y + stepY * index
-        drawRoundRect(
-            color = outline,
-            topLeft = Offset(x, y),
-            size = Size(cardW, cardH),
-            cornerRadius = corner
-        )
-        drawRoundRect(
-            color = color,
-            topLeft = Offset(x + border, y + border),
-            size = Size(cardW - border * 2, cardH - border * 2),
-            cornerRadius = corner
-        )
+        val left = origin.x + pad + stepX * index
+        val rect = Rect(Offset(left, top), Size(cardW, cardH))
+        rotate((index - middle) * spread, pivot = rect.center) {
+            drawRoundRect(
+                color = outline,
+                topLeft = rect.topLeft,
+                size = rect.size,
+                cornerRadius = corner
+            )
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(rect.left + border, rect.top + border),
+                size = Size(cardW - border * 2f, cardH - border * 2f),
+                cornerRadius = corner
+            )
+        }
     }
 }
 

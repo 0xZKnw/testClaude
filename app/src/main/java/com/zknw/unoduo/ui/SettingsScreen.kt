@@ -76,7 +76,7 @@ fun SettingsScreen(
                         )
                         Spacer(Modifier.fillMaxWidth(0.04f))
                         Text(
-                            "UNO Duo ${BuildConfig.VERSION_NAME}",
+                            "UNO ${BuildConfig.VERSION_NAME}",
                             color = Palette.TextDim,
                             fontSize = 13.sp
                         )
@@ -224,7 +224,7 @@ private fun UpdateBlock(
             } else {
                 Text(
                     "Android demande d'abord l'autorisation d'installer des applications " +
-                        "depuis UNO Duo.",
+                        "depuis UNO.",
                     color = Palette.TextDim,
                     fontSize = 13.sp,
                     lineHeight = 18.sp

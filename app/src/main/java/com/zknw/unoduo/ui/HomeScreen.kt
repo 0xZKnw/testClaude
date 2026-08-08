@@ -64,7 +64,7 @@ fun HomeScreen(
             Spacer(Modifier.height(18.dp))
 
             OutlinedGlyphText(
-                text = "UNO DUO",
+                text = "UNO",
                 fontSize = 46.sp,
                 fill = Palette.Gold,
                 outlineWidth = 3.dp
