@@ -1,13 +1,33 @@
-// Signing material comes from the environment so the key never lives in the repo.
-// Without it Gradle falls back to the auto-generated debug key — fine locally, but a
-// fresh key on every CI runner, which is exactly what makes Android refuse an update.
-val signingStore = System.getenv("UNO_KEYSTORE_FILE")
+// Guards the versioned keystore. It is deliberately not a secret: the key file sits next
+// to it in the repository, so the password protects nothing and only has to match.
+val BUNDLED_KEYSTORE_PASSWORD = "unoduosign"
+
+// Android refuses to replace an app signed with a different key, and a CI runner that
+// generates its own debug key produces a different one on every build — which is exactly
+// why updating failed. So the key has to be fixed.
+//
+// It is versioned under keystore/, in a public repository: anyone can sign an APK that
+// would install over this one. Accepted here because the app has no account, no payment
+// and no personal data, and because it is the only option that needs no repository
+// secret. Setting the UNO_KEYSTORE_* variables takes precedence, so moving the key into
+// GitHub secrets later is a configuration change rather than a code change.
+val envKeystore = System.getenv("UNO_KEYSTORE_FILE")
     ?.takeIf { it.isNotBlank() }
     ?.let(::file)
     ?.takeIf { it.exists() }
-val signingStorePassword = System.getenv("UNO_KEYSTORE_PASSWORD").orEmpty()
-val signingAlias = System.getenv("UNO_KEY_ALIAS").orEmpty().ifBlank { "unoduo" }
-val signingKeyPassword = System.getenv("UNO_KEY_PASSWORD").orEmpty().ifBlank { signingStorePassword }
+val bundledKeystore = rootProject.file("keystore/uno-duo.jks").takeIf { it.exists() }
+val usingEnvKeystore = envKeystore != null
+
+val signingStore = envKeystore ?: bundledKeystore
+val signingStorePassword = System.getenv("UNO_KEYSTORE_PASSWORD")
+    ?.takeIf { usingEnvKeystore && it.isNotBlank() }
+    ?: BUNDLED_KEYSTORE_PASSWORD
+val signingAlias = System.getenv("UNO_KEY_ALIAS")
+    ?.takeIf { usingEnvKeystore && it.isNotBlank() }
+    ?: "unoduo"
+val signingKeyPassword = System.getenv("UNO_KEY_PASSWORD")
+    ?.takeIf { usingEnvKeystore && it.isNotBlank() }
+    ?: signingStorePassword
 
 plugins {
     alias(libs.plugins.android.application)

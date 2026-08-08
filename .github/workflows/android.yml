@@ -44,9 +44,9 @@ jobs:
               echo "UNO_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
               echo "UNO_KEY_ALIAS=${KEY_ALIAS:-unoduo}"
             } >> "$GITHUB_ENV"
-            echo "Cle de signature restauree."
+            echo "Cle de signature restauree depuis les secrets du depot."
           else
-            echo "::warning::Aucun secret ANDROID_KEYSTORE_BASE64 : l'APK sera signe avec une cle jetable et ne pourra pas remplacer une installation existante."
+            echo "Pas de secret de signature : utilisation de la cle versionnee dans keystore/."
           fi
 
       - name: Unit tests (game rules)

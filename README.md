@@ -19,15 +19,22 @@ reste disponible au cas où le dépôt redeviendrait privé.
 
 ### Signature de l'APK
 
-Les builds sont signés avec une clé stable restaurée depuis les secrets du dépôt
-(`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, et éventuellement
-`ANDROID_KEY_ALIAS`). C'est indispensable : Android refuse de remplacer une application
-par une autre signée avec une clé différente, et sans ces secrets chaque runner génère
-une clé jetable. Le workflow affiche l'empreinte SHA-256 de l'APK à chaque build, ce qui
-permet de vérifier d'un coup d'œil qu'elle ne change pas.
+Android refuse de remplacer une application par une autre signée avec une clé différente.
+Comme un runner CI génère sa propre clé de debug à chaque exécution, la clé doit être fixe :
+elle est versionnée dans `keystore/uno-duo.jks`.
 
-Sans secret configuré, le build fonctionne quand même mais affiche un avertissement, et
-l'APK produit ne pourra qu'être installé à neuf.
+**Cette clé est publique**, puisque le dépôt l'est. N'importe qui peut donc signer un APK
+capable de s'installer par-dessus celui-ci. C'est un compromis assumé pour un projet
+personnel sans compte, sans paiement et sans donnée sensible — et c'est la seule option
+qui ne demande aucun secret de dépôt.
+
+Pour passer à une clé privée, ajoute les secrets `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD` et éventuellement `ANDROID_KEY_ALIAS` : ils sont prioritaires
+sur la clé versionnée, sans toucher au code. Changer de clé impose en revanche une
+désinstallation de l'app sur chaque téléphone.
+
+Le workflow affiche l'empreinte SHA-256 de l'APK à chaque build : elle doit rester
+identique d'une version à l'autre.
 
 ## Comment jouer
 
