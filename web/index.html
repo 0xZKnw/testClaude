@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>UNO — test de liaison</title>
+<style>
+  :root {
+    --ink: #14161d;
+    --stock: #fdfbf4;
+    --text: #f3f6fb;
+    --dim: #9daabf;
+    --gold: #ffc531;
+    --red: #f23b2e;
+    --green: #41c258;
+    --slate: #212836;
+    --line: #3b475d;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    padding: 20px 18px 40px;
+    background: linear-gradient(#2a2159, #15102f);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    min-height: 100vh;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.lead { color: var(--dim); margin: 0 0 22px; font-size: 14px; }
+  .panel {
+    background: var(--slate);
+    border: 3px solid var(--ink);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  h2 { font-size: 13px; letter-spacing: 1.2px; color: var(--dim); margin: 0 0 12px; text-transform: uppercase; }
+  button {
+    font: inherit;
+    font-weight: 700;
+    width: 100%;
+    padding: 14px;
+    border: 3px solid var(--ink);
+    border-radius: 12px;
+    background: var(--gold);
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+  button.ghost { background: transparent; color: var(--text); border-color: var(--line); }
+  button:disabled { opacity: .45; }
+  #qr { background: var(--stock); padding: 12px; border-radius: 12px; display: none; }
+  #qr img, #qr canvas { width: 100%; height: auto; display: block; image-rendering: pixelated; }
+  textarea {
+    width: 100%; height: 76px; font: 12px/1.4 ui-monospace, Menlo, monospace;
+    background: #171d2a; color: var(--dim); border: 2px solid var(--line);
+    border-radius: 10px; padding: 8px; resize: vertical;
+  }
+  video { width: 100%; border-radius: 12px; display: none; background: #000; }
+  .row { display: flex; gap: 10px; align-items: baseline; font-size: 13px; padding: 3px 0; }
+  .row b { color: var(--dim); font-weight: 600; min-width: 130px; }
+  .ok { color: var(--green); font-weight: 700; }
+  .bad { color: var(--red); font-weight: 700; }
+  .wait { color: var(--gold); font-weight: 700; }
+  #log { font: 11px/1.5 ui-monospace, Menlo, monospace; color: var(--dim); white-space: pre-wrap; margin-top: 8px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<h1>UNO — test de liaison</h1>
+<p class="lead">
+  Vérifie si deux téléphones peuvent se parler en direct, sans serveur : un iPhone et
+  un Android, sur le même WiFi. C'est le seul point qui décide si une version iOS est
+  possible sans payer de compte développeur.
+</p>
+
+<div class="panel" id="choice">
+  <h2>Sur ce téléphone</h2>
+  <button id="beHost">Créer la partie · afficher le QR</button>
+  <button class="ghost" id="paste">J'ai un code de réponse à coller</button>
+</div>
+
+<div class="panel hidden" id="showQr">
+  <h2 id="qrTitle">Fais scanner ce QR</h2>
+  <div id="qr"></div>
+  <p class="lead" id="qrHint" style="margin:12px 0 0"></p>
+  <textarea id="qrText" readonly></textarea>
+  <button class="ghost" id="copy" style="margin-top:10px">Copier le code</button>
+</div>
+
+<div class="panel hidden" id="scanBox">
+  <h2>Scanne la réponse de l'autre téléphone</h2>
+  <video id="video" playsinline muted></video>
+  <button class="ghost" id="startScan">Ouvrir la caméra</button>
+  <textarea id="answerIn" placeholder="…ou colle le code de réponse ici"></textarea>
+  <button id="useAnswer">Valider la réponse</button>
+</div>
+
+<div class="panel">
+  <h2>État</h2>
+  <div class="row"><b>Rôle</b><span id="sRole">—</span></div>
+  <div class="row"><b>Signalisation</b><span id="sSig">—</span></div>
+  <div class="row"><b>ICE</b><span id="sIce">—</span></div>
+  <div class="row"><b>Canal de données</b><span id="sChan">—</span></div>
+  <div class="row"><b>Aller-retour</b><span id="sPing">—</span></div>
+  <div class="row"><b>Adresses annoncées</b><span id="sCand">—</span></div>
+  <div id="log"></div>
+</div>
+
+<div class="panel">
+  <h2>Ce que ça prouve</h2>
+  <p class="lead" style="margin:0">
+    Si « canal de données » passe au vert et que l'aller-retour affiche un temps, alors
+    deux navigateurs peuvent échanger des données en direct sans aucun serveur — et
+    donc un iPhone peut jouer. Si ça bloque sur ICE, c'est le réseau : WiFi avec
+    isolation des clients, ou téléphones sur deux réseaux différents.
+  </p>
+</div>
+
+<script src="vendor/qrcode.js"></script>
+<script type="module">
+import { pack, unpack } from './sdp-codec.js';
+
+const $ = (id) => document.getElementById(id);
+const log = (line) => { $('log').textContent += line + '\n'; };
+const set = (id, text, cls) => { const e = $(id); e.textContent = text; e.className = cls || ''; };
+
+let pc = null;
+let channel = null;
+let pingSentAt = 0;
+
+function drawQr(text) {
+  // Error correction M: enough margin for a phone screen photographed by another.
+  const qr = qrcode(0, 'M');
+  qr.addData(text);
+  qr.make();
+  $('qr').innerHTML = qr.createSvgTag({ scalable: true, margin: 2 });
+  $('qr').style.display = 'block';
+  $('qrText').value = text;
+  $('showQr').classList.remove('hidden');
+}
+
+function watch(connection) {
+  connection.oniceconnectionstatechange = () => {
+    const s = connection.iceConnectionState;
+    set('sIce', s, s === 'connected' || s === 'completed' ? 'ok'
+      : s === 'failed' || s === 'disconnected' ? 'bad' : 'wait');
+  };
+  connection.onicecandidate = (e) => {
+    if (!e.candidate) return;
+    const c = e.candidate.candidate;
+    const kind = c.includes('.local') ? 'mDNS' : c.includes(' typ host') ? 'IP locale' : 'autre';
+    log(`candidat ${kind} : ${c.split(' ').slice(4, 6).join(':')}`);
+  };
+}
+
+function wireChannel(c) {
+  channel = c;
+  c.onopen = () => {
+    set('sChan', 'ouvert', 'ok');
+    pingSentAt = performance.now();
+    c.send('ping');
+  };
+  c.onclose = () => set('sChan', 'fermé', 'bad');
+  c.onmessage = (e) => {
+    if (e.data === 'ping') {
+      c.send('pong');
+    } else if (e.data === 'pong') {
+      set('sPing', `${Math.round(performance.now() - pingSentAt)} ms`, 'ok');
+    }
+  };
+}
+
+/** Vanilla ICE: no server to trickle through, so wait for the full list. */
+async function describe(kind) {
+  const description = kind === 'offer' ? await pc.createOffer() : await pc.createAnswer();
+  await pc.setLocalDescription(description);
+  if (pc.iceGatheringState !== 'complete') {
+    await new Promise((resolve) => {
+      const done = () => pc.iceGatheringState === 'complete' && resolve();
+      pc.addEventListener('icegatheringstatechange', done);
+      setTimeout(resolve, 4000);
+    });
+  }
+  const packed = pack(pc.localDescription);
+  set('sCand', `${(packed.split('|')[5] || '').split('~').filter(Boolean).length} adresse(s)`);
+  log(`${kind} compacte : ${packed.length} octets`);
+  return packed;
+}
+
+// ------------------------------------------------------------------------ host
+
+$('beHost').onclick = async () => {
+  $('choice').classList.add('hidden');
+  set('sRole', 'hôte (crée la partie)');
+  set('sSig', 'offre générée', 'wait');
+  pc = new RTCPeerConnection({ iceServers: [] });
+  watch(pc);
+  wireChannel(pc.createDataChannel('uno', { ordered: true }));
+  const packed = await describe('offer');
+  $('qrTitle').textContent = "Fais scanner ce QR par l'autre téléphone";
+  $('qrHint').textContent =
+    "Avec l'appareil photo, tout simplement. La page s'ouvrira chez lui et affichera " +
+    'un code de réponse à te renvoyer.';
+  drawQr(location.href.split('#')[0] + '#' + packed);
+  $('scanBox').classList.remove('hidden');
+};
+
+// ----------------------------------------------------------------------- guest
+
+async function joinWith(packedOffer) {
+  $('choice').classList.add('hidden');
+  set('sRole', 'invité (rejoint)');
+  set('sSig', 'offre reçue', 'wait');
+  pc = new RTCPeerConnection({ iceServers: [] });
+  watch(pc);
+  pc.ondatachannel = (e) => wireChannel(e.channel);
+  try {
+    await pc.setRemoteDescription(unpack(packedOffer));
+  } catch (err) {
+    set('sSig', 'offre refusée', 'bad');
+    log('échec setRemoteDescription : ' + err.message);
+    return;
+  }
+  const packed = await describe('answer');
+  set('sSig', 'réponse prête', 'wait');
+  $('qrTitle').textContent = "Montre ce QR à celui qui a créé la partie";
+  $('qrHint').textContent = "C'est le retour : sans lui, la liaison ne peut pas s'établir.";
+  drawQr(packed);
+}
+
+async function acceptAnswer(packed) {
+  try {
+    await pc.setRemoteDescription(unpack(packed.trim()));
+    set('sSig', 'réponse acceptée', 'ok');
+    $('scanBox').classList.add('hidden');
+  } catch (err) {
+    set('sSig', 'réponse refusée', 'bad');
+    log('échec : ' + err.message);
+  }
+}
+
+$('useAnswer').onclick = () => $('answerIn').value.trim() && acceptAnswer($('answerIn').value);
+$('paste').onclick = () => { $('choice').classList.add('hidden'); $('scanBox').classList.remove('hidden'); };
+$('copy').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($('qrText').value);
+    $('copy').textContent = 'Copié';
+  } catch { $('qrText').select(); }
+};
+
+// Scanning the answer back. BarcodeDetector exists on Chrome Android, which is what the
+// host runs; Safari has no such thing, so the guest never needs to scan — it only shows.
+$('startScan').onclick = async () => {
+  if (!('BarcodeDetector' in window)) {
+    log("Ce navigateur ne sait pas lire un QR : colle le code de réponse à la main.");
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const video = $('video');
+    video.style.display = 'block';
+    video.srcObject = stream;
+    await video.play();
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    const tick = async () => {
+      if (!pc || pc.remoteDescription) {
+        stream.getTracks().forEach((t) => t.stop());
+        video.style.display = 'none';
+        return;
+      }
+      const found = await detector.detect(video).catch(() => []);
+      if (found.length) {
+        await acceptAnswer(found[0].rawValue);
+        stream.getTracks().forEach((t) => t.stop());
+        video.style.display = 'none';
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    tick();
+  } catch (err) {
+    log('caméra indisponible : ' + err.message);
+  }
+};
+
+// Arriving with an offer in the URL means this phone was the one that scanned.
+if (location.hash.length > 2) {
+  joinWith(decodeURIComponent(location.hash.slice(1)));
+}
+
+log('navigateur : ' + (navigator.userAgent.match(/(CriOS|Chrome|Firefox|Version)\/[\d.]+/) || ['?'])[0]);
+log('WebRTC : ' + (window.RTCPeerConnection ? 'disponible' : 'ABSENT'));
+</script>
+</body>
+</html>

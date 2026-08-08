@@ -9,3 +9,7 @@ captures/
 .cxx/
 *.apk
 *.aab
+
+# Outils Node de la maquette web : ils viennent de l installation globale,
+# rien n est installe dans le depot.
+/node_modules
