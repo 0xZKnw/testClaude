@@ -31,21 +31,20 @@ jobs:
       - name: Unit tests (game rules)
         run: ./gradlew --no-daemon testDebugUnitTest
 
-      - name: Build APKs
-        run: ./gradlew --no-daemon assembleDebug assembleRelease
+      - name: Build APK
+        run: ./gradlew --no-daemon --stacktrace assembleDebug
 
-      - name: Rename artifacts
+      - name: Rename artifact
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk out/uno-duo-debug.apk
-          cp app/build/outputs/apk/release/app-release.apk out/uno-duo.apk
+          cp app/build/outputs/apk/debug/app-debug.apk out/uno-duo.apk
           ls -la out
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: uno-duo-apk
-          path: out/*.apk
+          path: out/uno-duo.apk
           if-no-files-found: error
 
       # Informational only: a lint nitpick must never withhold a working APK.
@@ -70,7 +69,7 @@ jobs:
         run: |
           TAG="apk-latest"
           gh release delete "$TAG" --yes --cleanup-tag || true
-          gh release create "$TAG" out/uno-duo.apk out/uno-duo-debug.apk \
+          gh release create "$TAG" out/uno-duo.apk \
             --title "UNO Duo — dernier APK" \
-            --notes "APK construit depuis \`${GITHUB_SHA::7}\`. Installe \`uno-duo.apk\` sur les deux téléphones." \
+            --notes "APK construit depuis \`${GITHUB_SHA::7}\`. Installe-le sur les deux téléphones." \
             --prerelease

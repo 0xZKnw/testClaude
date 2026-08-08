@@ -9,7 +9,8 @@ Chaque push sur la branche déclenche le workflow **Build APK**, qui publie l'AP
 release `apk-latest` du dépôt : <https://github.com/0xZKnw/testClaude/releases/tag/apk-latest>
 
 Télécharge `uno-duo.apk` sur les **deux** téléphones (Android 8.0 / API 26 minimum) et
-autorise l'installation depuis une source inconnue.
+autorise l'installation depuis une source inconnue. L'APK est signé avec la clé de
+debug d'Android : il s'installe directement, sans passer par le Play Store.
 
 ## Comment jouer
 
