@@ -1,3 +1,14 @@
+// Signing material comes from the environment so the key never lives in the repo.
+// Without it Gradle falls back to the auto-generated debug key — fine locally, but a
+// fresh key on every CI runner, which is exactly what makes Android refuse an update.
+val signingStore = System.getenv("UNO_KEYSTORE_FILE")
+    ?.takeIf { it.isNotBlank() }
+    ?.let(::file)
+    ?.takeIf { it.exists() }
+val signingStorePassword = System.getenv("UNO_KEYSTORE_PASSWORD").orEmpty()
+val signingAlias = System.getenv("UNO_KEY_ALIAS").orEmpty().ifBlank { "unoduo" }
+val signingKeyPassword = System.getenv("UNO_KEY_PASSWORD").orEmpty().ifBlank { signingStorePassword }
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -13,7 +24,8 @@ android {
         applicationId = "com.zknw.unoduo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        // Bumped by CI so a newer build is never seen as a downgrade.
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1)
         versionName = "1.0"
 
         // Stamped by CI so the in-app updater knows what is installed.
@@ -21,9 +33,22 @@ android {
         buildConfigField("String", "GIT_SHA", "\"$builtFrom\"")
     }
 
+    signingConfigs {
+        if (signingStore != null) {
+            create("shared") {
+                storeFile = signingStore
+                storePassword = signingStorePassword
+                keyAlias = signingAlias
+                keyPassword = signingKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
+            // Same key on every build, so the app can update itself in place.
+            signingConfigs.findByName("shared")?.let { signingConfig = it }
         }
         release {
             isMinifyEnabled = false

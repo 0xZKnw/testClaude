@@ -17,6 +17,18 @@ télécharge le dernier APK publié par la CI et lance l'installateur, sans repa
 navigateur. Le dépôt étant public, aucune configuration n'est nécessaire. Un champ jeton
 reste disponible au cas où le dépôt redeviendrait privé.
 
+### Signature de l'APK
+
+Les builds sont signés avec une clé stable restaurée depuis les secrets du dépôt
+(`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, et éventuellement
+`ANDROID_KEY_ALIAS`). C'est indispensable : Android refuse de remplacer une application
+par une autre signée avec une clé différente, et sans ces secrets chaque runner génère
+une clé jetable. Le workflow affiche l'empreinte SHA-256 de l'APK à chaque build, ce qui
+permet de vérifier d'un coup d'œil qu'elle ne change pas.
+
+Sans secret configuré, le build fonctionne quand même mais affiche un avertissement, et
+l'APK produit ne pourra qu'être installé à neuf.
+
 ## Comment jouer
 
 1. Joueur A : *Créer une partie* → un QR code s'affiche, le téléphone devient

@@ -30,6 +30,25 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # A stable key is what lets the installed app be replaced rather than rejected.
+      - name: Restore signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/uno-duo.jks"
+            {
+              echo "UNO_KEYSTORE_FILE=$RUNNER_TEMP/uno-duo.jks"
+              echo "UNO_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+              echo "UNO_KEY_ALIAS=${KEY_ALIAS:-unoduo}"
+            } >> "$GITHUB_ENV"
+            echo "Cle de signature restauree."
+          else
+            echo "::warning::Aucun secret ANDROID_KEYSTORE_BASE64 : l'APK sera signe avec une cle jetable et ne pourra pas remplacer une installation existante."
+          fi
+
       - name: Unit tests (game rules)
         run: ./gradlew --no-daemon testDebugUnitTest
 
@@ -41,6 +60,12 @@ jobs:
           mkdir -p out
           cp app/build/outputs/apk/debug/app-debug.apk out/uno-duo.apk
           ls -la out
+
+      # Printed so the signature can be compared between two builds at a glance.
+      - name: Show APK signature
+        run: |
+          keytool -printcert -jarfile out/uno-duo.apk | grep -i "SHA256:" | head -1 \
+            || echo "signature illisible"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
