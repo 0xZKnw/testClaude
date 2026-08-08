@@ -3,29 +3,34 @@ package com.zknw.unoduo.game
 import kotlin.random.Random
 
 /**
- * The authoritative 2-player UNO engine. Pure Kotlin, no Android dependency, fully
- * deterministic for a given [Random] seed — only the host runs it, the guest just
- * renders the [GameView] snapshots it receives.
+ * The authoritative UNO engine for two to five players. Pure Kotlin, no Android
+ * dependency, fully deterministic for a given [Random] seed — only the host runs it,
+ * everyone else just renders the [GameView] snapshots they receive.
  *
  * House rules implemented (see [Rules] for the user-facing text):
  *  - +4 stack on +4, +2 stack on +2, and +4 may also be answered by a +2 **of the
  *    colour that was chosen with the +4**.
  *  - Whoever finally eats the stack skips their turn if the last card played onto
  *    the stack was a +4, and keeps their turn if it was a +2.
- *  - Reverse acts as a Skip (2 players), so the player who played it plays again.
+ *  - Reverse flips the direction of play. With exactly two players there is no
+ *    direction to flip, so it acts as a Skip and the player goes again.
  */
-class UnoEngine(private val rng: Random) {
+class UnoEngine(private val rng: Random, val playerCount: Int) {
 
-    private val hands = mutableMapOf(
-        Seat.HOST to mutableListOf<Card>(),
-        Seat.GUEST to mutableListOf<Card>()
-    )
+    init {
+        require(playerCount in MIN_PLAYERS..MAX_PLAYERS) {
+            "Une partie se joue de $MIN_PLAYERS à $MAX_PLAYERS joueurs"
+        }
+    }
+
+    private val seats: List<Seat> = (0 until playerCount).toList()
+    private val hands: Map<Seat, MutableList<Card>> = seats.associateWith { mutableListOf() }
     private val drawPile = mutableListOf<Card>()
     private val discardPile = mutableListOf<Card>()
 
     var activeColor: CardColor = CardColor.RED
         private set
-    var turn: Seat = Seat.HOST
+    var turn: Seat = HOST_SEAT
         private set
     var pendingDraw: Int = 0
         private set
@@ -36,10 +41,14 @@ class UnoEngine(private val rng: Random) {
     var winner: Seat? = null
         private set
 
+    /** +1 goes up the seats, -1 goes back down. Flipped by a Reverse at 3 or more. */
+    var direction: Int = 1
+        private set
+
     /** Id of the card just drawn in [Phase.DECIDE_AFTER_DRAW], -1 otherwise. */
     private var drawnCardId: Int = -1
 
-    /** Last human-readable thing that happened, mirrored to both devices. */
+    /** Last human-readable thing that happened, mirrored to every device. */
     var event: String = ""
         private set
     var eventId: Int = 0
@@ -61,16 +70,12 @@ class UnoEngine(private val rng: Random) {
     var penaltyVictim: Seat? = null
         private set
 
-    private val scores = mutableMapOf(Seat.HOST to 0, Seat.GUEST to 0)
-    private val stats = mapOf(Seat.HOST to StatsBuilder(), Seat.GUEST to StatsBuilder())
-    private val avatars = mutableMapOf(Seat.HOST to 0, Seat.GUEST to 5)
+    private val scores = seats.associateWith { 0 }.toMutableMap()
+    private val stats = seats.associateWith { StatsBuilder() }
+    private val avatars = seats.associateWith { it }.toMutableMap()
+    private val names = seats.associateWith { defaultName(it) }.toMutableMap()
 
     fun statsOf(seat: Seat): RoundStats = stats.getValue(seat).snapshot()
-
-    fun setAvatars(host: Int, guest: Int) {
-        avatars[Seat.HOST] = host
-        avatars[Seat.GUEST] = guest
-    }
 
     fun score(seat: Seat): Int = scores.getValue(seat)
 
@@ -80,21 +85,39 @@ class UnoEngine(private val rng: Random) {
 
     fun top(): Card = discardPile.last()
 
+    fun setName(seat: Seat, name: String) {
+        if (seat in hands) names[seat] = name.ifBlank { defaultName(seat) }
+    }
+
+    fun setAvatar(seat: Seat, avatar: Int) {
+        if (seat in hands) avatars[seat] = avatar
+    }
+
+    fun seatName(seat: Seat): String = names[seat] ?: defaultName(seat)
+
+    // ------------------------------------------------------------------ seating
+
+    /** The seat [step] places along from [from], following the current direction. */
+    fun seatAfter(from: Seat, step: Int = 1): Seat {
+        val moved = (from + direction * step) % playerCount
+        return if (moved < 0) moved + playerCount else moved
+    }
+
     /**
      * Deals a fresh round. The starting card is re-drawn until it is a plain number
      * card, which removes every "first card is a +2 / wild / skip" special case.
      */
     fun startRound(starter: Seat) {
-        hands.getValue(Seat.HOST).clear()
-        hands.getValue(Seat.GUEST).clear()
+        hands.values.forEach { it.clear() }
         drawPile.clear()
         discardPile.clear()
 
         drawPile.addAll(Deck.standard().shuffled(rng))
 
         repeat(7) {
-            hands.getValue(Seat.HOST).add(drawPile.removeAt(drawPile.size - 1))
-            hands.getValue(Seat.GUEST).add(drawPile.removeAt(drawPile.size - 1))
+            seats.forEach { seat ->
+                hands.getValue(seat).add(drawPile.removeAt(drawPile.size - 1))
+            }
         }
 
         val setAside = mutableListOf<Card>()
@@ -114,7 +137,8 @@ class UnoEngine(private val rng: Random) {
 
         discardPile.add(start)
         activeColor = start.color
-        turn = starter
+        turn = starter.coerceIn(0, playerCount - 1)
+        direction = 1
         pendingDraw = 0
         pendingType = Penalty.NONE
         phase = Phase.PLAYING
@@ -132,7 +156,7 @@ class UnoEngine(private val rng: Random) {
     /** Ids of the cards [seat] is allowed to play right now. */
     fun legalCardIds(seat: Seat): Set<Int> {
         if (phase == Phase.GAME_OVER || seat != turn) return emptySet()
-        val hand = hands.getValue(seat)
+        val hand = hands[seat] ?: return emptySet()
 
         if (pendingDraw > 0) {
             return when (pendingType) {
@@ -214,19 +238,29 @@ class UnoEngine(private val rng: Random) {
         when (card.kind) {
             CardKind.NUMBER -> {
                 activeColor = card.color
-                turn = seat.other
+                turn = seatAfter(seat)
                 pushEvent("$name pose ${card.label()}")
             }
 
             CardKind.SKIP -> {
                 activeColor = card.color
-                // 2 players: the opponent loses their turn, so [seat] plays again.
-                pushEvent("$name saute le tour de ${seatName(seat.other)}")
+                val skipped = seatAfter(seat)
+                turn = seatAfter(seat, 2)
+                pushEvent("$name saute le tour de ${seatName(skipped)}")
             }
 
             CardKind.REVERSE -> {
                 activeColor = card.color
-                pushEvent("$name inverse le sens — ${seatName(seat.other)} passe")
+                if (playerCount == 2) {
+                    // No direction to flip in a duel, so it lands as a Skip: the player
+                    // who put it down keeps the table.
+                    turn = seatAfter(seat, 2)
+                    pushEvent("$name inverse le sens — ${seatName(seatAfter(seat))} passe")
+                } else {
+                    direction = -direction
+                    turn = seatAfter(seat)
+                    pushEvent("$name inverse le sens — à ${seatName(turn)}")
+                }
             }
 
             CardKind.DRAW_TWO -> {
@@ -234,13 +268,13 @@ class UnoEngine(private val rng: Random) {
                 pendingDraw += 2
                 pendingType = Penalty.DRAW_TWO
                 tally.biggestStackDealt = maxOf(tally.biggestStackDealt, pendingDraw)
-                turn = seat.other
+                turn = seatAfter(seat)
                 pushEvent("$name pose +2 — total +$pendingDraw")
             }
 
             CardKind.WILD -> {
                 activeColor = chosenColor!!
-                turn = seat.other
+                turn = seatAfter(seat)
                 pushEvent("$name choisit ${colorName(activeColor)}")
             }
 
@@ -249,7 +283,7 @@ class UnoEngine(private val rng: Random) {
                 pendingDraw += 4
                 pendingType = Penalty.DRAW_FOUR
                 tally.biggestStackDealt = maxOf(tally.biggestStackDealt, pendingDraw)
-                turn = seat.other
+                turn = seatAfter(seat)
                 pushEvent("$name pose +4 ${colorName(activeColor)} — total +$pendingDraw")
             }
         }
@@ -284,7 +318,7 @@ class UnoEngine(private val rng: Random) {
             hit.biggestStackTaken = maxOf(hit.biggestStackTaken, amount)
             if (skipTurn) {
                 // House rule: eating a +4 also costs you your turn.
-                turn = seat.other
+                turn = seatAfter(seat)
                 pushEvent("${seatName(seat)} pioche $amount et passe son tour")
             } else {
                 // House rule: eating a +2 does NOT cost you your turn.
@@ -297,7 +331,7 @@ class UnoEngine(private val rng: Random) {
         val card = drawOne(seat)
         if (card == null) {
             // Nothing left anywhere: nobody can be blocked, just hand over the turn.
-            turn = seat.other
+            turn = seatAfter(seat)
             pushEvent("Pioche vide — ${seatName(seat)} passe")
             return true
         }
@@ -307,7 +341,7 @@ class UnoEngine(private val rng: Random) {
             pushEvent("${seatName(seat)} pioche une carte")
         } else {
             drawnCardId = -1
-            turn = seat.other
+            turn = seatAfter(seat)
             pushEvent("${seatName(seat)} pioche et passe")
         }
         return true
@@ -319,7 +353,7 @@ class UnoEngine(private val rng: Random) {
         drawnCardId = -1
         clearPenaltyMark()
         phase = Phase.PLAYING
-        turn = seat.other
+        turn = seatAfter(seat)
         pushEvent("${seatName(seat)} passe")
         return true
     }
@@ -366,20 +400,15 @@ class UnoEngine(private val rng: Random) {
 
     // ------------------------------------------------------------------- view
 
-    private val names = mutableMapOf(Seat.HOST to "Hôte", Seat.GUEST to "Invité")
-
-    fun setNames(host: String, guest: String) {
-        names[Seat.HOST] = host.ifBlank { "Hôte" }
-        names[Seat.GUEST] = guest.ifBlank { "Invité" }
-    }
-
-    fun seatName(seat: Seat): String = names.getValue(seat)
-
-    fun viewFor(seat: Seat, rematchSelf: Boolean, rematchOther: Boolean): GameView = GameView(
+    /**
+     * The snapshot for one seat. [rematch] is the set of players who have already
+     * asked for another round; it lives outside the engine because it is about the
+     * lobby rather than about the rules.
+     */
+    fun viewFor(seat: Seat, rematch: Set<Seat> = emptySet()): GameView = GameView(
         youAre = seat,
         hand = hands.getValue(seat).sortedWith(HAND_ORDER),
         legal = legalCardIds(seat).toList(),
-        opponentCount = hands.getValue(seat.other).size,
         top = discardPile.last(),
         activeColor = activeColor,
         turn = turn,
@@ -387,29 +416,47 @@ class UnoEngine(private val rng: Random) {
         pendingType = pendingType,
         phase = phase,
         deckCount = drawPile.size,
+        rivals = rivalsFor(seat, rematch),
         winner = winner,
         drawnCardId = if (turn == seat) drawnCardId else -1,
-        yourName = names.getValue(seat),
-        opponentName = names.getValue(seat.other),
+        yourName = seatName(seat),
         event = event,
         eventId = eventId,
-        rematchYou = rematchSelf,
-        rematchOpponent = rematchOther,
+        rematchYou = seat in rematch,
         yourScore = scores.getValue(seat),
-        opponentScore = scores.getValue(seat.other),
         roundId = roundId,
         lastPlayedBy = lastPlayedBy,
         penaltyTaken = penaltyTaken,
         penaltyVictim = penaltyVictim,
         yourStats = stats.getValue(seat).snapshot(),
         yourAvatar = avatars.getValue(seat),
-        opponentAvatar = avatars.getValue(seat.other)
+        direction = direction
     )
+
+    /**
+     * The others, in seating order starting just after [seat]. Seating order, not turn
+     * order: a Reverse must not make everyone jump around the screen.
+     */
+    private fun rivalsFor(seat: Seat, rematch: Set<Seat>): List<Rival> =
+        (1 until playerCount).map { step ->
+            val other = (seat + step) % playerCount
+            Rival(
+                seat = other,
+                name = seatName(other),
+                avatar = avatars.getValue(other),
+                cards = hands.getValue(other).size,
+                score = scores.getValue(other),
+                rematch = other in rematch
+            )
+        }
 
     private fun pushEvent(text: String) {
         event = text
         eventId++
     }
+
+    private fun defaultName(seat: Seat): String =
+        if (seat == HOST_SEAT) "Hôte" else "Joueur ${seat + 1}"
 
     private fun colorName(color: CardColor): String = when (color) {
         CardColor.RED -> "rouge"
@@ -434,25 +481,27 @@ class UnoEngine(private val rng: Random) {
 
     /** Test-only: force a precise situation without replaying a whole game. */
     internal fun forceState(
-        hostHand: List<Card>,
-        guestHand: List<Card>,
+        playerHands: List<List<Card>>,
         top: Card,
         color: CardColor,
         turnSeat: Seat,
         pending: Int = 0,
         penalty: Penalty = Penalty.NONE,
-        deck: List<Card> = emptyList()
+        deck: List<Card> = emptyList(),
+        way: Int = 1
     ) {
-        hands.getValue(Seat.HOST).clear()
-        hands.getValue(Seat.HOST).addAll(hostHand)
-        hands.getValue(Seat.GUEST).clear()
-        hands.getValue(Seat.GUEST).addAll(guestHand)
+        require(playerHands.size == playerCount) { "Il faut une main par joueur" }
+        playerHands.forEachIndexed { seat, cards ->
+            hands.getValue(seat).clear()
+            hands.getValue(seat).addAll(cards)
+        }
         discardPile.clear()
         discardPile.add(top)
         drawPile.clear()
         drawPile.addAll(deck)
         activeColor = color
         turn = turnSeat
+        direction = way
         pendingDraw = pending
         pendingType = penalty
         phase = Phase.PLAYING

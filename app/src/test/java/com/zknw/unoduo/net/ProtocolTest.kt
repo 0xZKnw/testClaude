@@ -22,8 +22,19 @@ class ProtocolTest {
     fun `every message survives a round trip`() {
         val messages = listOf(
             NetMsg.Hello("ABC234", "Zak"),
-            NetMsg.Welcome(ok = true, hostName = "Alex"),
+            NetMsg.Hello("ABC234", "Zak", avatar = 3),
+            NetMsg.Welcome(ok = true, seat = 3),
             NetMsg.Welcome(ok = false, reason = "Mauvais code de salon"),
+            NetMsg.Lobby(
+                listOf(
+                    LobbyPlayer(0, "Zak", 1),
+                    LobbyPlayer(1, "Alex", 2),
+                    LobbyPlayer(2, "Sam", 3)
+                ),
+                started = true
+            ),
+            NetMsg.Photo(2, "aGVsbG8="),
+            NetMsg.Start,
             NetMsg.Play(42, CardColor.BLUE),
             NetMsg.Play(7, null),
             NetMsg.Draw,
@@ -39,10 +50,13 @@ class ProtocolTest {
 
     @Test
     fun `a full table snapshot survives a round trip`() {
-        val engine = UnoEngine(Random(11))
-        engine.setNames("Zak", "Alex")
-        engine.startRound(Seat.HOST)
-        val view = engine.viewFor(Seat.GUEST, rematchSelf = false, rematchOther = true)
+        val engine = UnoEngine(Random(11), 4)
+        engine.setName(0, "Zak")
+        engine.setName(1, "Alex")
+        engine.setName(2, "Sam")
+        engine.setName(3, "Lou")
+        engine.startRound(0)
+        val view = engine.viewFor(1, rematch = setOf(0))
 
         val decoded = Wire.decode(Wire.encode(NetMsg.State(view))) as? NetMsg.State
         assertNotNull(decoded)
@@ -109,19 +123,20 @@ class ProtocolTest {
         // A hand can realistically reach ~30 cards after a couple of fat stacks.
         val hand = (0 until 30).map { Card(it, CardColor.RED, CardKind.NUMBER, it % 10) }
         val view = com.zknw.unoduo.game.GameView(
-            youAre = Seat.GUEST,
+            youAre = 1,
             hand = hand,
             legal = hand.map { it.id },
-            opponentCount = 12,
+            rivals = (0 until 4).filter { it != 1 }.map {
+                com.zknw.unoduo.game.Rival(it, "Joueur $it", it, 12, 1)
+            },
             top = Card(99, CardColor.BLUE, CardKind.DRAW_TWO),
             activeColor = CardColor.BLUE,
-            turn = Seat.GUEST,
+            turn = 1,
             pendingDraw = 6,
             pendingType = Penalty.DRAW_TWO,
             phase = Phase.PLAYING,
             deckCount = 20,
             yourName = "Zak",
-            opponentName = "Alex",
             event = "Alex pose +2 — total +6",
             eventId = 12
         )
@@ -178,5 +193,28 @@ class ProtocolTest {
         assertNull(JoinLink.parse("unoduo://join"))
         assertNull(JoinLink.parse(""))
         assertNull(JoinLink.parse("WIFI:S:home;T:WPA;P:secret;;"))
+    }
+
+    @Test
+    fun `a full five-player snapshot still fits in a sane number of frames`() {
+        // Worst realistic case: five seats, long names, and a hand fattened by stacks.
+        val engine = UnoEngine(Random(3), 5)
+        (0 until 5).forEach { engine.setName(it, "Joueur numero $it") }
+        engine.startRound(0)
+        val view = engine.viewFor(0, rematch = setOf(1, 2))
+        val fat = view.copy(
+            hand = (0 until 30).map { Card(it, CardColor.RED, CardKind.NUMBER, it % 10) },
+            legal = (0 until 30).toList()
+        )
+        val frames = Framing.split(Wire.encode(NetMsg.State(fat)), 247)
+        assertTrue("trames=${frames.size}", frames.size <= 16)
+    }
+
+    @Test
+    fun `a profile picture stays within one screenful of frames`() {
+        // A 128px JPEG lands near 3 kB, which Base64 inflates by a third.
+        val payload = "A".repeat(4_400)
+        val frames = Framing.split(Wire.encode(NetMsg.Photo(2, payload)), 247)
+        assertTrue("trames=${frames.size}", frames.size <= 32)
     }
 }

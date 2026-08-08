@@ -2,6 +2,7 @@ package com.zknw.unoduo.net
 
 import com.zknw.unoduo.game.CardColor
 import com.zknw.unoduo.game.GameView
+import com.zknw.unoduo.game.Seat
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -24,6 +25,14 @@ object Ble {
     const val QR_SCHEME = "unoduo"
 }
 
+/** One player as the lobby knows them, before any cards are dealt. */
+@Serializable
+data class LobbyPlayer(
+    @SerialName("s") val seat: Seat,
+    @SerialName("n") val name: String,
+    @SerialName("a") val avatar: Int = 0
+)
+
 @Serializable
 sealed class NetMsg {
 
@@ -36,15 +45,39 @@ sealed class NetMsg {
         @SerialName("a") val avatar: Int = 0
     ) : NetMsg()
 
-    /** Host accepts or rejects the guest. */
+    /** Host accepts or rejects the guest, and tells it which seat it got. */
     @Serializable
     @SerialName("welcome")
     data class Welcome(
         @SerialName("ok") val ok: Boolean,
-        @SerialName("n") val hostName: String = "",
-        @SerialName("a") val hostAvatar: Int = 0,
+        @SerialName("s") val seat: Seat = 0,
         @SerialName("r") val reason: String = ""
     ) : NetMsg()
+
+    /** Host broadcasts who is in the room, on every arrival and departure. */
+    @Serializable
+    @SerialName("lobby")
+    data class Lobby(
+        @SerialName("p") val players: List<LobbyPlayer>,
+        @SerialName("st") val started: Boolean = false
+    ) : NetMsg()
+
+    /**
+     * A profile picture, split from the snapshots on purpose: it is a few kilobytes
+     * that never change, while a snapshot is a few hundred bytes sent on every move.
+     * [png] is Base64 because the wire format is JSON.
+     */
+    @Serializable
+    @SerialName("photo")
+    data class Photo(
+        @SerialName("s") val seat: Seat,
+        @SerialName("d") val png: String
+    ) : NetMsg()
+
+    /** Guest asks the host to start dealing. Only the host actually decides. */
+    @Serializable
+    @SerialName("go")
+    data object Start : NetMsg()
 
     /** Host broadcasts the full table snapshot after every change. */
     @Serializable

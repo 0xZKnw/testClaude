@@ -28,9 +28,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.zknw.unoduo.game.HOST_SEAT
+import com.zknw.unoduo.game.Seat
+import com.zknw.unoduo.net.LobbyPlayer
 import com.zknw.unoduo.ui.components.GhostButton
 import com.zknw.unoduo.ui.components.MenuBackground
 import com.zknw.unoduo.ui.components.Panel
+import com.zknw.unoduo.ui.components.PrimaryButton
 import com.zknw.unoduo.ui.components.QrCode
 import com.zknw.unoduo.ui.components.ScreenHeader
 import com.zknw.unoduo.ui.components.StatusRow
@@ -43,12 +49,17 @@ fun HostScreen(
     joinLink: String,
     status: String,
     link: LinkStatus,
+    players: List<LobbyPlayer>,
+    photos: Map<Seat, String>,
+    canStart: Boolean,
+    onStart: () -> Unit,
     onBack: () -> Unit
 ) {
     MenuBackground {
         Column(
             Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 22.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -58,12 +69,12 @@ fun HostScreen(
                 "Fais scanner ce QR code par l'autre téléphone.",
                 onBack
             )
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(20.dp))
 
             Box(contentAlignment = Alignment.Center) {
                 PulseHalo(active = link == LinkStatus.ADVERTISING)
                 if (joinLink.isNotEmpty()) {
-                    QrCode(content = joinLink, size = 260.dp)
+                    QrCode(content = joinLink, size = 220.dp)
                 }
             }
 
@@ -102,13 +113,24 @@ fun HostScreen(
                 }
             }
 
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(16.dp))
+            PlayerRoster(players, photos, mySeat = HOST_SEAT)
+
+            Spacer(Modifier.height(16.dp))
             StatusRow(
                 text = status,
                 busy = link == LinkStatus.ADVERTISING || link == LinkStatus.IDLE
             )
 
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(18.dp))
+            PrimaryButton(
+                text = if (canStart) "Lancer la partie" else "Il manque un joueur",
+                modifier = Modifier.fillMaxWidth(),
+                enabled = canStart
+            ) { onStart() }
+            Spacer(Modifier.height(10.dp))
+            LobbyHint(players.size)
+            Spacer(Modifier.height(12.dp))
             GhostButton("Annuler", Modifier.fillMaxWidth()) { onBack() }
             Spacer(Modifier.height(22.dp))
         }
@@ -134,7 +156,7 @@ private fun PulseHalo(active: Boolean) {
     )
     Box(
         Modifier
-            .size(300.dp)
+            .size(258.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale

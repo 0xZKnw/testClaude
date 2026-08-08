@@ -70,7 +70,7 @@ fun HomeScreen(
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Deux joueurs, un QR code, zéro internet.",
+                "De 2 à 5 joueurs, un QR code, zéro internet.",
                 color = Palette.TextDim,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
@@ -94,7 +94,7 @@ fun HomeScreen(
 
             Spacer(Modifier.height(24.dp))
             Text(
-                "Connexion Bluetooth LE — les deux téléphones doivent être proches.",
+                "Connexion Bluetooth LE — les téléphones doivent être proches.",
                 color = Palette.TextDim,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(bottom = 26.dp)

@@ -24,24 +24,38 @@ import android.util.Log
 import java.util.ArrayDeque
 
 /**
- * The host side of the link: a GATT server that advertises the room and talks to
- * exactly one guest. Every GATT operation runs on a private handler thread and
- * notifications go through a queue, because Android only tolerates one outstanding
- * notification at a time.
+ * The host side of the link: a GATT server that advertises the room and talks to up to
+ * [maxGuests] guests at once. Every GATT operation runs on a private handler thread,
+ * and each guest gets its own send queue because Android only tolerates one outstanding
+ * notification per device — a shared queue would let a slow phone stall the table.
+ *
+ * Guests are addressed by their Bluetooth address, which the caller treats as an opaque
+ * key: seats are assigned above this layer.
  */
 @SuppressLint("MissingPermission")
 class BleHost(
     private val context: Context,
     private val roomCode: String,
+    private val maxGuests: Int,
     private val listener: Listener
 ) {
 
     interface Listener {
-        fun onGuestConnected()
-        fun onGuestDisconnected()
-        fun onMessage(msg: NetMsg)
+        /** The guest has subscribed and can now be sent messages. */
+        fun onGuestReady(key: String)
+        fun onGuestGone(key: String)
+        fun onMessage(key: String, msg: NetMsg)
         fun onError(message: String)
         fun onAdvertising()
+    }
+
+    /** Everything that belongs to one connected guest. */
+    private class Peer(val device: BluetoothDevice) {
+        var subscribed = false
+        var mtu = 23
+        val reassembler = Framing.Reassembler()
+        val outbox = ArrayDeque<ByteArray>()
+        var sending = false
     }
 
     private val thread = HandlerThread("ble-host").apply { start() }
@@ -52,15 +66,14 @@ class BleHost(
     private var advertiser: BluetoothLeAdvertiser? = null
     private var txCharacteristic: BluetoothGattCharacteristic? = null
 
-    private var peer: BluetoothDevice? = null
-    private var subscribed = false
-    private var mtu = 23
-    private val reassembler = Framing.Reassembler()
+    /** Insertion-ordered so seats can be handed out in the order people joined. */
+    private val peers = LinkedHashMap<String, Peer>()
 
-    private val outbox = ArrayDeque<ByteArray>()
-    private var sending = false
     private var stopped = false
     private var advertising = false
+
+    /** Once the deal starts the door is closed, so latecomers are not left half-in. */
+    private var open = true
 
     fun start() = handler.post {
         val adapter = manager.adapter
@@ -103,7 +116,25 @@ class BleHost(
         }
     }
 
+    /** Shuts the door: the room stops being discoverable, connected guests stay. */
+    fun closeRoom() = handler.post {
+        open = false
+        stopAdvertising()
+    }
+
+    /** Reopens the room, e.g. when someone leaves before the deal. */
+    fun reopenRoom() = handler.post {
+        open = true
+        refreshAdvertising()
+    }
+
+    private fun refreshAdvertising() {
+        if (stopped) return
+        if (open && peers.size < maxGuests) startAdvertising() else stopAdvertising()
+    }
+
     private fun stopAdvertising() {
+        if (!advertising) return
         try {
             advertiser?.stopAdvertising(advertiseCallback)
         } catch (_: Exception) {
@@ -172,7 +203,7 @@ class BleHost(
 
         override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
             handler.post {
-                if (status == BluetoothGatt.GATT_SUCCESS) startAdvertising()
+                if (status == BluetoothGatt.GATT_SUCCESS) refreshAdvertising()
                 else listener.onError("Service Bluetooth refusé ($status)")
             }
         }
@@ -180,35 +211,28 @@ class BleHost(
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             handler.post {
                 if (stopped) return@post
+                val key = device.address
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    val current = peer
-                    if (current != null && current.address != device.address) {
-                        // The room is full: politely drop anybody else.
+                    if (!peers.containsKey(key) && (!open || peers.size >= maxGuests)) {
+                        // Room full or already dealing: turn them away rather than
+                        // holding a connection that will never get a seat.
                         server?.cancelConnection(device)
                         return@post
                     }
-                    peer = device
-                    reassembler.reset()
-                    // The room is taken: stop shouting about it.
-                    stopAdvertising()
+                    peers.getOrPut(key) { Peer(device) }
+                    refreshAdvertising()
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                    if (peer?.address == device.address) {
-                        peer = null
-                        subscribed = false
-                        sending = false
-                        outbox.clear()
-                        reassembler.reset()
-                        // Some stacks also stop the advertiser on connect, so always
-                        // restart it — the guest may just be reconnecting.
-                        startAdvertising()
-                        listener.onGuestDisconnected()
+                    if (peers.remove(key) != null) {
+                        refreshAdvertising()
+                        listener.onGuestGone(key)
                     }
                 }
             }
         }
 
         override fun onMtuChanged(device: BluetoothDevice?, newMtu: Int) {
-            handler.post { mtu = newMtu.coerceAtLeast(23) }
+            val key = device?.address ?: return
+            handler.post { peers[key]?.mtu = newMtu.coerceAtLeast(23) }
         }
 
         override fun onDescriptorWriteRequest(
@@ -226,12 +250,12 @@ class BleHost(
                 server?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
             }
             handler.post {
-                if (descriptor.uuid == Ble.CCCD_UUID && peer?.address == device.address) {
-                    subscribed = enabling
-                    if (enabling) {
-                        listener.onGuestConnected()
-                        pump()
-                    }
+                if (descriptor.uuid != Ble.CCCD_UUID) return@post
+                val peer = peers[device.address] ?: return@post
+                peer.subscribed = enabling
+                if (enabling) {
+                    listener.onGuestReady(device.address)
+                    pump(peer)
                 }
             }
         }
@@ -250,42 +274,52 @@ class BleHost(
             }
             val bytes = value ?: return
             handler.post {
-                if (peer?.address != device.address) return@post
-                val payload = reassembler.feed(bytes) ?: return@post
+                val peer = peers[device.address] ?: return@post
+                val payload = peer.reassembler.feed(bytes) ?: return@post
                 val msg = Wire.decode(payload)
-                if (msg != null) listener.onMessage(msg)
+                if (msg != null) listener.onMessage(device.address, msg)
                 else Log.w(TAG, "Message illisible (${payload.size} octets)")
             }
         }
 
         override fun onNotificationSent(device: BluetoothDevice?, status: Int) {
+            val key = device?.address ?: return
             handler.post {
-                sending = false
-                pump()
+                val peer = peers[key] ?: return@post
+                peer.sending = false
+                pump(peer)
             }
         }
     }
 
-    fun send(msg: NetMsg) = handler.post {
+    /** Sends to one guest. Unknown keys are ignored: the guest may have just left. */
+    fun send(key: String, msg: NetMsg) = handler.post {
         if (stopped) return@post
-        val frames = Framing.split(Wire.encode(msg), mtu)
-        outbox.addAll(frames)
-        pump()
+        val peer = peers[key] ?: return@post
+        enqueue(peer, msg)
     }
 
-    private fun pump() {
-        if (sending || stopped) return
-        val device = peer ?: return
-        if (!subscribed) return
+    /** Sends the same message to everyone currently in the room. */
+    fun broadcast(msg: NetMsg) = handler.post {
+        if (stopped) return@post
+        peers.values.forEach { enqueue(it, msg) }
+    }
+
+    private fun enqueue(peer: Peer, msg: NetMsg) {
+        peer.outbox.addAll(Framing.split(Wire.encode(msg), peer.mtu))
+        pump(peer)
+    }
+
+    private fun pump(peer: Peer) {
+        if (peer.sending || stopped || !peer.subscribed) return
         val tx = txCharacteristic ?: return
-        val frame = outbox.poll() ?: return
-        sending = true
-        val ok = notify(device, tx, frame)
-        if (!ok) {
+        val frame = peer.outbox.poll() ?: return
+        peer.sending = true
+        if (!notify(peer.device, tx, frame)) {
             // Retry once shortly after; the stack is usually just busy.
-            sending = false
-            outbox.addFirst(frame)
-            handler.postDelayed({ pump() }, 40)
+            peer.sending = false
+            peer.outbox.addFirst(frame)
+            handler.postDelayed({ pump(peer) }, 40)
         }
     }
 
@@ -314,16 +348,15 @@ class BleHost(
         handler.post {
             if (stopped) return@post
             stopped = true
-            outbox.clear()
             stopAdvertising()
             advertiser = null
             try {
-                peer?.let { server?.cancelConnection(it) }
+                peers.values.forEach { server?.cancelConnection(it.device) }
                 server?.close()
             } catch (_: Exception) {
             }
             server = null
-            peer = null
+            peers.clear()
             thread.quitSafely()
         }
     }

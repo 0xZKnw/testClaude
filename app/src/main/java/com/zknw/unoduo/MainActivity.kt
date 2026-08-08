@@ -41,6 +41,7 @@ import com.zknw.unoduo.ui.GameScreen
 import com.zknw.unoduo.ui.HomeScreen
 import com.zknw.unoduo.ui.HostScreen
 import com.zknw.unoduo.ui.JoinScreen
+import com.zknw.unoduo.ui.LobbyScreen
 import com.zknw.unoduo.ui.ProfileScreen
 import com.zknw.unoduo.ui.RulesScreen
 import com.zknw.unoduo.ui.SettingsScreen
@@ -217,7 +218,19 @@ private fun App(vm: AppViewModel = viewModel()) {
             joinLink = state.joinLink,
             status = state.statusText,
             link = state.link,
+            players = state.players,
+            photos = state.photos,
+            canStart = state.canStart,
+            onStart = vm::startGame,
             onBack = vm::goHome
+        )
+
+        Screen.LOBBY -> LobbyScreen(
+            players = state.players,
+            photos = state.photos,
+            mySeat = state.mySeat,
+            roomCode = state.roomCode,
+            onLeave = vm::goHome
         )
 
         Screen.JOIN -> JoinScreen(
@@ -243,6 +256,7 @@ private fun App(vm: AppViewModel = viewModel()) {
             } else {
                 GameScreen(
                     view = view,
+                    photos = state.photos,
                     inputLocked = state.inputLocked,
                     onPlay = vm::playCard,
                     onDraw = vm::drawCard,

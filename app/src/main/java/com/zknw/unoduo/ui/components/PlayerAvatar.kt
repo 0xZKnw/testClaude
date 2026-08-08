@@ -26,12 +26,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
+import com.zknw.unoduo.profile.AvatarImage
 import com.zknw.unoduo.ui.theme.Palette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** How a player wants to be shown: a picked photo, or a colour plus their initial. */
-data class AvatarLook(val colorIndex: Int, val photoUri: String? = null)
+/**
+ * How a player wants to be shown: a picked photo, or a colour plus their initial.
+ * [photoUri] is the local pick; [photoData] is the Base64 thumbnail that came over the
+ * link from another phone, where a URI would be meaningless.
+ */
+data class AvatarLook(
+    val colorIndex: Int,
+    val photoUri: String? = null,
+    val photoData: String? = null
+)
 
 /**
  * Ink-outlined round avatar. A photo wins when there is one; otherwise the initial
@@ -47,7 +56,7 @@ fun PlayerAvatar(
     ringColor: androidx.compose.ui.graphics.Color = Palette.Outline
 ) {
     val context = LocalContext.current
-    val bitmap = rememberAvatarBitmap(context, look.photoUri, size)
+    val bitmap = rememberAvatarBitmap(context, look, size)
 
     Box(
         modifier
@@ -82,16 +91,22 @@ fun PlayerAvatar(
  * loading a full-resolution photo for a 40dp circle is how you run out of memory.
  */
 @Composable
-private fun rememberAvatarBitmap(context: Context, uri: String?, size: Dp): ImageBitmap? {
-    var bitmap by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
+private fun rememberAvatarBitmap(context: Context, look: AvatarLook, size: Dp): ImageBitmap? {
+    val uri = look.photoUri
+    val data = look.photoData
+    var bitmap by remember(uri, data) { mutableStateOf<ImageBitmap?>(null) }
     val targetPx = with(androidx.compose.ui.platform.LocalDensity.current) { size.roundToPx() }
 
-    LaunchedEffect(uri, targetPx) {
-        if (uri.isNullOrBlank()) {
-            bitmap = null
-            return@LaunchedEffect
+    LaunchedEffect(uri, data, targetPx) {
+        bitmap = withContext(Dispatchers.IO) {
+            // The local pick wins: it is the full-resolution original, while the
+            // transmitted copy is a thumbnail squeezed to fit down a BLE link.
+            when {
+                !uri.isNullOrBlank() -> decode(context, uri, targetPx)
+                !data.isNullOrBlank() -> AvatarImage.decode(data)?.asImageBitmap()
+                else -> null
+            }
         }
-        bitmap = withContext(Dispatchers.IO) { decode(context, uri, targetPx) }
     }
     return bitmap
 }

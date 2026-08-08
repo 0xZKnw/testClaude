@@ -51,6 +51,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -60,6 +61,8 @@ import com.zknw.unoduo.game.CardColor
 import com.zknw.unoduo.game.GameView
 import com.zknw.unoduo.game.Penalty
 import com.zknw.unoduo.game.Phase
+import com.zknw.unoduo.game.Rival
+import com.zknw.unoduo.game.Seat
 import com.zknw.unoduo.ui.components.AvatarLook
 import com.zknw.unoduo.ui.components.ColorChip
 import com.zknw.unoduo.ui.components.InkChip
@@ -80,6 +83,7 @@ import kotlin.math.min
 @Composable
 fun GameScreen(
     view: GameView,
+    photos: Map<Seat, String>,
     inputLocked: Boolean,
     onPlay: (Int, CardColor?) -> Unit,
     onDraw: () -> Unit,
@@ -97,7 +101,11 @@ fun GameScreen(
         // Eating a stack resolves in a single snapshot, so the table has to stop and
         // spell it out — otherwise six cards appear in your hand out of nowhere.
         if (view.penaltyTaken > 0) {
-            penaltyHit = PenaltyHit(view.penaltyTaken, view.penaltyIsMine, view.opponentName)
+            penaltyHit = PenaltyHit(
+                view.penaltyTaken,
+                view.penaltyIsMine,
+                view.penaltyVictim?.let(view::nameOf).orEmpty()
+            )
             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
             kotlinx.coroutines.delay(1900)
             penaltyHit = null
@@ -111,7 +119,7 @@ fun GameScreen(
     TableBackground {
         Column(Modifier.fillMaxSize()) {
 
-            OpponentRow(view, onQuit)
+            RivalsRow(view, photos, onQuit)
 
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 TableCenter(
@@ -285,45 +293,101 @@ private fun colorLabel(color: CardColor): String = when (color) {
     CardColor.WILD -> ""
 }
 
-// ------------------------------------------------------------------ opponent
+// ------------------------------------------------------------------- rivals
 
+/**
+ * The other players. A duel keeps the original layout — one big avatar and a fan of
+ * card backs — because that is the game most rounds are. From three players up the
+ * fan would not fit four times over, so everyone becomes a compact tile and only the
+ * player on turn gets their cards drawn.
+ */
 @Composable
-private fun OpponentRow(view: GameView, onQuit: () -> Unit) {
+private fun RivalsRow(view: GameView, photos: Map<Seat, String>, onQuit: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
             .padding(top = 10.dp, start = 16.dp, end = 16.dp)
     ) {
+        val single = view.rivals.singleOrNull()
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val opponentTurn = !view.yourTurn && view.phase != Phase.GAME_OVER
-            PlayerAvatar(
-                name = view.opponentName,
-                look = AvatarLook(view.opponentAvatar),
-                size = 44.dp,
-                ring = if (opponentTurn) 4.dp else 3.dp,
-                ringColor = if (opponentTurn) Palette.Gold else Palette.Outline
-            )
-            Spacer(Modifier.width(10.dp))
-            Column {
-                Text(
-                    view.opponentName,
-                    color = Palette.Text,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
+            if (single != null) {
+                val theirTurn = view.turn == single.seat && view.phase != Phase.GAME_OVER
+                PlayerAvatar(
+                    name = single.name,
+                    look = AvatarLook(single.avatar, photoData = photos[single.seat]),
+                    size = 44.dp,
+                    ring = if (theirTurn) 4.dp else 3.dp,
+                    ringColor = if (theirTurn) Palette.Gold else Palette.Outline
                 )
-                CardCountLine(view.opponentCount)
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(
+                        single.name,
+                        color = Palette.Text,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    CardCountLine(single.cards)
+                }
+                Spacer(Modifier.weight(1f))
+                InkChip(
+                    text = "${view.yourScore} — ${single.score}",
+                    color = Palette.SlateHigh
+                )
+            } else {
+                Row(
+                    Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    view.rivals.forEach { rival ->
+                        RivalTile(
+                            rival = rival,
+                            onTurn = view.turn == rival.seat && view.phase != Phase.GAME_OVER,
+                            photo = photos[rival.seat]
+                        )
+                    }
+                }
             }
-            Spacer(Modifier.weight(1f))
-            InkChip(
-                text = "${view.yourScore} — ${view.opponentScore}",
-                color = Palette.SlateHigh
-            )
             Spacer(Modifier.width(8.dp))
             InkIconButton("✕", size = 40.dp) { onQuit() }
         }
 
         Spacer(Modifier.height(6.dp))
-        OpponentFan(view.opponentCount)
+        // Whoever the table is waiting on gets their hand drawn; in a duel that is
+        // simply always the same person.
+        val shown = single ?: view.rivals.firstOrNull { it.seat == view.turn }
+        OpponentFan(shown?.cards ?: 0)
+    }
+}
+
+/** One rival squeezed into a column: face, name, card count. */
+@Composable
+private fun RivalTile(rival: Rival, onTurn: Boolean, photo: String?) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(contentAlignment = Alignment.BottomEnd) {
+            PlayerAvatar(
+                name = rival.name,
+                look = AvatarLook(rival.avatar, photoData = photo),
+                size = 40.dp,
+                ring = if (onTurn) 4.dp else 3.dp,
+                ringColor = if (onTurn) Palette.Gold else Palette.Outline
+            )
+            InkChip(
+                text = "${rival.cards}",
+                color = if (rival.cards == 1) Palette.Red else Palette.SlateHigh,
+                fontSize = 10
+            )
+        }
+        Spacer(Modifier.height(3.dp))
+        Text(
+            rival.name,
+            color = if (onTurn) Palette.Gold else Palette.TextDim,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -579,7 +643,7 @@ private fun TurnBanner(view: GameView) {
     val yours = view.yourTurn
     val text = when {
         view.phase == Phase.GAME_OVER ->
-            if (view.youWon) "Tu as gagné !" else "${view.opponentName} a gagné"
+            if (view.youWon) "Tu as gagné !" else "${view.winner?.let(view::nameOf) ?: "?"} a gagné"
 
         view.mustAnswerPenalty && view.pendingType == Penalty.DRAW_FOUR ->
             "+${view.pendingDraw} — contre avec un +4 ou un +2 ${colorLabel(view.activeColor)}"
@@ -588,15 +652,25 @@ private fun TurnBanner(view: GameView) {
         view.phase == Phase.DECIDE_AFTER_DRAW && yours -> "Carte piochée : pose-la ou passe"
         view.mustDraw -> "Rien à poser — touche la pioche"
         yours -> "À toi de jouer"
-        else -> "Au tour de ${view.opponentName}"
+        else -> "Au tour de ${view.turnName}"
     }
 
-    Box(
+    Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 18.dp, vertical = 6.dp),
-        contentAlignment = Alignment.Center
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        // Which way play is going only means something once a Reverse can flip it.
+        if (view.playerCount > 2) {
+            InkChip(
+                text = if (view.direction > 0) "↻" else "↺",
+                color = Palette.SlateHigh,
+                fontSize = 14
+            )
+            Spacer(Modifier.width(8.dp))
+        }
         AnimatedContent(
             targetState = text,
             transitionSpec = {
@@ -883,31 +957,35 @@ private fun GameOverOverlay(view: GameView, onRematch: () -> Unit, onQuit: () ->
                 Spacer(Modifier.height(8.dp))
                 Text(
                     if (view.youWon) {
-                        "${view.opponentName} n'a rien vu venir."
+                        "Personne n'a rien vu venir."
                     } else {
-                        "${view.opponentName} a posé sa dernière carte."
+                        "${view.winner?.let(view::nameOf) ?: "?"} a posé sa dernière carte."
                     },
                     color = Palette.TextDim,
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center
                 )
                 Spacer(Modifier.height(20.dp))
-                Text(
-                    "${view.yourScore}  —  ${view.opponentScore}",
-                    color = Palette.Text,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Black
-                )
+                ScoreLine(view)
                 Spacer(Modifier.height(24.dp))
                 PrimaryButton(
-                    text = if (view.rematchYou) "En attente de l'adversaire…" else "Revanche",
+                    text = if (view.rematchYou) {
+                        "En attente… ${view.rematchReady}/${view.playerCount}"
+                    } else {
+                        "Revanche"
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !view.rematchYou
                 ) { onRematch() }
-                if (view.rematchOpponent && !view.rematchYou) {
+                val waiting = view.rivals.filter { it.rematch }
+                if (waiting.isNotEmpty() && !view.rematchYou) {
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "${view.opponentName} veut sa revanche",
+                        if (waiting.size == 1) {
+                            "${waiting.first().name} veut sa revanche"
+                        } else {
+                            "${waiting.size} joueurs veulent leur revanche"
+                        },
                         color = Palette.Gold,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
@@ -916,6 +994,27 @@ private fun GameOverOverlay(view: GameView, onRematch: () -> Unit, onQuit: () ->
                 Spacer(Modifier.height(10.dp))
                 GhostButton("Quitter", Modifier.fillMaxWidth()) { onQuit() }
             }
+        }
+    }
+}
+
+/** Scores, as a duel line at two players and one chip per player beyond that. */
+@Composable
+private fun ScoreLine(view: GameView) {
+    val single = view.rivals.singleOrNull()
+    if (single != null) {
+        Text(
+            "${view.yourScore}  —  ${single.score}",
+            color = Palette.Text,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Black
+        )
+        return
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        InkChip("Toi ${view.yourScore}", color = Palette.Gold, fontSize = 12)
+        view.rivals.forEach { rival ->
+            InkChip("${rival.name} ${rival.score}", color = Palette.SlateHigh, fontSize = 12)
         }
     }
 }
