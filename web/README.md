@@ -44,17 +44,24 @@ le reste à l'identique de l'autre côté.
 
 ## Comment tester
 
-1. Construire le fichier unique : `node web/build.mjs`
-2. Déposer `web/dist/test-liaison.html` sur n'importe quel hébergeur statique en
-   **HTTPS** — Vercel, GitHub Pages, peu importe. HTTPS est obligatoire : sans lui le
-   navigateur refuse WebRTC.
-3. Sur le premier téléphone : ouvrir la page, *Créer la partie*. Un QR s'affiche.
-4. Sur l'iPhone : le scanner avec l'appareil photo. La page s'ouvre et affiche un
+**En ligne : https://uno-test-liaison.vercel.app** — accès libre, rien à installer.
+
+1. Sur le premier téléphone : ouvrir la page, *Créer la partie*. Un QR s'affiche.
+2. Sur l'iPhone : le scanner avec l'appareil photo. La page s'ouvre et affiche un
    deuxième QR, la réponse.
-5. Revenir au premier téléphone : *Ouvrir la caméra* et scanner cette réponse.
+3. Revenir au premier téléphone : *Ouvrir la caméra* et scanner cette réponse.
 
 Les deux téléphones doivent être sur le **même WiFi**.
 
 Si « canal de données » passe au vert et qu'un aller-retour s'affiche en millisecondes,
 la voie web est ouverte et l'app iOS payante devient inutile. Si ça bloque sur ICE,
 c'est le réseau. Si ça bloque avant, c'est Safari — et là, seule l'app native reste.
+
+## Héberger soi-même
+
+`node web/build.mjs` produit `web/dist/index.html`, un fichier unique sans aucune
+dépendance externe, déposable tel quel sur n'importe quel hébergeur statique. HTTPS est
+obligatoire : sans lui, le navigateur refuse WebRTC.
+
+Le déploiement Vercel, lui, sert les trois fichiers séparément et récupère l'encodeur QR
+depuis npm au moment du build — c'est la configuration que les tests d'ici vérifient.

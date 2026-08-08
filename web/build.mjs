@@ -4,7 +4,11 @@
 // with no build step and no CDN. That matters here: the whole point of this experiment
 // is that nothing but a file server is involved.
 //
-//   node web/build.mjs   ->   web/dist/test-liaison.html
+//   node web/build.mjs   ->   web/dist/index.html
+//
+// The output is named index.html so the page sits at the root of whatever hosts it.
+// That matters twice over: the join link is the bare domain, and the QR that carries it
+// is that much smaller.
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +35,6 @@ if (html.includes('import ') || html.includes('src="vendor')) {
 }
 
 mkdirSync(join(root, 'dist'), { recursive: true });
-const out = join(root, 'dist', 'test-liaison.html');
+const out = join(root, 'dist', 'index.html');
 writeFileSync(out, html);
 console.log(`${out}  —  ${(html.length / 1024).toFixed(0)} Ko, aucune dependance externe`);

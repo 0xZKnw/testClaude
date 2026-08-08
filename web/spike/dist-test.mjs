@@ -20,7 +20,7 @@ try {
   host.on('pageerror', (e) => errors.push('hote: ' + e.message));
   guest.on('pageerror', (e) => errors.push('invite: ' + e.message));
 
-  await host.goto(`http://localhost:${PORT}/dist/test-liaison.html`);
+  await host.goto(`http://localhost:${PORT}/dist/index.html`);
   await host.click('#beHost');
   await host.waitForFunction(() => document.getElementById('qrText').value.length > 20);
   const offer = await host.inputValue('#qrText');
