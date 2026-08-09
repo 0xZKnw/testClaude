@@ -196,11 +196,11 @@ textarea {
 .flash .who { color: var(--gold); font-size: 10px; font-weight: 900; }
 .flash .what { font-size: 13px; margin-top: 2px; word-break: break-word; }
 
-/* Pinned to the right edge at the height of the deck. Always open rather than behind a
-   button: a sticker you have to go looking for is a sticker nobody sends. */
+/* Bottom-right, clear of the pile: folded away it is one button, and when it opens it
+   grows upwards along the edge rather than over the cards you are trying to play. */
 #sticker-rail {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-  display: flex; flex-direction: column; gap: 5px; padding: 7px 5px;
+  position: absolute; right: 6px; bottom: 40px;
+  display: flex; flex-direction: column; gap: 5px; padding: 6px 5px;
   background: var(--slate); border: 3px solid var(--ink); border-radius: 20px;
   box-shadow: 0 4px 0 var(--ink);
 }
@@ -208,6 +208,10 @@ textarea {
   width: 34px; height: 34px; border: 0; border-radius: 50%;
   background: var(--slate-high); font-size: 19px; line-height: 1;
   cursor: pointer; padding: 0; color: inherit;
+}
+#sticker-rail button.shut {
+  width: 24px; height: 24px; align-self: center;
+  background: #0b0e14; color: var(--dim); font-size: 11px;
 }
 #sticker-rail button:active { transform: scale(.9); }
 
@@ -262,11 +266,22 @@ textarea {
 }
 .said.mine .bubble { background: var(--gold); color: var(--ink); }
 .said .who { color: var(--gold); font-size: 10px; font-weight: 900; margin-bottom: 2px; }
+/* One line, the height of its send button, and nothing else — the tall bordered box it
+   replaced read as a form field dropped into a game. */
 #chat-input {
-  background: #0b0e14; color: var(--text); border: 3px solid var(--ink);
-  border-radius: 14px; padding: 12px 14px; font: inherit; font-size: 15px; min-width: 0;
+  height: 46px; background: #0b0e14; color: var(--text);
+  border: 2.5px solid var(--ink); border-radius: 15px;
+  padding: 0 12px; font: inherit; font-size: 15px; min-width: 0;
 }
 #chat-input:focus { outline: none; border-color: var(--gold); }
+#chat-send {
+  width: 46px; height: 46px; flex: none; padding: 0; margin: 0;
+  border: 3px solid var(--ink); border-radius: 50%;
+  background: var(--gold); color: var(--ink);
+  font-size: 17px; font-weight: 900; line-height: 1; cursor: pointer;
+}
+#chat-send:disabled { background: var(--slate-high); color: var(--dim); cursor: default; }
+#chat-send:active:not(:disabled) { transform: scale(.92); }
 #hand .row { display: flex; justify-content: center; }
 #pass-wrap { padding: 0 20px; }
 
@@ -284,8 +299,19 @@ textarea {
 #qrbox { background: var(--stock); border-radius: 14px; padding: 10px; }
 #qrbox svg { display: block; width: 100%; height: auto; }
 video { width: 100%; border-radius: 12px; background: #000; display: none; }
-.stat { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13.5px; }
-.stat b { color: var(--dim); font-weight: 600; }
+.stat { display: flex; justify-content: space-between; gap: 14px; padding: 5px 0; font-size: 13.5px; }
+.stat b { color: var(--dim); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat span { font-weight: 800; flex: none; }
+.stat-group { margin-top: 18px; }
+.stat-group .label { margin-bottom: 8px; }
+.stat-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.bigstats { display: flex; gap: 10px; }
+.bigstat {
+  flex: 1; text-align: center; background: var(--ink);
+  border: 3px solid var(--line); border-radius: 16px; padding: 10px 4px;
+}
+.bigstat b { display: block; font-size: 24px; font-weight: 900; }
+.bigstat span { display: block; margin-top: 2px; font-size: 11px; color: var(--dim); font-weight: 700; }
 .row-line { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
 .grow { flex: 1; min-width: 0; }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -573,7 +599,7 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
     <div class="row-line" style="padding:12px 0 0">
       <input id="chat-input" class="grow" maxlength="120" placeholder="Ton message"
              autocomplete="off" enterkeyhint="send">
-      <button class="btn" id="chat-send" style="width:118px;margin:0">Envoyer</button>
+      <button type="button" id="chat-send" aria-label="Envoyer">&#10148;</button>
     </div>
   </div>
 </div>

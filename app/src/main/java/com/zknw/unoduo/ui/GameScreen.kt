@@ -140,10 +140,13 @@ fun GameScreen(
                 )
 
                 if (social.enabled) {
+                    // Bottom-right, clear of the pile: folded away it is one button, and
+                    // when it opens it grows upwards along the edge rather than over the
+                    // cards you are trying to play.
                     StickerRail(
                         modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .padding(end = 8.dp)
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 6.dp, bottom = 38.dp)
                     ) { index ->
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onSticker(index)

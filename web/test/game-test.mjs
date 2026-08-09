@@ -175,7 +175,16 @@ try {
   }
   await guest.click('#chat-close');
 
+  // The rail is folded away by default, so it takes a tap to unfold before picking.
+  if (await host.$$eval('#sticker-rail [data-sticker]', (n) => n.length) !== 0) {
+    problems.push('le rail des stickers est deja ouvert');
+  }
+  await host.click('#sticker-rail [data-rail="1"]');
   await host.click('#sticker-rail [data-sticker="5"]');
+  // Picking one folds the rail back down.
+  if (await host.$$eval('#sticker-rail [data-sticker]', (n) => n.length) !== 0) {
+    problems.push('le rail ne se referme pas apres un envoi');
+  }
   await guest.waitForTimeout(400);
   const emotes = await guest.$$eval('#emote-layer .emote', (n) => n.map((x) => x.className));
   console.log(`  emoji recu par l'invite : ${emotes.length ? emotes[0] : 'aucun'}`);
@@ -220,6 +229,25 @@ try {
   const agree = (hostWinner === 'Gagné !') !== (guestWinner === 'Gagné !');
   console.log(`  les deux ecrans sont d'accord sur le vainqueur : ${agree ? 'oui' : 'NON'}`);
   if (!agree) problems.push(`desaccord sur le vainqueur : ${hostWinner} / ${guestWinner}`);
+
+  // ---------------------------------------------------------------------- stats
+  // The round that just ended has been folded in, so the profile has real numbers to
+  // render — and every derived figure gets exercised on the way.
+  await host.click('#quit-btn');
+  await host.waitForSelector('#screen-home.on');
+  await host.click('#profile-bar');
+  await host.waitForSelector('#screen-profile.on');
+  const groups = await host.$$eval('#stats-list .stat-group .label', (n) => n.map((x) => x.textContent));
+  console.log(`  panneaux de stats : ${groups.length}`);
+  for (const title of ['Séries et records', 'Rythme', 'Cartes', 'Guerre des cumuls', 'Dernière carte']) {
+    if (!groups.includes(title)) problems.push(`le panneau « ${title} » manque dans les stats`);
+  }
+  const played = await host.$$eval('#stats-list .stat', (rows) => {
+    const hit = rows.find((r) => r.querySelector('b').textContent === 'Cartes posées');
+    return hit ? hit.querySelector('span').textContent : null;
+  });
+  console.log(`  cartes posees comptees : ${played}`);
+  if (!played || Number(played) <= 0) problems.push("la manche jouee n'est pas comptee dans les stats");
 } finally {
   await browser.close();
   server.kill();

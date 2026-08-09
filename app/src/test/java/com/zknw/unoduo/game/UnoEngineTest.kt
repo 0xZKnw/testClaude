@@ -725,6 +725,36 @@ class UnoEngineTest {
     }
 
     @Test
+    fun `touching a single card is counted, and the losing hand is frozen at the end`() {
+        val e = engine()
+        e.forceState(
+            playerHands = listOf(
+                listOf(
+                    card(1, CardColor.RED, CardKind.NUMBER, 3),
+                    card(2, CardColor.RED, CardKind.NUMBER, 4)
+                ),
+                filler(5, 800)
+            ),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = HOST,
+            deck = filler(30, 100)
+        )
+        assertTrue(e.playCard(HOST, 1, null))
+        assertEquals(1, e.statsOf(HOST).unoReached)
+        assertEquals(0, e.statsOf(HOST).cardsLeftAtEnd)
+
+        // The guest hands the turn straight back, then the host goes out.
+        e.forceTurn(HOST)
+        assertTrue(e.playCard(HOST, 2, null))
+        assertEquals(Phase.GAME_OVER, e.phase)
+        // Counted on the way down to one, not again on the way out.
+        assertEquals(1, e.statsOf(HOST).unoReached)
+        assertEquals(0, e.statsOf(HOST).cardsLeftAtEnd)
+        assertEquals(5, e.statsOf(GUEST).cardsLeftAtEnd)
+    }
+
+    @Test
     fun `each player sees their own avatar and the other one`() {
         val e = engine()
         e.setAvatar(HOST, 2)

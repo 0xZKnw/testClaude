@@ -145,9 +145,14 @@ function handOrder(a, b) {
 /** Kotlin's sortedWith is stable; Array.sort is too in every current engine. */
 const sortedHand = (hand) => hand.slice().sort(handOrder);
 
+/**
+ * One seat's round, counted by the host. Same fields and same short keys as the Android
+ * app's RoundStats, so the two versions describe a round in exactly the same terms.
+ */
 function emptyStats() {
   return {
-    cp: 0, cd: 0, d2: 0, d4: 0, w: 0, sk: 0, co: 0, pt: 0, bt: 0, bd: 0,
+    cp: 0, cd: 0, nb: 0, d2: 0, d4: 0, e8: 0, e12: 0, wc: 0, dp: 0, sp: 0,
+    sk: 0, ct: 0, pt: 0, bt: 0, bd: 0, un: 0, cl: 0,
   };
 }
 
@@ -351,14 +356,20 @@ export class UnoEngine {
 
     const tally = this.stats[seat];
     tally.cp++;
-    if (card.k === Kind.DRAW_TWO) { tally.d2++; if (wasCountering) tally.co++; }
-    else if (card.k === Kind.DRAW_FOUR || card.k === Kind.DRAW_EIGHT
-      || card.k === Kind.DRAW_TWELVE) {
-      tally.d4++; if (wasCountering) tally.co++;
-    } else if (card.k === Kind.WILD || card.k === Kind.DOUBLE_PLAY || card.k === Kind.SPY) {
-      tally.w++;
-    }
+    if (card.k === Kind.NUMBER) tally.nb++;
+    else if (card.k === Kind.DRAW_TWO) tally.d2++;
+    else if (card.k === Kind.DRAW_FOUR) tally.d4++;
+    else if (card.k === Kind.DRAW_EIGHT) tally.e8++;
+    else if (card.k === Kind.DRAW_TWELVE) tally.e12++;
+    else if (card.k === Kind.WILD) tally.wc++;
+    else if (card.k === Kind.DOUBLE_PLAY) tally.dp++;
+    else if (card.k === Kind.SPY) tally.sp++;
     else if (card.k === Kind.SKIP || card.k === Kind.REVERSE) tally.sk++;
+    // Landing any attacking card on a pile somebody else started is a counter.
+    if (wasCountering && isPenalty(card)) tally.ct++;
+    // Counted on the way down to one, not on the way out: going out is a win, and
+    // sitting on a single card is the thing that makes a round tense.
+    if (hand.length === 1) tally.un++;
 
     const name = this.seatName(seat);
     switch (card.k) {
@@ -456,6 +467,9 @@ export class UnoEngine {
       this.phase = Phase.GAME_OVER;
       this.extraPlays = 0;
       this.scores[seat]++;
+      // What everybody was left holding, frozen here because the hands are about to
+      // stop changing and this is the only moment it means anything.
+      this.seats.forEach((other) => { this.stats[other].cl = this.hands[other].length; });
       this.pushEvent(`${name} gagne la manche !`);
     }
     return true;

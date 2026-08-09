@@ -267,20 +267,21 @@ class UnoEngine(
         val tally = stats.getValue(seat)
         tally.cardsPlayed++
         when (card.kind) {
-            CardKind.DRAW_TWO -> {
-                tally.drawTwosPlayed++
-                if (wasCountering) tally.countersPlayed++
-            }
-
-            CardKind.WILD_DRAW_FOUR, CardKind.WILD_DRAW_EIGHT, CardKind.WILD_DRAW_TWELVE -> {
-                tally.drawFoursPlayed++
-                if (wasCountering) tally.countersPlayed++
-            }
-
-            CardKind.WILD, CardKind.DOUBLE_PLAY, CardKind.SPY -> tally.wildsPlayed++
+            CardKind.NUMBER -> tally.numbersPlayed++
+            CardKind.DRAW_TWO -> tally.drawTwosPlayed++
+            CardKind.WILD_DRAW_FOUR -> tally.drawFoursPlayed++
+            CardKind.WILD_DRAW_EIGHT -> tally.drawEightsPlayed++
+            CardKind.WILD_DRAW_TWELVE -> tally.drawTwelvesPlayed++
+            CardKind.WILD -> tally.wildsPlayed++
+            CardKind.DOUBLE_PLAY -> tally.doublePlaysPlayed++
+            CardKind.SPY -> tally.spiesPlayed++
             CardKind.SKIP, CardKind.REVERSE -> tally.skipsPlayed++
-            CardKind.NUMBER -> Unit
         }
+        // Landing any attacking card on a pile somebody else started is a counter.
+        if (wasCountering && card.isPenalty) tally.countersPlayed++
+        // Counted on the way down to one, not on the way out: going out is a win, and
+        // sitting on a single card is the thing that makes a round tense.
+        if (hand.size == 1) tally.unoReached++
 
         val name = seatName(seat)
         when (card.kind) {
@@ -389,6 +390,9 @@ class UnoEngine(
             phase = Phase.GAME_OVER
             extraPlays = 0
             scores[seat] = scores.getValue(seat) + 1
+            // What everybody was left holding, frozen here because the hands are about
+            // to stop changing and this is the only moment it means anything.
+            seats.forEach { other -> stats.getValue(other).cardsLeftAtEnd = hands.getValue(other).size }
             pushEvent("$name gagne la manche !")
         }
         return true

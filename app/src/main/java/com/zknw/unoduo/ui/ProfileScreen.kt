@@ -221,12 +221,48 @@ private fun StatsPanels(profile: Profile) {
 
     Panel(Modifier.fillMaxWidth()) {
         Column {
+            SectionLabel("SÉRIES ET RECORDS")
+            Spacer(Modifier.height(12.dp))
+            StatLine("Série de victoires en cours", stats.currentStreak, Palette.Green)
+            StatLine("Meilleure série", stats.bestStreak, Palette.Green)
+            StatLine("Pire série de défaites", stats.worstStreak, Palette.Red)
+            // Zero means "never won one", not "won without playing a card".
+            StatText(
+                "Victoire la plus expéditive",
+                if (stats.fastestWin == 0) "—" else "${stats.fastestWin} cartes",
+                Palette.Gold
+            )
+            StatLine("Pire main à l'arrivée", stats.worstHand, Palette.Red)
+        }
+    }
+
+    Spacer(Modifier.height(12.dp))
+
+    Panel(Modifier.fillMaxWidth()) {
+        Column {
+            SectionLabel("RYTHME")
+            Spacer(Modifier.height(12.dp))
+            StatText("Cartes posées par manche", stats.cardsPerRound)
+            StatText("Cartes piochées par manche", stats.drawnPerRound)
+            StatText("Part de pioche", "${stats.drawRate} %")
+            StatText("Part d'attaque", "${stats.aggression} %")
+            StatText("Cartes restantes quand tu perds", stats.averageLoss)
+        }
+    }
+
+    Spacer(Modifier.height(12.dp))
+
+    Panel(Modifier.fillMaxWidth()) {
+        Column {
             SectionLabel("CARTES")
             Spacer(Modifier.height(12.dp))
             StatLine("Cartes posées", totals.cardsPlayed)
             StatLine("Cartes piochées", totals.cardsDrawn)
-            StatLine("Jokers posés", totals.wildsPlayed)
+            StatLine("Chiffres posés", totals.numbersPlayed)
             StatLine("Passe et sens interdit", totals.skipsPlayed)
+            StatLine("Jokers posés", totals.wildsPlayed)
+            StatLine("Coups doubles", totals.doublePlaysPlayed)
+            StatLine("Espions", totals.spiesPlayed)
         }
     }
 
@@ -238,10 +274,24 @@ private fun StatsPanels(profile: Profile) {
             Spacer(Modifier.height(12.dp))
             StatLine("+2 posés", totals.drawTwosPlayed)
             StatLine("+4 posés", totals.drawFoursPlayed)
+            StatLine("+8 posés", totals.drawEightsPlayed)
+            StatLine("+12 posés", totals.drawTwelvesPlayed)
             StatLine("Contres réussis", totals.countersPlayed)
             StatLine("Cartes encaissées", totals.penaltyCardsTaken)
+            StatText("Encaissées par manche", stats.penaltiesTakenPerRound)
             StatLine("Plus gros cumul infligé", totals.biggestStackDealt, Palette.Green)
             StatLine("Plus gros cumul encaissé", totals.biggestStackTaken, Palette.Red)
+        }
+    }
+
+    Spacer(Modifier.height(12.dp))
+
+    Panel(Modifier.fillMaxWidth()) {
+        Column {
+            SectionLabel("DERNIÈRE CARTE")
+            Spacer(Modifier.height(12.dp))
+            StatLine("Fois où tu as touché l'UNO", totals.unoReached, Palette.Gold)
+            StatText("Transformées en victoire", "${stats.closingRate} %", Palette.Gold)
         }
     }
 }
@@ -265,15 +315,24 @@ private fun BigStat(value: String, label: String, tint: Color, modifier: Modifie
 }
 
 @Composable
-private fun StatLine(label: String, value: Int, tint: Color = Palette.Text) {
+private fun StatLine(label: String, value: Int, tint: Color = Palette.Text) =
+    StatText(label, value.toString(), tint)
+
+@Composable
+private fun StatText(label: String, value: String, tint: Color = Palette.Text) {
     Row(
         Modifier
             .fillMaxWidth()
             .padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, color = Palette.TextDim, fontSize = 14.sp)
-        Spacer(Modifier.weight(1f))
-        Text("$value", color = tint, fontSize = 17.sp, fontWeight = FontWeight.Black)
+        Text(
+            label,
+            color = Palette.TextDim,
+            fontSize = 14.sp,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(value, color = tint, fontSize = 17.sp, fontWeight = FontWeight.Black)
     }
 }

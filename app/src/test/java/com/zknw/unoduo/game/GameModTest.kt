@@ -678,4 +678,66 @@ class GameModTest {
             }
         }
     }
+
+    // ------------------------------------------------------------- what got counted
+
+    @Test
+    fun `every mod card lands in its own counter`() {
+        val e = engine(mods = setOf(GameMod.DOUBLE_PLAY, GameMod.SPY))
+        e.forceState(
+            playerHands = listOf(
+                listOf(
+                    card(1, CardColor.WILD, CardKind.DOUBLE_PLAY),
+                    card(2, CardColor.GREEN, CardKind.NUMBER, 1),
+                    card(3, CardColor.WILD, CardKind.SPY)
+                ) + filler(2, 700),
+                filler(4, 800)
+            ),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = HOST,
+            deck = filler(30, 100)
+        )
+        // The Coup double is what keeps the hand, so all three go down in one turn.
+        assertTrue(e.playCard(HOST, 1, CardColor.GREEN))
+        assertTrue(e.playCard(HOST, 2, null))
+        assertTrue(e.playCard(HOST, 3, CardColor.RED))
+
+        val s = e.statsOf(HOST)
+        assertEquals(1, s.doublePlaysPlayed)
+        assertEquals(1, s.spiesPlayed)
+        assertEquals(1, s.numbersPlayed)
+        // A Coup double and an Espion are their own thing, not ordinary Jokers.
+        assertEquals(0, s.wildsPlayed)
+        assertEquals(3, s.cardsPlayed)
+        assertEquals(0, s.penaltiesPlayed)
+    }
+
+    @Test
+    fun `the plus eight and the plus twelve are counted apart from the plus four`() {
+        val e = engine(mods = setOf(GameMod.DRAW_EIGHT, GameMod.DRAW_TWELVE))
+        e.forceState(
+            playerHands = listOf(
+                listOf(
+                    card(1, CardColor.WILD, CardKind.WILD_DRAW_EIGHT),
+                    card(2, CardColor.WILD, CardKind.WILD_DRAW_TWELVE)
+                ) + filler(2, 700),
+                filler(4, 800)
+            ),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = HOST,
+            deck = filler(40, 100)
+        )
+        assertTrue(e.playCard(HOST, 1, CardColor.BLUE))
+        e.forceTurn(HOST)
+        assertTrue(e.playCard(HOST, 2, CardColor.BLUE))
+
+        val s = e.statsOf(HOST)
+        assertEquals(1, s.drawEightsPlayed)
+        assertEquals(1, s.drawTwelvesPlayed)
+        assertEquals(0, s.drawFoursPlayed)
+        assertEquals(2, s.penaltiesPlayed)
+        assertEquals(20, s.biggestStackDealt)
+    }
 }

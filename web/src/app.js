@@ -13,7 +13,10 @@ import { decide, DIFFICULTY_ORDER, DIFFICULTY_INFO } from './bot.js';
 import { cardFace, cardBack, colorChip, PALETTE } from './cards.js';
 import { WebRtcHost, WebRtcGuest } from './net.js';
 import { RULES } from './rules.js';
-import { loadProfile, saveProfile, recordRound, resetStats, AVATAR_COLORS, shrinkPhoto } from './profile.js';
+import {
+  loadProfile, saveProfile, recordRound, resetStats, AVATAR_COLORS, shrinkPhoto,
+  winRate, perRound, drawRate, aggression, averageLoss, closingRate,
+} from './profile.js';
 import { STICKERS, cleanLine, MAX_CHARS } from './talk.js';
 
 const $ = (id) => document.getElementById(id);
@@ -97,7 +100,7 @@ function renderHome() {
   $('home-name').textContent = p.name || 'Choisis ton pseudo';
   $('home-record').textContent = p.stats.roundsPlayed === 0
     ? 'Aucune manche jouée'
-    : `${p.stats.roundsWon} victoires · ${Math.round(p.stats.roundsWon * 100 / p.stats.roundsPlayed)} %`;
+    : `${p.stats.roundsWon} victoires · ${winRate(p.stats)} %`;
 
   const fan = [
     { i: 0, c: Color.BLUE, k: Kind.NUMBER, n: 7 },
@@ -131,17 +134,72 @@ function renderProfile() {
     node.onclick = () => { p.avatarColor = Number(node.dataset.color); renderProfile(); };
   });
 
-  const s = p.stats;
-  const rate = s.roundsPlayed ? Math.round(s.roundsWon * 100 / s.roundsPlayed) : 0;
-  $('stats-list').innerHTML = [
-    ['Manches jouées', s.roundsPlayed], ['Victoires', s.roundsWon], ['Défaites', s.roundsLost],
-    ['Taux de victoire', `${rate} %`], ['Cartes posées', s.cardsPlayed],
-    ['Cartes piochées', s.cardsDrawn], ['+2 posés', s.drawTwosPlayed],
-    ['+4 posés', s.drawFoursPlayed], ['Jokers posés', s.wildsPlayed],
-    ['Contres réussis', s.countersPlayed], ['Cartes encaissées', s.penaltyCardsTaken],
-    ['Plus grosse pile encaissée', s.biggestStackTaken],
-    ['Plus grosse pile envoyée', s.biggestStackDealt],
-  ].map(([k, v]) => `<div class="stat"><b>${k}</b><span>${v}</span></div>`).join('');
+  renderStats(p.stats);
+}
+
+/**
+ * The same six panels the Android profile shows, in the same order and with the same
+ * wording — a player comparing the two screens should not be able to tell them apart.
+ */
+function renderStats(s) {
+  const line = ([label, value, tint]) =>
+    `<div class="stat"><b>${esc(label)}</b><span${tint ? ` style="color:${tint}"` : ''}>${esc(String(value))}</span></div>`;
+  const section = (title, rows) =>
+    `<div class="stat-group"><div class="label">${title}</div>${rows.map(line).join('')}</div>`;
+
+  const big = (value, label, tint) =>
+    `<div class="bigstat"><b style="color:${tint}">${esc(value)}</b><span>${label}</span></div>`;
+
+  $('stats-list').innerHTML = `
+    <div class="bigstats">
+      ${big(String(s.roundsWon), 'gagnées', PALETTE.G)}
+      ${big(String(s.roundsLost), 'perdues', PALETTE.R)}
+      ${big(`${winRate(s)} %`, 'victoires', PALETTE.gold)}
+    </div>
+    <div class="stat-chips">
+      <span class="chip">${s.roundsPlayed} manches</span>
+      <span class="chip">Série : ${s.currentStreak}</span>
+      <span class="chip">Record : ${s.bestStreak}</span>
+    </div>
+    ${section('Séries et records', [
+    ['Série de victoires en cours', s.currentStreak, PALETTE.G],
+    ['Meilleure série', s.bestStreak, PALETTE.G],
+    ['Pire série de défaites', s.worstStreak, PALETTE.R],
+    // Zero means "never won one", not "won without playing a card".
+    ['Victoire la plus expéditive', s.fastestWin === 0 ? '—' : `${s.fastestWin} cartes`, PALETTE.gold],
+    ["Pire main à l'arrivée", s.worstHand, PALETTE.R],
+  ])}
+    ${section('Rythme', [
+    ['Cartes posées par manche', perRound(s, s.cardsPlayed)],
+    ['Cartes piochées par manche', perRound(s, s.cardsDrawn)],
+    ['Part de pioche', `${drawRate(s)} %`],
+    ["Part d'attaque", `${aggression(s)} %`],
+    ['Cartes restantes quand tu perds', averageLoss(s)],
+  ])}
+    ${section('Cartes', [
+    ['Cartes posées', s.cardsPlayed],
+    ['Cartes piochées', s.cardsDrawn],
+    ['Chiffres posés', s.numbersPlayed],
+    ['Passe et sens interdit', s.skipsPlayed],
+    ['Jokers posés', s.wildsPlayed],
+    ['Coups doubles', s.doublePlaysPlayed],
+    ['Espions', s.spiesPlayed],
+  ])}
+    ${section('Guerre des cumuls', [
+    ['+2 posés', s.drawTwosPlayed],
+    ['+4 posés', s.drawFoursPlayed],
+    ['+8 posés', s.drawEightsPlayed],
+    ['+12 posés', s.drawTwelvesPlayed],
+    ['Contres réussis', s.countersPlayed],
+    ['Cartes encaissées', s.penaltyCardsTaken],
+    ['Encaissées par manche', perRound(s, s.penaltyCardsTaken)],
+    ['Plus gros cumul infligé', s.biggestStackDealt, PALETTE.G],
+    ['Plus gros cumul encaissé', s.biggestStackTaken, PALETTE.R],
+  ])}
+    ${section('Dernière carte', [
+    ["Fois où tu as touché l'UNO", s.unoReached, PALETTE.gold],
+    ['Transformées en victoire', `${closingRate(s)} %`, PALETTE.gold],
+  ])}`;
 }
 
 $('profile-bar').onclick = () => { show('profile'); renderProfile(); };
@@ -862,11 +920,30 @@ function renderSocial() {
   log.scrollTop = log.scrollHeight;
 }
 
-$('sticker-rail').innerHTML = STICKERS
-  .map((s, i) => `<button type="button" data-sticker="${i}">${s}</button>`).join('');
-$('sticker-rail').querySelectorAll('[data-sticker]').forEach((node) => {
-  node.onclick = () => sendSticker(Number(node.dataset.sticker));
-});
+/**
+ * Folded away by default — one button — and opened on demand. Left permanently open it
+ * was a column of emoji sitting next to the table the whole game.
+ */
+let railOpen = false;
+
+function renderRail() {
+  const rail = $('sticker-rail');
+  rail.innerHTML = railOpen
+    ? STICKERS.map((s, i) => `<button type="button" data-sticker="${i}">${s}</button>`).join('')
+      + '<button type="button" class="shut" data-rail="0">&#10005;</button>'
+    : `<button type="button" data-rail="1">${STICKERS[0]}</button>`;
+  rail.querySelectorAll('[data-sticker]').forEach((node) => {
+    node.onclick = () => {
+      railOpen = false;
+      renderRail();
+      sendSticker(Number(node.dataset.sticker));
+    };
+  });
+  rail.querySelectorAll('[data-rail]').forEach((node) => {
+    node.onclick = () => { railOpen = node.dataset.rail === '1'; renderRail(); };
+  });
+}
+renderRail();
 
 $('chat-bar').onclick = openChat;
 $('chat-close').onclick = closeChat;
@@ -874,11 +951,16 @@ $('chat').onclick = (e) => { if (e.target === $('chat')) closeChat(); };
 $('chat-send').onclick = () => {
   sendChat($('chat-input').value);
   $('chat-input').value = '';
+  armSend();
 };
 $('chat-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); $('chat-send').click(); }
 });
+// Gold once there is something to send, grey the rest of the time.
+const armSend = () => { $('chat-send').disabled = $('chat-input').value.trim() === ''; };
+$('chat-input').addEventListener('input', armSend);
 $('chat-input').setAttribute('maxlength', String(MAX_CHARS));
+armSend();
 
 /**
  * Keeps the sheet above the keyboard.

@@ -24,10 +24,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,8 +41,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,7 +56,6 @@ import com.zknw.unoduo.game.Seat
 import com.zknw.unoduo.net.Talk
 import com.zknw.unoduo.ui.components.InkChip
 import com.zknw.unoduo.ui.components.InkSurface
-import com.zknw.unoduo.ui.components.PrimaryButton
 import com.zknw.unoduo.ui.components.clickableNoRipple
 import com.zknw.unoduo.ui.theme.Palette
 import com.zknw.unoduo.vm.ChatLine
@@ -165,37 +165,62 @@ private fun FlashBubble(line: ChatLine) {
 }
 
 /**
- * The sticker rail, pinned to the right edge at the height of the deck.
+ * The sticker rail, tucked against the right edge at the height of the deck.
  *
- * Always open rather than behind a button: a sticker you have to go looking for is a
- * sticker nobody sends, and the right margin next to the deck is dead space anyway.
+ * Folded down to a single button by default: open, six of them ran the length of the
+ * table and crowded the discard pile, which is the one thing that must stay clear. One
+ * tap opens it, picking one closes it again.
  */
 @Composable
 fun StickerRail(modifier: Modifier = Modifier, onPick: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+
     InkSurface(
         modifier = modifier,
         color = Palette.Slate,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(22.dp),
         depth = 4.dp
     ) {
         Column(
-            Modifier.padding(horizontal = 5.dp, vertical = 7.dp),
+            Modifier.padding(horizontal = 5.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Talk.STICKERS.forEachIndexed { index, sticker ->
-                Box(
-                    Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(Palette.SlateHigh)
-                        .clickableNoRipple { onPick(index) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(sticker, fontSize = 19.sp)
+            if (open) {
+                Talk.STICKERS.forEachIndexed { index, sticker ->
+                    StickerButton(sticker, Palette.SlateHigh) {
+                        open = false
+                        onPick(index)
+                    }
                 }
+                StickerButton("✕", Palette.Ink, small = true) { open = false }
+            } else {
+                StickerButton(Talk.STICKERS.first(), Palette.SlateHigh) { open = true }
             }
         }
+    }
+}
+
+@Composable
+private fun StickerButton(
+    glyph: String,
+    background: androidx.compose.ui.graphics.Color,
+    small: Boolean = false,
+    onClick: () -> Unit
+) {
+    Box(
+        Modifier
+            .size(if (small) 26.dp else 36.dp)
+            .clip(CircleShape)
+            .background(background)
+            .clickableNoRipple { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            glyph,
+            fontSize = if (small) 12.sp else 20.sp,
+            color = if (small) Palette.TextDim else Palette.Text
+        )
     }
 }
 
@@ -345,38 +370,82 @@ fun ChatSheet(social: Social, onSend: (String) -> Unit, onClose: () -> Unit) {
                     }
 
                     Spacer(Modifier.height(12.dp))
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = draft,
-                            onValueChange = { draft = it.take(Talk.MAX_CHARS) },
-                            singleLine = true,
-                            placeholder = { Text("Ton message", color = Palette.TextDim) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .focusRequester(focus),
-                            shape = RoundedCornerShape(14.dp),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                            keyboardActions = KeyboardActions(onSend = { send() }),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Palette.Text,
-                                unfocusedTextColor = Palette.Text,
-                                focusedBorderColor = Palette.Gold,
-                                unfocusedBorderColor = Palette.Outline,
-                                cursorColor = Palette.Gold,
-                                focusedContainerColor = Palette.Ink,
-                                unfocusedContainerColor = Palette.Ink
-                            )
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        PrimaryButton(
-                            text = "Envoyer",
-                            modifier = Modifier.width(118.dp),
-                            enabled = draft.isNotBlank()
-                        ) { send() }
-                    }
+                    ChatInput(
+                        draft = draft,
+                        focus = focus,
+                        onChange = { draft = it.take(Talk.MAX_CHARS) },
+                        onSend = { send() }
+                    )
                 }
             }
+        }
+    }
+}
+
+/**
+ * One line, one round send button, both the same height.
+ *
+ * A Material text field is 56dp tall before its own padding, and next to a full-width
+ * button the row took a third of the sheet. This is the shape every messaging app uses
+ * because it is the one that gets out of the way.
+ */
+@Composable
+private fun ChatInput(
+    draft: String,
+    focus: FocusRequester,
+    onChange: (String) -> Unit,
+    onSend: () -> Unit
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .weight(1f)
+                .height(46.dp)
+                .clip(shape)
+                .background(Palette.Ink)
+                .border(2.5.dp, Palette.Outline, shape)
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            BasicTextField(
+                value = draft,
+                onValueChange = onChange,
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focus),
+                textStyle = TextStyle(color = Palette.Text, fontSize = 15.sp),
+                cursorBrush = SolidColor(Palette.Gold),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { onSend() }),
+                decorationBox = { field ->
+                    if (draft.isEmpty()) {
+                        Text("Ton message", color = Palette.TextDim, fontSize = 15.sp)
+                    }
+                    field()
+                }
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(
+            Modifier
+                .size(46.dp)
+                .clip(CircleShape)
+                .background(if (draft.isBlank()) Palette.SlateHigh else Palette.Gold)
+                .border(2.5.dp, Palette.Outline, CircleShape)
+                .clickableNoRipple(enabled = draft.isNotBlank()) { onSend() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "➤",
+                color = if (draft.isBlank()) Palette.TextDim else Palette.Outline,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Black
+            )
         }
     }
 }
