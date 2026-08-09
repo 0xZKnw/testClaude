@@ -82,6 +82,7 @@ fun MenuBackground(content: @Composable () -> Unit) {
  * screen sizes its viewfinder from the space it is given, and shrinking that space
  * would push the code field off the bottom rather than into view.
  */
+@Composable
 private fun Modifier.safeArea(): Modifier = this
     .fillMaxSize()
     .windowInsetsPadding(WindowInsets.systemBars)
