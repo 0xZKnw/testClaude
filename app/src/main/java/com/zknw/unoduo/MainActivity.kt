@@ -36,6 +36,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.location.LocationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.zknw.unoduo.ui.CreateScreen
 import com.zknw.unoduo.ui.GameScreen
 import com.zknw.unoduo.ui.HomeScreen
 import com.zknw.unoduo.ui.HostScreen
@@ -183,6 +184,7 @@ private fun App(vm: AppViewModel = viewModel()) {
             Screen.RULES -> vm.closeRules()
             Screen.SETTINGS -> vm.closeSettings()
             Screen.PROFILE -> vm.closeProfile()
+            Screen.CREATE -> vm.closeCreate()
             Screen.SOLO -> vm.closeSolo()
             Screen.GAME -> vm.leaveGame()
             else -> vm.goHome()
@@ -192,7 +194,8 @@ private fun App(vm: AppViewModel = viewModel()) {
     when (state.screen) {
         Screen.HOME -> HomeScreen(
             profile = state.profile,
-            onHost = { withBle(asHost = true) { vm.startHosting() } },
+            // The radio is only asked for once the room is actually being opened.
+            onHost = vm::openCreate,
             onJoin = { withBle(asHost = false) { vm.openJoin() } },
             // Solo needs no radio at all, so it skips the permission dance.
             onSolo = vm::openSolo,
@@ -211,6 +214,11 @@ private fun App(vm: AppViewModel = viewModel()) {
             },
             onResetStats = vm::resetStats,
             onBack = vm::closeProfile
+        )
+
+        Screen.CREATE -> CreateScreen(
+            onHost = { mods -> withBle(asHost = true) { vm.startHosting(mods) } },
+            onBack = vm::closeCreate
         )
 
         Screen.SOLO -> SoloScreen(onPick = vm::startSolo, onBack = vm::closeSolo)
@@ -243,6 +251,7 @@ private fun App(vm: AppViewModel = viewModel()) {
             link = state.link,
             players = state.players,
             photos = state.photos,
+            mods = state.mods,
             canStart = state.canStart,
             onStart = vm::startGame,
             onBack = vm::goHome
@@ -253,6 +262,7 @@ private fun App(vm: AppViewModel = viewModel()) {
             photos = state.photos,
             mySeat = state.mySeat,
             roomCode = state.roomCode,
+            mods = state.mods,
             onLeave = vm::goHome
         )
 

@@ -81,17 +81,28 @@ data class GameView(
     @SerialName("st") val yourStats: RoundStats = RoundStats(),
     @SerialName("ya") val yourAvatar: Int = 0,
     /** +1 or -1. Only ever anything but +1 once a Reverse has been played at 3 or more. */
-    @SerialName("dr") val direction: Int = 1
+    @SerialName("dr") val direction: Int = 1,
+    /** Cards the player on turn still owes after a Coup double. 0 the rest of the time. */
+    @SerialName("xp") val extraPlays: Int = 0,
+    /** The optional rules this room is playing with, so every device can say so. */
+    @SerialName("md") val mods: List<GameMod> = emptyList()
 ) {
     val playerCount: Int get() = rivals.size + 1
 
     val yourTurn: Boolean get() = turn == youAre && phase != Phase.GAME_OVER
     val youWon: Boolean get() = winner == youAre
     val mustAnswerPenalty: Boolean get() = pendingDraw > 0 && yourTurn
-    val canPass: Boolean get() = phase == Phase.DECIDE_AFTER_DRAW && yourTurn
+
+    /** You are in the middle of a Coup double and still owe the table cards. */
+    val inBonus: Boolean get() = extraPlays > 0 && phase == Phase.PLAYING
+
+    /** Declining the card you just drew, or cutting a Coup double short. */
+    val canPass: Boolean
+        get() = yourTurn && (phase == Phase.DECIDE_AFTER_DRAW || inBonus)
 
     /** The deck is tappable on your turn, once any pending stack is settled. */
-    val canDraw: Boolean get() = yourTurn && phase == Phase.PLAYING && pendingDraw == 0
+    val canDraw: Boolean
+        get() = yourTurn && phase == Phase.PLAYING && pendingDraw == 0 && extraPlays == 0
 
     /** Nothing to play and no stack pending: drawing is the only way forward. */
     val mustDraw: Boolean get() = canDraw && legal.isEmpty()

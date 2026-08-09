@@ -38,6 +38,12 @@ object Bot {
             return BotMove.Draw
         }
 
+        // Mid Coup double there is nothing to draw, so the same hesitation has to come
+        // out as stopping early instead — otherwise the easy bot never wastes a bonus.
+        if (view.inBonus && rng.nextInt(100) < ditherPercent(difficulty)) {
+            return BotMove.Pass
+        }
+
         val card = choose(legal, view, difficulty, rng)
         val color = if (card.isWild) chooseColor(view, card, difficulty, rng) else null
         return BotMove.Play(card.id, color)
@@ -87,6 +93,12 @@ object Bot {
             CardKind.DRAW_TWO -> if (threatened) 40 else 30
             CardKind.WILD -> 5
             CardKind.WILD_DRAW_FOUR -> if (threatened) 65 else 6
+            // Same card, twice the bite: never worth less than a +4.
+            CardKind.WILD_DRAW_EIGHT -> if (threatened) 90 else 8
+            // Two cards gone for the price of one, and the colour is yours to pick.
+            // Worth playing early rather than hoarded — unless the hand is down to it
+            // plus one card, where a plain card followed by the wild is the safer out.
+            CardKind.DOUBLE_PLAY -> if (view.hand.size > 2) 60 else 4
         }
 
         if (sharp) {

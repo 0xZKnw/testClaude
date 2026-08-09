@@ -78,6 +78,10 @@ function score(card, v, sharp) {
     case Kind.DRAW_TWO: value = threatened ? 40 : 30; break;
     case Kind.WILD: value = 5; break;
     case Kind.DRAW_FOUR: value = threatened ? 65 : 6; break;
+    // Same card, twice the bite: never worth less than a +4.
+    case Kind.DRAW_EIGHT: value = threatened ? 90 : 8; break;
+    // Two cards gone for the price of one, and the colour is yours to pick.
+    case Kind.DOUBLE_PLAY: value = v.h.length > 2 ? 60 : 4; break;
     default: value = 0;
   }
 
@@ -120,6 +124,12 @@ export function decide(v, difficulty, rng) {
   // Drawing a card you did not need is the beginner mistake that actually costs games.
   if (view.canDraw(v) && rng.nextIntBelow(100) < ditherPercent(difficulty)) {
     return { kind: 'draw' };
+  }
+
+  // Mid Coup double there is nothing to draw, so the same hesitation comes out as
+  // stopping early instead — otherwise the easy bot never wastes a bonus.
+  if (view.inBonus(v) && rng.nextIntBelow(100) < ditherPercent(difficulty)) {
+    return { kind: 'pass' };
   }
 
   let card;

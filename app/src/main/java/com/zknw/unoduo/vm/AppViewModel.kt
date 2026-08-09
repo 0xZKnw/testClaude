@@ -8,10 +8,12 @@ import com.zknw.unoduo.game.Bot
 import com.zknw.unoduo.game.BotMove
 import com.zknw.unoduo.game.CardColor
 import com.zknw.unoduo.game.Difficulty
+import com.zknw.unoduo.game.GameMod
 import com.zknw.unoduo.game.GameView
 import com.zknw.unoduo.game.HOST_SEAT
 import com.zknw.unoduo.game.MAX_PLAYERS
 import com.zknw.unoduo.game.MIN_PLAYERS
+import com.zknw.unoduo.game.ordered
 import com.zknw.unoduo.game.Phase
 import com.zknw.unoduo.game.Seat
 import com.zknw.unoduo.game.UnoEngine
@@ -37,7 +39,7 @@ import kotlinx.coroutines.withContext
 import java.security.SecureRandom
 import kotlin.random.Random
 
-enum class Screen { HOME, RULES, PROFILE, SETTINGS, SOLO, HOST, JOIN, LOBBY, GAME }
+enum class Screen { HOME, RULES, PROFILE, SETTINGS, CREATE, SOLO, HOST, JOIN, LOBBY, GAME }
 
 /** Where the in-app updater is in its little state machine. */
 sealed interface UpdateState {
@@ -73,7 +75,9 @@ data class UiState(
     /** Seats whose phone has dropped off mid-game. */
     val offline: Set<Seat> = emptySet(),
     /** Set while playing against the machine; null for a real table. */
-    val solo: Difficulty? = null
+    val solo: Difficulty? = null,
+    /** The optional rules this room plays with. Empty for a standard game. */
+    val mods: Set<GameMod> = emptySet()
 ) {
     val playerName: String get() = profile.name
     val canStart: Boolean get() = isHost && players.size >= MIN_PLAYERS
@@ -135,6 +139,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             UiState(profile = it.profile, updateToken = it.updateToken)
         }
     }
+
+    fun openCreate() = _state.update { it.copy(screen = Screen.CREATE) }
+
+    fun closeCreate() = _state.update { it.copy(screen = Screen.HOME) }
 
     fun openSolo() = _state.update { it.copy(screen = Screen.SOLO) }
 
@@ -222,7 +230,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------------ host
 
-    fun startHosting() {
+    fun startHosting(mods: Set<GameMod> = emptySet()) {
         teardown()
         val code = RoomCode.random()
         val name = displayName()
@@ -239,6 +247,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 players = listOf(LobbyPlayer(HOST_SEAT, name, it.profile.avatarColor)),
                 photos = emptyMap(),
                 offline = emptySet(),
+                mods = mods,
                 error = null
             )
         }
@@ -410,7 +419,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun broadcastLobby() {
-        host?.broadcast(NetMsg.Lobby(_state.value.players, started = engine != null))
+        host?.broadcast(
+            NetMsg.Lobby(
+                players = _state.value.players,
+                started = engine != null,
+                mods = _state.value.mods.ordered()
+            )
+        )
     }
 
     private fun nameOfSeat(seat: Seat): String =
@@ -426,9 +441,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun startNewRound(firstRound: Boolean) {
         val players = _state.value.players.sortedBy { it.seat }
         if (players.size < MIN_PLAYERS) return
+        val mods = _state.value.mods
         var e = engine
-        if (e == null || e.playerCount != players.size) {
-            e = UnoEngine(Random(SecureRandom().nextLong()), players.size)
+        if (e == null || e.playerCount != players.size || e.mods != mods) {
+            e = UnoEngine(Random(SecureRandom().nextLong()), players.size, mods)
             engine = e
         }
         players.forEach { p ->
@@ -490,7 +506,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * bot simply takes the second seat and is handed the same snapshot a human would
      * get, so it plays by the same rules and sees no more than you do.
      */
-    fun startSolo(difficulty: Difficulty) {
+    fun startSolo(difficulty: Difficulty, mods: Set<GameMod> = emptySet()) {
         teardown()
         val me = LobbyPlayer(HOST_SEAT, displayName(), _state.value.profile.avatarColor)
         // A colour of its own, so the bot is never your twin at the table.
@@ -509,6 +525,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 players = listOf(me, LobbyPlayer(1, difficulty.botName, botColor)),
                 photos = emptyMap(),
                 offline = emptySet(),
+                mods = mods,
                 error = null
             )
         }
@@ -559,6 +576,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 players = emptyList(),
                 photos = emptyMap(),
                 offline = emptySet(),
+                mods = emptySet(),
                 error = null
             )
         }
@@ -635,6 +653,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             is NetMsg.Lobby -> _state.update {
                 it.copy(
                     players = msg.players.sortedBy { p -> p.seat },
+                    mods = msg.mods.toSet(),
                     screen = if (it.view == null && it.link == LinkStatus.CONNECTED) {
                         Screen.LOBBY
                     } else {

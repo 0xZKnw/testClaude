@@ -237,6 +237,23 @@ fun DrawScope.drawWildFour(boxSize: Size, origin: Offset, outline: Color) {
     )
 }
 
+/**
+ * The +8: the +4's fan, dealt twice.
+ *
+ * Two staggered rows rather than eight cards in one row, and no lettering at all — the
+ * point of the card is "twice the +4", and a doubled fan says that at a glance where a
+ * row of eight slivers would just read as noise.
+ */
+fun DrawScope.drawWildEight(boxSize: Size, origin: Offset, outline: Color) {
+    val rowHeight = boxSize.height * 0.62f
+    val drop = boxSize.height - rowHeight
+    val shift = boxSize.width * 0.06f
+    val row = Size(boxSize.width - shift, rowHeight)
+
+    drawWildFour(row, Offset(origin.x, origin.y), outline)
+    drawWildFour(row, Offset(origin.x + shift, origin.y + drop), outline)
+}
+
 /** Slanted oval every UNO face carries behind its glyph, ink keyline included. */
 fun DrawScope.drawFaceOval(fill: Color, outline: Color, tilt: Float = -22f) {
     rotate(tilt, pivot = center) {

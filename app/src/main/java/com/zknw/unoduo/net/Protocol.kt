@@ -1,6 +1,7 @@
 package com.zknw.unoduo.net
 
 import com.zknw.unoduo.game.CardColor
+import com.zknw.unoduo.game.GameMod
 import com.zknw.unoduo.game.GameView
 import com.zknw.unoduo.game.Seat
 import kotlinx.serialization.SerialName
@@ -59,7 +60,9 @@ sealed class NetMsg {
     @SerialName("lobby")
     data class Lobby(
         @SerialName("p") val players: List<LobbyPlayer>,
-        @SerialName("st") val started: Boolean = false
+        @SerialName("st") val started: Boolean = false,
+        /** The optional rules the host picked, so the lobby can list them. */
+        @SerialName("md") val mods: List<GameMod> = emptyList()
     ) : NetMsg()
 
     /**

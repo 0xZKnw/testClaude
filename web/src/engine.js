@@ -17,8 +17,34 @@ const COLOR_ORDER = { R: 0, Y: 1, G: 2, B: 3, W: 4 };
 
 export const Kind = {
   NUMBER: 'n', SKIP: 's', REVERSE: 'r', DRAW_TWO: 'd2', WILD: 'w', DRAW_FOUR: 'd4',
+  // Only ever in the deck when the matching mod is on. Appended, like Kotlin's enum, so
+  // a standard game sorts exactly as it always did.
+  DRAW_EIGHT: 'd8', DOUBLE_PLAY: 'x2',
 };
-const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5 };
+const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7 };
+
+/** The optional rules a host can switch on. Order matters: it numbers the extra cards. */
+export const Mod = { DRAW_EIGHT: 'd8', DOUBLE_PLAY: 'x2' };
+export const MOD_ORDER = [Mod.DRAW_EIGHT, Mod.DOUBLE_PLAY];
+export const MOD_INFO = {
+  d8: {
+    label: 'Les +8',
+    blurb: 'Deux +8 rejoignent le paquet. Ils fonctionnent exactement comme des +4, en '
+      + 'plus lourd : ils se cumulent avec les +4 et les +8, et un +2 de la couleur '
+      + 'annoncée les contre.',
+  },
+  x2: {
+    label: 'Coup double',
+    blurb: 'Cinq cartes en plus. Tu annonces une couleur, puis tu poses deux cartes de '
+      + 'suite. Une carte d\'attaque met fin au coup double : la pile part chez le voisin.',
+  },
+};
+export const orderedMods = (mods) => MOD_ORDER.filter((m) => mods.includes(m));
+
+/** How many cards a Coup double buys. */
+const BONUS_PLAYS = 2;
+export const DRAW_EIGHTS = 2;
+export const DOUBLE_PLAYS = 5;
 
 export const Penalty = { NONE: '0', DRAW_TWO: '2', DRAW_FOUR: '4' };
 export const Phase = { PLAYING: 'p', DECIDE_AFTER_DRAW: 'd', GAME_OVER: 'o' };
@@ -27,7 +53,10 @@ export const HOST_SEAT = 0;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 5;
 
-export const isWild = (card) => card.k === Kind.WILD || card.k === Kind.DRAW_FOUR;
+export const isWild = (card) => card.k === Kind.WILD || card.k === Kind.DRAW_FOUR
+  || card.k === Kind.DRAW_EIGHT || card.k === Kind.DOUBLE_PLAY;
+export const isPenalty = (card) => card.k === Kind.DRAW_TWO || card.k === Kind.DRAW_FOUR
+  || card.k === Kind.DRAW_EIGHT;
 export const isRealColor = (color) => color !== Color.WILD;
 
 const COLOR_NAME = { R: 'rouge', Y: 'jaune', G: 'vert', B: 'bleu', W: '-' };
@@ -35,6 +64,7 @@ const COLOR_NAME = { R: 'rouge', Y: 'jaune', G: 'vert', B: 'bleu', W: '-' };
 export function cardLabel(card) {
   const kindName = {
     n: String(card.n), s: 'Passe', r: 'Sens interdit', d2: '+2', w: 'Joker', d4: '+4',
+    d8: '+8', x2: 'Coup double',
   }[card.k];
   const colorName = card.c === Color.WILD ? '' : COLOR_NAME[card.c];
   return colorName ? `${kindName} ${colorName}` : kindName;
@@ -42,6 +72,15 @@ export function cardLabel(card) {
 
 /** The classic 108-card deck, built in the same order so ids line up with Kotlin's. */
 export function standardDeck() {
+  return buildDeck([]);
+}
+
+/**
+ * The deck for a room. The 108 classic cards are always built first and in the same
+ * order, so their ids never move whatever is switched on — and the extra cards are added
+ * in MOD_ORDER, never in the order the caller happened to list them.
+ */
+export function buildDeck(mods) {
   const cards = [];
   let id = 0;
   for (const color of PLAYABLE_COLORS) {
@@ -55,6 +94,17 @@ export function standardDeck() {
   }
   for (let i = 0; i < 4; i++) cards.push({ i: id++, c: Color.WILD, k: Kind.WILD, n: -1 });
   for (let i = 0; i < 4; i++) cards.push({ i: id++, c: Color.WILD, k: Kind.DRAW_FOUR, n: -1 });
+
+  if (mods.includes(Mod.DRAW_EIGHT)) {
+    for (let i = 0; i < DRAW_EIGHTS; i++) {
+      cards.push({ i: id++, c: Color.WILD, k: Kind.DRAW_EIGHT, n: -1 });
+    }
+  }
+  if (mods.includes(Mod.DOUBLE_PLAY)) {
+    for (let i = 0; i < DOUBLE_PLAYS; i++) {
+      cards.push({ i: id++, c: Color.WILD, k: Kind.DOUBLE_PLAY, n: -1 });
+    }
+  }
   return cards;
 }
 
@@ -75,12 +125,13 @@ function emptyStats() {
 }
 
 export class UnoEngine {
-  constructor(seedLow, seedHigh, playerCount) {
+  constructor(seedLow, seedHigh, playerCount, mods = []) {
     if (playerCount < MIN_PLAYERS || playerCount > MAX_PLAYERS) {
       throw new Error(`Une partie se joue de ${MIN_PLAYERS} à ${MAX_PLAYERS} joueurs`);
     }
     this.rng = new KotlinRandom(seedLow, seedHigh);
     this.playerCount = playerCount;
+    this.mods = orderedMods(mods);
     this.seats = [...Array(playerCount).keys()];
     this.hands = this.seats.map(() => []);
     this.drawPile = [];
@@ -93,6 +144,7 @@ export class UnoEngine {
     this.phase = Phase.PLAYING;
     this.winner = null;
     this.direction = 1;
+    this.extraPlays = 0;
     this.drawnCardId = -1;
     this.event = '';
     this.eventId = 0;
@@ -153,7 +205,7 @@ export class UnoEngine {
    */
   startRound(starter) {
     this.hands.forEach((h) => { h.length = 0; });
-    this.drawPile = shuffled(standardDeck(), this.rng);
+    this.drawPile = shuffled(buildDeck(this.mods), this.rng);
     this.discardPile = [];
 
     for (let round = 0; round < 7; round++) {
@@ -178,6 +230,7 @@ export class UnoEngine {
     this.direction = 1;
     this.pendingDraw = 0;
     this.pendingType = Penalty.NONE;
+    this.extraPlays = 0;
     this.phase = Phase.PLAYING;
     this.winner = null;
     this.drawnCardId = -1;
@@ -198,12 +251,13 @@ export class UnoEngine {
     if (this.pendingDraw > 0) {
       let allowed;
       if (this.pendingType === Penalty.DRAW_TWO) {
-        // Any +2 stacks onto a +2, and a +4 may be dropped on it too.
-        allowed = hand.filter((c) => c.k === Kind.DRAW_TWO || c.k === Kind.DRAW_FOUR);
+        // Any +2 stacks onto a +2, and a wild penalty may be dropped on it too.
+        allowed = hand.filter(isPenalty);
       } else if (this.pendingType === Penalty.DRAW_FOUR) {
-        // A +4 is answered by another +4, or by a +2 of the chosen colour.
-        allowed = hand.filter((c) =>
-          c.k === Kind.DRAW_FOUR || (c.k === Kind.DRAW_TWO && c.c === this.activeColor));
+        // A wild penalty is answered by another one, or by a +2 of the chosen colour.
+        // The +8 is a +4 that hits harder, so it lands in both places.
+        allowed = hand.filter((c) => c.k === Kind.DRAW_FOUR || c.k === Kind.DRAW_EIGHT
+          || (c.k === Kind.DRAW_TWO && c.c === this.activeColor));
       } else {
         allowed = [];
       }
@@ -250,8 +304,9 @@ export class UnoEngine {
     const tally = this.stats[seat];
     tally.cp++;
     if (card.k === Kind.DRAW_TWO) { tally.d2++; if (wasCountering) tally.co++; }
-    else if (card.k === Kind.DRAW_FOUR) { tally.d4++; if (wasCountering) tally.co++; }
-    else if (card.k === Kind.WILD) tally.w++;
+    else if (card.k === Kind.DRAW_FOUR || card.k === Kind.DRAW_EIGHT) {
+      tally.d4++; if (wasCountering) tally.co++;
+    } else if (card.k === Kind.WILD || card.k === Kind.DOUBLE_PLAY) tally.w++;
     else if (card.k === Kind.SKIP || card.k === Kind.REVERSE) tally.sk++;
 
     const name = this.seatName(seat);
@@ -301,22 +356,63 @@ export class UnoEngine {
         this.turn = this.seatAfter(seat);
         this.pushEvent(`${name} pose +4 ${COLOR_NAME[this.activeColor]} — total +${this.pendingDraw}`);
         break;
+      case Kind.DRAW_EIGHT:
+        this.activeColor = chosenColor;
+        this.pendingDraw += 8;
+        // Deliberately the same penalty type as a +4: every rule that keys off the type
+        // treats the two identically, which is the whole point of the mod.
+        this.pendingType = Penalty.DRAW_FOUR;
+        tally.bd = Math.max(tally.bd, this.pendingDraw);
+        this.turn = this.seatAfter(seat);
+        this.pushEvent(`${name} pose +8 ${COLOR_NAME[this.activeColor]} — total +${this.pendingDraw}`);
+        break;
+      case Kind.DOUBLE_PLAY:
+        this.activeColor = chosenColor;
+        // The turn stays put: the two bonus cards are laid down right now.
+        this.turn = seat;
+        this.pushEvent(`${name} joue un coup double en ${COLOR_NAME[this.activeColor]}`);
+        break;
       default:
         break;
     }
 
+    this.advanceBonus(card, seat);
+
     if (hand.length === 0) {
       this.winner = seat;
       this.phase = Phase.GAME_OVER;
+      this.extraPlays = 0;
       this.scores[seat]++;
       this.pushEvent(`${name} gagne la manche !`);
     }
     return true;
   }
 
+  /**
+   * Keeps the Coup double running, or ends it. Only a quiet card — a number or a Joker —
+   * spends a bonus play and leaves the table where it is; anything that moves the turn on
+   * ends the bonus, because the stack has to reach the next player.
+   */
+  advanceBonus(card, seat) {
+    if (card.k === Kind.DOUBLE_PLAY) {
+      this.extraPlays = BONUS_PLAYS;
+      this.appendEvent(` — ${BONUS_PLAYS} cartes à poser`);
+      return;
+    }
+    if (this.extraPlays === 0) return;
+
+    const quiet = card.k === Kind.NUMBER || card.k === Kind.WILD;
+    if (!quiet) { this.extraPlays = 0; return; }
+    this.extraPlays--;
+    this.turn = this.extraPlays > 0 ? seat : this.seatAfter(seat);
+    if (this.extraPlays > 0) this.appendEvent(` — encore ${this.extraPlays}`);
+  }
+
   /** Either eats the pending stack, or draws one card in a normal turn. */
   draw(seat) {
     if (seat !== this.turn || this.phase !== Phase.PLAYING) return false;
+    // A Coup double is played out of the hand you already have.
+    if (this.extraPlays > 0) return false;
 
     if (this.pendingDraw > 0) {
       const amount = this.pendingDraw;
@@ -361,7 +457,15 @@ export class UnoEngine {
   }
 
   pass(seat) {
-    if (seat !== this.turn || this.phase !== Phase.DECIDE_AFTER_DRAW) return false;
+    if (seat !== this.turn) return false;
+    if (this.phase === Phase.PLAYING && this.extraPlays > 0) {
+      this.extraPlays = 0;
+      this.clearPenaltyMark();
+      this.turn = this.seatAfter(seat);
+      this.pushEvent(`${this.seatName(seat)} s'arrête là`);
+      return true;
+    }
+    if (this.phase !== Phase.DECIDE_AFTER_DRAW) return false;
     this.drawnCardId = -1;
     this.clearPenaltyMark();
     this.phase = Phase.PLAYING;
@@ -397,6 +501,11 @@ export class UnoEngine {
    * for them. A normal draw stays a deliberate act.
    */
   autoAdvance() {
+    // A Coup double with nothing left to lay is not a decision, it is a dead end.
+    if (this.phase === Phase.PLAYING && this.extraPlays > 0
+      && this.legalCardIds(this.turn).length === 0) {
+      this.pass(this.turn);
+    }
     let guard = 0;
     while (
       this.phase === Phase.PLAYING &&
@@ -437,6 +546,10 @@ export class UnoEngine {
       st: { ...this.stats[seat] },
       ya: this.avatars[seat],
       dr: this.direction,
+      // Sent to everyone, not just the player on turn: the table wants to know why one
+      // player is laying three cards in a row.
+      xp: this.extraPlays,
+      md: this.mods,
     };
   }
 
@@ -461,6 +574,11 @@ export class UnoEngine {
     this.event = text;
     this.eventId++;
   }
+
+  /** Adds to the line just pushed without counting as a second event. */
+  appendEvent(suffix) {
+    this.event += suffix;
+  }
 }
 
 // Derived read-only helpers, mirroring GameView's computed properties in Kotlin.
@@ -469,8 +587,11 @@ export const view = {
   yourTurn: (v) => v.ts === v.y && v.ph !== Phase.GAME_OVER,
   youWon: (v) => v.w === v.y,
   mustAnswerPenalty: (v) => v.pd > 0 && view.yourTurn(v),
-  canPass: (v) => v.ph === Phase.DECIDE_AFTER_DRAW && view.yourTurn(v),
-  canDraw: (v) => view.yourTurn(v) && v.ph === Phase.PLAYING && v.pd === 0,
+  inBonus: (v) => (v.xp ?? 0) > 0 && v.ph === Phase.PLAYING,
+  canPass: (v) => view.yourTurn(v)
+    && (v.ph === Phase.DECIDE_AFTER_DRAW || view.inBonus(v)),
+  canDraw: (v) => view.yourTurn(v) && v.ph === Phase.PLAYING && v.pd === 0
+    && (v.xp ?? 0) === 0,
   mustDraw: (v) => view.canDraw(v) && v.l.length === 0,
   topCameFromOpponent: (v) => v.lp !== null && v.lp !== v.y,
   penaltyIsMine: (v) => v.pk > 0 && v.pv === v.y,

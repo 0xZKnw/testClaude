@@ -61,6 +61,33 @@ object Rules {
                 "Si la carte piochée est jouable, tu choisis : la poser, ou passer ton tour.",
                 "En revanche, un cumul de +2 ou +4 que tu ne peux pas contrer est encaissé automatiquement — inutile de le confirmer."
             )
+        ),
+        Section(
+            "Parties personnalisées",
+            listOf(
+                "En créant un salon tu choisis entre une partie normale et une partie personnalisée. Une partie personnalisée ajoute les mods que tu coches — autant que tu veux, ils se cumulent.",
+                "Les mods n'ajoutent que des cartes : le jeu de base ne change pas, il y en a simplement plus dans le paquet.",
+                "Les mods actifs sont affichés dans le salon avant le lancement, et le solo les propose aussi."
+            )
+        ),
+        Section(
+            "Mod « ${GameMod.DRAW_EIGHT.label} »",
+            listOf(
+                "${Deck.DRAW_EIGHTS} +8 rejoignent le paquet.",
+                "Ils se comportent exactement comme des +4 : cumul avec les +4 et les +8, et le porteur annonce une couleur.",
+                "Un +2 de la couleur annoncée les contre, comme pour un +4.",
+                "Encaisser une pile terminée par un +8 coûte aussi le tour."
+            )
+        ),
+        Section(
+            "Mod « ${GameMod.DOUBLE_PLAY.label} »",
+            listOf(
+                "${Deck.DOUBLE_PLAYS} cartes Coup double rejoignent le paquet. Elles se posent sur n'importe quoi, comme un Joker.",
+                "Tu annonces une couleur, puis tu poses deux cartes de plus en suivant les règles habituelles.",
+                "Une carte d'attaque (Passe, Sens interdit, +2, +4, +8) met fin au coup double sur-le-champ : la main passe au joueur suivant.",
+                "Tu peux t'arrêter avant d'avoir posé tes deux cartes, et si tu n'as rien de jouable le coup double s'arrête tout seul.",
+                "Pas de pioche pendant un coup double : il se joue avec la main que tu as."
+            )
         )
     )
 }

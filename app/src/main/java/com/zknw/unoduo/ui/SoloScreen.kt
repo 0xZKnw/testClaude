@@ -8,18 +8,27 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zknw.unoduo.game.Difficulty
+import com.zknw.unoduo.game.GameMod
 import com.zknw.unoduo.ui.components.AvatarLook
 import com.zknw.unoduo.ui.components.GhostButton
 import com.zknw.unoduo.ui.components.InkChip
 import com.zknw.unoduo.ui.components.MenuBackground
+import com.zknw.unoduo.ui.components.ModPicker
+import com.zknw.unoduo.ui.components.SectionLabel
 import com.zknw.unoduo.ui.components.Panel
 import com.zknw.unoduo.ui.components.PlayerAvatar
 import com.zknw.unoduo.ui.components.ScreenHeader
@@ -27,11 +36,15 @@ import com.zknw.unoduo.ui.components.clickableNoRipple
 import com.zknw.unoduo.ui.theme.Palette
 
 @Composable
-fun SoloScreen(onPick: (Difficulty) -> Unit, onBack: () -> Unit) {
+fun SoloScreen(onPick: (Difficulty, Set<GameMod>) -> Unit, onBack: () -> Unit) {
+    // Picked before the difficulty, because the difficulty card is what starts the game.
+    var mods by remember { mutableStateOf(emptySet<GameMod>()) }
+
     MenuBackground {
         Column(
             Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 22.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -44,14 +57,21 @@ fun SoloScreen(onPick: (Difficulty) -> Unit, onBack: () -> Unit) {
             Spacer(Modifier.height(26.dp))
 
             Difficulty.entries.forEach { difficulty ->
-                DifficultyCard(difficulty) { onPick(difficulty) }
+                DifficultyCard(difficulty) { onPick(difficulty, mods) }
                 Spacer(Modifier.height(12.dp))
             }
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(10.dp))
+            SectionLabel("MODS", Modifier.fillMaxWidth())
+            Spacer(Modifier.height(10.dp))
+            ModPicker(mods) { mod ->
+                mods = if (mod in mods) mods - mod else mods + mod
+            }
+
+            Spacer(Modifier.height(14.dp))
             Text(
                 "Le bot ne voit que ce que tu vois : ta main lui est cachée, " +
-                    "comme la sienne l'est pour toi.",
+                    "comme la sienne l'est pour toi. Il joue les mods aussi.",
                 color = Palette.TextDim,
                 fontSize = 12.sp
             )
@@ -62,7 +82,7 @@ fun SoloScreen(onPick: (Difficulty) -> Unit, onBack: () -> Unit) {
                 modifier = Modifier.padding(top = 6.dp)
             )
 
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(18.dp))
             GhostButton("Retour", Modifier.fillMaxWidth()) { onBack() }
             Spacer(Modifier.height(22.dp))
         }

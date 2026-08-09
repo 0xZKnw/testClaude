@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -141,6 +143,44 @@ private fun BoxScope.CenterMark(card: Card, width: Dp) {
                 drawWildFour(size, Offset.Zero, Palette.Outline)
             }
         }
+
+        CardKind.WILD_DRAW_EIGHT -> Box(box.size(width * 0.70f)) {
+            Canvas(Modifier.fillMaxSize()) {
+                drawWildEight(size, Offset.Zero, Palette.Outline)
+            }
+        }
+
+        // Two blank cards and a badge that counts them. The badge sits in the corner of
+        // the fan rather than over its middle: centred, it covered the very cards it is
+        // there to count.
+        CardKind.DOUBLE_PLAY -> Box(box.size(width * 0.62f)) {
+            Canvas(Modifier.fillMaxSize()) {
+                drawMiniCards(
+                    colors = listOf(Palette.Stock, Palette.Stock),
+                    outline = Palette.Outline,
+                    boxSize = Size(size.width * 0.82f, size.height * 0.82f),
+                    origin = Offset.Zero
+                )
+            }
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(width * 0.29f)
+                    .clip(CircleShape)
+                    .background(Palette.Outline)
+                    .padding(width * 0.027f)
+                    .clip(CircleShape)
+                    .background(Palette.Gold),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "×2",
+                    color = Palette.Outline,
+                    fontWeight = FontWeight.Black,
+                    fontSize = with(density) { (width * 0.145f).toSp() }
+                )
+            }
+        }
     }
 }
 
@@ -189,6 +229,22 @@ private fun BoxScope.CornerMark(
             text = "+4",
             fontSize = small,
             fill = Palette.Stock,
+            outlineWidth = width * 0.022f,
+            modifier = base
+        )
+
+        CardKind.WILD_DRAW_EIGHT -> OutlinedGlyphText(
+            text = "+8",
+            fontSize = small,
+            fill = Palette.Stock,
+            outlineWidth = width * 0.022f,
+            modifier = base
+        )
+
+        CardKind.DOUBLE_PLAY -> OutlinedGlyphText(
+            text = "×2",
+            fontSize = small,
+            fill = Palette.Gold,
             outlineWidth = width * 0.022f,
             modifier = base
         )

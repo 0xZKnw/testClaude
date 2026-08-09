@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.zknw.unoduo.game.GameMod
 import com.zknw.unoduo.game.HOST_SEAT
 import com.zknw.unoduo.game.MAX_PLAYERS
 import com.zknw.unoduo.game.MIN_PLAYERS
@@ -27,6 +28,7 @@ import com.zknw.unoduo.ui.components.AvatarLook
 import com.zknw.unoduo.ui.components.GhostButton
 import com.zknw.unoduo.ui.components.InkChip
 import com.zknw.unoduo.ui.components.MenuBackground
+import com.zknw.unoduo.ui.components.ModSummary
 import com.zknw.unoduo.ui.components.Panel
 import com.zknw.unoduo.ui.components.PlayerAvatar
 import com.zknw.unoduo.ui.components.ScreenHeader
@@ -113,6 +115,7 @@ fun LobbyScreen(
     photos: Map<Seat, String>,
     mySeat: Seat,
     roomCode: String,
+    mods: Set<GameMod>,
     onLeave: () -> Unit
 ) {
     MenuBackground {
@@ -130,6 +133,8 @@ fun LobbyScreen(
             )
             Spacer(Modifier.height(24.dp))
             PlayerRoster(players, photos, mySeat)
+            Spacer(Modifier.height(16.dp))
+            ModSummary(mods)
             Spacer(Modifier.height(22.dp))
             StatusRow(text = "En attente de l'hôte…", busy = true)
             Spacer(Modifier.weight(1f))

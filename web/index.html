@@ -188,6 +188,21 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
 .row-line { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
 .grow { flex: 1; min-width: 0; }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Mode cards and mod rows: the same ink-and-slab language as the buttons, and the
+   chosen one lifts out of the page rather than merely changing colour. */
+.mode-card, .mod-row { cursor: pointer; }
+.mode-card.picked, .mod-row.picked { background: var(--slate-high); }
+.mode-card.picked .mod-name, .mod-row.picked .mod-name { color: var(--gold); }
+.mod-name { font-weight: 900; font-size: 17px; }
+.mod-blurb { color: var(--dim); font-size: 13px; margin-top: 5px; }
+.tick {
+  flex: 0 0 auto; width: 28px; height: 28px; border-radius: 9px;
+  border: 3px solid var(--ink); background: #0b0e14; color: var(--ink);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; font-size: 15px; box-shadow: 0 3px 0 var(--ink);
+}
+.tick.on { background: var(--gold); box-shadow: none; transform: translateY(3px); }
 .hidden { display: none !important; }
 .spinner {
   width: 16px; height: 16px; border: 3px solid var(--line); border-top-color: var(--gold);
@@ -259,6 +274,32 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
   </div>
 </section>
 
+<!-- ------------------------------------------------------------ créer une partie -->
+<section class="screen" id="screen-create">
+  <div class="scroll">
+    <div class="head">
+      <button class="icon-btn" data-back>‹</button>
+      <div><h2>Créer une partie</h2><p>Les règles maison sont toujours là. Le reste est à toi.</p></div>
+    </div>
+    <div class="panel mode-card" id="create-normal">
+      <div class="mod-name">Partie normale</div>
+      <div class="mod-blurb">Le jeu de 108 cartes et les règles maison, rien de plus.</div>
+    </div>
+    <div class="panel mode-card" id="create-custom">
+      <div class="mod-name">Partie personnalisée</div>
+      <div class="mod-blurb">Ajoute les mods que tu veux. Ils se cumulent tous.</div>
+    </div>
+    <div id="create-mods" class="hidden">
+      <div id="mod-list"></div>
+      <p class="lead" style="text-align:left;margin:12px 0 0">
+        Un mod n'enlève jamais rien : il ajoute des cartes au paquet. Les autres joueurs
+        les voient dans le salon avant le lancement.
+      </p>
+    </div>
+    <button class="btn" id="create-go" style="margin-top:18px">Ouvrir le salon</button>
+  </div>
+</section>
+
 <!-- --------------------------------------------------------------------- solo -->
 <section class="screen" id="screen-solo">
   <div class="scroll">
@@ -267,9 +308,12 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
       <div><h2>Jouer en solo</h2><p>Contre la machine. Mêmes règles maison.</p></div>
     </div>
     <div id="difficulty-list"></div>
+    <div class="label" style="margin-top:18px">MODS</div>
+    <div id="solo-mods" style="margin-top:10px"></div>
     <p class="lead" style="text-align:left">
       Le bot ne voit que ce que tu vois : ta main lui est cachée, comme la sienne l'est
-      pour toi. Les parties solo ne comptent pas dans les statistiques.
+      pour toi. Il joue les mods aussi. Les parties solo ne comptent pas dans les
+      statistiques.
     </p>
   </div>
 </section>
@@ -312,6 +356,7 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
       <div class="label" id="roster-label">JOUEURS</div>
       <div id="host-roster" style="margin-top:10px"></div>
     </div>
+    <div class="panel" id="host-mods"></div>
     <div class="row-line" id="host-status" style="justify-content:center"></div>
     <button class="btn" id="host-start">Lancer la partie</button>
     <button class="btn ghost" id="host-invite-more">Inviter un joueur de plus</button>
@@ -354,6 +399,7 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
       <div class="label">JOUEURS</div>
       <div id="lobby-roster" style="margin-top:10px"></div>
     </div>
+    <div class="panel" id="lobby-mods"></div>
     <div class="row-line" id="lobby-status" style="justify-content:center"></div>
   </div>
 </section>

@@ -14,8 +14,15 @@ import kotlin.random.Random
  *    the stack was a +4, and keeps their turn if it was a +2.
  *  - Reverse flips the direction of play. With exactly two players there is no
  *    direction to flip, so it acts as a Skip and the player goes again.
+ *
+ * [mods] are the optional rules the host switched on. They only ever add cards, so with
+ * none of them on this is bit-for-bit the game it has always been.
  */
-class UnoEngine(private val rng: Random, val playerCount: Int) {
+class UnoEngine(
+    private val rng: Random,
+    val playerCount: Int,
+    val mods: Set<GameMod> = emptySet()
+) {
 
     init {
         require(playerCount in MIN_PLAYERS..MAX_PLAYERS) {
@@ -43,6 +50,13 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
 
     /** +1 goes up the seats, -1 goes back down. Flipped by a Reverse at 3 or more. */
     var direction: Int = 1
+        private set
+
+    /**
+     * Cards the player on turn still owes the table after a Coup double. Always 0 unless
+     * [GameMod.DOUBLE_PLAY] is on.
+     */
+    var extraPlays: Int = 0
         private set
 
     /** Id of the card just drawn in [Phase.DECIDE_AFTER_DRAW], -1 otherwise. */
@@ -112,7 +126,7 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
         drawPile.clear()
         discardPile.clear()
 
-        drawPile.addAll(Deck.standard().shuffled(rng))
+        drawPile.addAll(Deck.build(mods).shuffled(rng))
 
         repeat(7) {
             seats.forEach { seat ->
@@ -141,6 +155,7 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
         direction = 1
         pendingDraw = 0
         pendingType = Penalty.NONE
+        extraPlays = 0
         phase = Phase.PLAYING
         winner = null
         drawnCardId = -1
@@ -160,13 +175,13 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
 
         if (pendingDraw > 0) {
             return when (pendingType) {
-                // Any +2 stacks onto a +2, and a +4 may be dropped on it too.
-                Penalty.DRAW_TWO -> hand.filter {
-                    it.kind == CardKind.DRAW_TWO || it.kind == CardKind.WILD_DRAW_FOUR
-                }
-                // A +4 is answered by another +4, or by a +2 of the chosen colour.
+                // Any +2 stacks onto a +2, and a wild penalty may be dropped on it too.
+                Penalty.DRAW_TWO -> hand.filter { it.isPenalty }
+                // A wild penalty is answered by another one, or by a +2 of the chosen
+                // colour. The +8 is a +4 that hits harder, so it lands in both places.
                 Penalty.DRAW_FOUR -> hand.filter {
                     it.kind == CardKind.WILD_DRAW_FOUR ||
+                        it.kind == CardKind.WILD_DRAW_EIGHT ||
                         (it.kind == CardKind.DRAW_TWO && it.color == activeColor)
                 }
                 Penalty.NONE -> emptyList()
@@ -224,12 +239,12 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
                 if (wasCountering) tally.countersPlayed++
             }
 
-            CardKind.WILD_DRAW_FOUR -> {
+            CardKind.WILD_DRAW_FOUR, CardKind.WILD_DRAW_EIGHT -> {
                 tally.drawFoursPlayed++
                 if (wasCountering) tally.countersPlayed++
             }
 
-            CardKind.WILD -> tally.wildsPlayed++
+            CardKind.WILD, CardKind.DOUBLE_PLAY -> tally.wildsPlayed++
             CardKind.SKIP, CardKind.REVERSE -> tally.skipsPlayed++
             CardKind.NUMBER -> Unit
         }
@@ -286,15 +301,64 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
                 turn = seatAfter(seat)
                 pushEvent("$name pose +4 ${colorName(activeColor)} — total +$pendingDraw")
             }
+
+            CardKind.WILD_DRAW_EIGHT -> {
+                activeColor = chosenColor!!
+                pendingDraw += 8
+                // Deliberately the same penalty type as a +4: every rule that keys off
+                // the type — what counters it, whether eating it costs you your turn —
+                // treats the two identically, which is the whole point of the mod.
+                pendingType = Penalty.DRAW_FOUR
+                tally.biggestStackDealt = maxOf(tally.biggestStackDealt, pendingDraw)
+                turn = seatAfter(seat)
+                pushEvent("$name pose +8 ${colorName(activeColor)} — total +$pendingDraw")
+            }
+
+            CardKind.DOUBLE_PLAY -> {
+                activeColor = chosenColor!!
+                // The turn stays put: the two bonus cards are laid down right now.
+                turn = seat
+                pushEvent("$name joue un coup double en ${colorName(activeColor)}")
+            }
         }
+
+        advanceBonus(card, seat)
 
         if (hand.isEmpty()) {
             winner = seat
             phase = Phase.GAME_OVER
+            extraPlays = 0
             scores[seat] = scores.getValue(seat) + 1
             pushEvent("$name gagne la manche !")
         }
         return true
+    }
+
+    /**
+     * Keeps the Coup double running, or ends it.
+     *
+     * Only a quiet card — a number or a Joker — spends one of the two bonus plays and
+     * leaves the table where it is. Anything that moves the turn on (Passe, Sens
+     * interdit, +2, +4, +8) ends the bonus there and then: the stack has to reach the
+     * next player, and a Coup double that could be followed by two +8 would not be a
+     * mod, it would be a win button.
+     */
+    private fun advanceBonus(card: Card, seat: Seat) {
+        if (card.kind == CardKind.DOUBLE_PLAY) {
+            extraPlays = BONUS_PLAYS
+            appendEvent(" — $BONUS_PLAYS cartes à poser")
+            return
+        }
+        if (extraPlays == 0) return
+
+        val quiet = card.kind == CardKind.NUMBER || card.kind == CardKind.WILD
+        if (!quiet) {
+            extraPlays = 0
+            return
+        }
+        extraPlays--
+        turn = if (extraPlays > 0) seat else seatAfter(seat)
+        if (extraPlays > 0) appendEvent(" — encore $extraPlays")
     }
 
     /**
@@ -303,6 +367,9 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
      */
     fun draw(seat: Seat): Boolean {
         if (seat != turn || phase != Phase.PLAYING) return false
+        // A Coup double is played out of the hand you already have; there is no drawing
+        // in the middle of it. Nothing to play simply ends the bonus.
+        if (extraPlays > 0) return false
 
         if (pendingDraw > 0) {
             val amount = pendingDraw
@@ -347,9 +414,17 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
         return true
     }
 
-    /** Declines to play the card that was just drawn. */
+    /** Declines to play the card that was just drawn, or stops a Coup double early. */
     fun pass(seat: Seat): Boolean {
-        if (seat != turn || phase != Phase.DECIDE_AFTER_DRAW) return false
+        if (seat != turn) return false
+        if (phase == Phase.PLAYING && extraPlays > 0) {
+            extraPlays = 0
+            clearPenaltyMark()
+            turn = seatAfter(seat)
+            pushEvent("${seatName(seat)} s'arrête là")
+            return true
+        }
+        if (phase != Phase.DECIDE_AFTER_DRAW) return false
         drawnCardId = -1
         clearPenaltyMark()
         phase = Phase.PLAYING
@@ -388,6 +463,10 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
      * deck — because doing it silently reads as the game playing itself.
      */
     fun autoAdvance() {
+        // A Coup double with nothing left to lay is not a decision, it is a dead end.
+        if (phase == Phase.PLAYING && extraPlays > 0 && legalCardIds(turn).isEmpty()) {
+            pass(turn)
+        }
         var guard = 0
         while (phase == Phase.PLAYING &&
             pendingDraw > 0 &&
@@ -430,7 +509,11 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
         penaltyVictim = penaltyVictim,
         yourStats = stats.getValue(seat).snapshot(),
         yourAvatar = avatars.getValue(seat),
-        direction = direction
+        direction = direction,
+        // Sent to everyone, not just the player on turn: the table wants to know why
+        // one player is laying three cards in a row.
+        extraPlays = extraPlays,
+        mods = mods.ordered()
     )
 
     /**
@@ -455,6 +538,11 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
         eventId++
     }
 
+    /** Adds to the line just pushed without counting as a second event. */
+    private fun appendEvent(suffix: String) {
+        event += suffix
+    }
+
     private fun defaultName(seat: Seat): String =
         if (seat == HOST_SEAT) "Hôte" else "Joueur ${seat + 1}"
 
@@ -468,6 +556,9 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
 
     private companion object {
         const val AUTO_GUARD = 300
+
+        /** How many cards a Coup double buys. */
+        const val BONUS_PLAYS = 2
 
         /** Hands are shown grouped by colour, then by symbol, then by number. */
         val HAND_ORDER: Comparator<Card> = compareBy(
@@ -488,7 +579,8 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
         pending: Int = 0,
         penalty: Penalty = Penalty.NONE,
         deck: List<Card> = emptyList(),
-        way: Int = 1
+        way: Int = 1,
+        bonus: Int = 0
     ) {
         require(playerHands.size == playerCount) { "Il faut une main par joueur" }
         playerHands.forEachIndexed { seat, cards ->
@@ -504,6 +596,7 @@ class UnoEngine(private val rng: Random, val playerCount: Int) {
         direction = way
         pendingDraw = pending
         pendingType = penalty
+        extraPlays = bonus
         phase = Phase.PLAYING
         winner = null
         drawnCardId = -1

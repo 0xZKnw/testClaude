@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zknw.unoduo.game.Card
 import com.zknw.unoduo.game.CardColor
+import com.zknw.unoduo.game.GameMod
 import com.zknw.unoduo.game.GameView
 import com.zknw.unoduo.game.Penalty
 import com.zknw.unoduo.game.Phase
@@ -135,7 +136,8 @@ fun GameScreen(
 
             TurnBanner(view)
 
-            // The only button left: declining the card you were just forced to draw.
+            // The only button left: declining the card you were just forced to draw,
+            // or cutting a Coup double short.
             AnimatedVisibility(visible = view.canPass) {
                 Box(
                     Modifier
@@ -143,7 +145,7 @@ fun GameScreen(
                         .padding(horizontal = 22.dp, vertical = 4.dp)
                 ) {
                     PrimaryButton(
-                        text = "Passer mon tour",
+                        text = if (view.inBonus) "Arrêter là" else "Passer mon tour",
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !inputLocked
                     ) { onPass() }
@@ -277,13 +279,22 @@ private fun PenaltyOverlay(hit: PenaltyHit) {
 private fun illegalReason(view: GameView): String = when {
     !view.yourTurn -> "Ce n'est pas ton tour."
     view.pendingDraw > 0 && view.pendingType == Penalty.DRAW_FOUR ->
-        "Il te faut un +4, ou un +2 ${colorLabel(view.activeColor)}."
+        "Il te faut ${bigPenalties(view)}, ou un +2 ${colorLabel(view.activeColor)}."
 
-    view.pendingDraw > 0 -> "Il te faut un +2 (ou un +4) pour continuer la pile."
+    view.pendingDraw > 0 -> "Il te faut un +2 (ou ${bigPenalties(view)}) pour continuer la pile."
     view.phase == Phase.DECIDE_AFTER_DRAW -> "Tu ne peux poser que la carte piochée."
+    view.inBonus && view.legal.isEmpty() -> "Plus rien à poser : arrête le coup double."
     view.legal.isEmpty() -> "Rien à poser : touche la pioche."
     else -> "Carte non jouable."
 }
+
+/** "un +4", or "un +4 ou un +8" once the mod is on — never a rule the room is not playing. */
+private fun bigPenalties(view: GameView): String =
+    if (GameMod.DRAW_EIGHT in view.mods) "un +4 ou un +8" else "un +4"
+
+/** "1 carte" / "2 cartes" — a bonus counter that reads as French, not as a number. */
+private fun cardsLeft(count: Int): String =
+    if (count > 1) "$count cartes" else "$count carte"
 
 private fun colorLabel(color: CardColor): String = when (color) {
     CardColor.RED -> "rouge"
@@ -657,10 +668,13 @@ private fun TurnBanner(view: GameView) {
             if (view.youWon) "Tu as gagné !" else "${view.winner?.let(view::nameOf) ?: "?"} a gagné"
 
         view.mustAnswerPenalty && view.pendingType == Penalty.DRAW_FOUR ->
-            "+${view.pendingDraw} — contre avec un +4 ou un +2 ${colorLabel(view.activeColor)}"
+            "+${view.pendingDraw} — contre avec ${bigPenalties(view)} " +
+                "ou un +2 ${colorLabel(view.activeColor)}"
 
         view.mustAnswerPenalty -> "+${view.pendingDraw} — contre-attaque ou encaisse"
         view.phase == Phase.DECIDE_AFTER_DRAW && yours -> "Carte piochée : pose-la ou passe"
+        view.inBonus && yours -> "Coup double — ${cardsLeft(view.extraPlays)} à poser"
+        view.inBonus -> "Coup double de ${view.turnName} — ${cardsLeft(view.extraPlays)}"
         view.mustDraw -> "Rien à poser — touche la pioche"
         yours -> "À toi de jouer"
         else -> "Au tour de ${view.turnName}"

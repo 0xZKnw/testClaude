@@ -7,7 +7,7 @@
 
 import {
   UnoEngine, Phase, Color, Kind, PLAYABLE_COLORS, HOST_SEAT, MIN_PLAYERS, MAX_PLAYERS,
-  view as V, isWild,
+  view as V, isWild, Mod, MOD_ORDER, MOD_INFO, orderedMods,
 } from './engine.js';
 import { decide, DIFFICULTY_ORDER, DIFFICULTY_INFO } from './bot.js';
 import { cardFace, cardBack, colorChip, PALETTE } from './cards.js';
@@ -32,6 +32,7 @@ const state = {
   photos: {},           // seat -> data URL
   mySeat: HOST_SEAT,
   myView: null,
+  mods: [],             // the optional rules this room plays with
   rematch: new Set(),
   seatOfKey: new Map(),
   keyOfSeat: new Map(),
@@ -44,7 +45,7 @@ const state = {
 
 // --------------------------------------------------------------------- screens
 
-const SCREENS = ['home', 'profile', 'solo', 'rules', 'host', 'join', 'lobby', 'game'];
+const SCREENS = ['home', 'profile', 'create', 'solo', 'rules', 'host', 'join', 'lobby', 'game'];
 let previous = 'home';
 
 function show(name) {
@@ -190,8 +191,12 @@ $('difficulty-list').innerHTML = DIFFICULTY_ORDER.map((d) => {
 }).join('');
 
 $('difficulty-list').querySelectorAll('[data-difficulty]').forEach((node) => {
-  node.onclick = () => startSolo(node.dataset.difficulty);
+  node.onclick = () => startSolo(node.dataset.difficulty, soloMods.slice());
 });
+
+/** Picked before the difficulty, because the difficulty card is what starts the game. */
+let soloMods = [];
+mountModPicker('solo-mods', () => soloMods, (next) => { soloMods = next; });
 
 $('go-solo').onclick = () => show('solo');
 
@@ -202,7 +207,7 @@ function teardown() {
   state.net?.stop();
   Object.assign(state, {
     role: null, engine: null, solo: null, players: [], photos: {}, mySeat: HOST_SEAT,
-    myView: null, rematch: new Set(), seatOfKey: new Map(), keyOfSeat: new Map(),
+    myView: null, mods: [], rematch: new Set(), seatOfKey: new Map(), keyOfSeat: new Map(),
     net: null, botTimer: null, pendingWild: null, lastRecordedRound: -1,
     nextStarter: 1,
   });
@@ -222,10 +227,11 @@ function newSeed() {
   return [a[0] | 0, a[1] | 0];
 }
 
-function startSolo(difficulty) {
+function startSolo(difficulty, mods = []) {
   teardown();
   state.role = 'solo';
   state.solo = difficulty;
+  state.mods = orderedMods(mods);
   state.mySeat = HOST_SEAT;
   const botColor = state.profile.avatarColor === BOT_AVATAR ? BOT_AVATAR_ALT : BOT_AVATAR;
   state.players = [
@@ -242,9 +248,10 @@ function startRound(firstRound) {
   const players = [...state.players].sort((a, b) => a.s - b.s);
   if (players.length < MIN_PLAYERS) return;
   let e = state.engine;
-  if (!e || e.playerCount !== players.length) {
+  const mods = orderedMods(state.mods);
+  if (!e || e.playerCount !== players.length || e.mods.join() !== mods.join()) {
     const [low, high] = newSeed();
-    e = new UnoEngine(low, high, players.length);
+    e = new UnoEngine(low, high, players.length, mods);
     state.engine = e;
   }
   players.forEach((p) => { e.setName(p.s, p.n); e.setAvatar(p.s, p.a); });
@@ -332,7 +339,7 @@ function firstFreeSeat() {
 }
 
 function broadcastLobby() {
-  state.net?.broadcast({ t: 'lobby', p: state.players, st: !!state.engine });
+  state.net?.broadcast({ t: 'lobby', p: state.players, st: !!state.engine, md: state.mods });
 }
 
 function onGuestMessage(key, msg) {
@@ -425,6 +432,7 @@ function onHostMessage(msg) {
       break;
     case 'lobby':
       state.players = (msg.p || []).slice().sort((a, b) => a.s - b.s);
+      state.mods = orderedMods(msg.md || []);
       renderGuestLobby();
       break;
     case 'photo':
@@ -501,9 +509,27 @@ async function scanQr(videoId, onFound) {
   tick();
 }
 
-$('go-host').onclick = async () => {
+$('go-host').onclick = () => show('create');
+
+let createCustom = false;
+let createMods = [];
+
+function renderCreate() {
+  $('create-normal').classList.toggle('picked', !createCustom);
+  $('create-custom').classList.toggle('picked', createCustom);
+  $('create-mods').classList.toggle('hidden', !createCustom);
+}
+$('create-normal').onclick = () => { createCustom = false; renderCreate(); };
+$('create-custom').onclick = () => { createCustom = true; renderCreate(); };
+mountModPicker('mod-list', () => createMods, (next) => { createMods = next; });
+renderCreate();
+
+$('create-go').onclick = () => openRoom(createCustom ? createMods.slice() : []);
+
+async function openRoom(mods) {
   teardown();
   state.role = 'host';
+  state.mods = orderedMods(mods);
   state.mySeat = HOST_SEAT;
   state.players = [{ s: HOST_SEAT, n: myName(), a: state.profile.avatarColor }];
   state.photos = state.profile.photo ? { [HOST_SEAT]: state.profile.photo } : {};
@@ -511,7 +537,7 @@ $('go-host').onclick = async () => {
   show('host');
   renderHostLobby();
   await newInvite();
-};
+}
 
 async function newInvite() {
   $('host-status').innerHTML = '<div class="spinner"></div><span>Préparation de l\'invitation…</span>';
@@ -574,8 +600,52 @@ function rosterHtml(target) {
   $(target).innerHTML = rows + waiting;
 }
 
+/**
+ * The mod list, wired the same way in the create screen and the solo screen so the two
+ * can never offer different rules. Every mod is independent — ticking one never unticks
+ * another.
+ */
+function mountModPicker(target, get, set) {
+  const box = $(target);
+  const paint = () => {
+    const chosen = get();
+    box.innerHTML = MOD_ORDER.map((mod) => {
+      const on = chosen.includes(mod);
+      return `<div class="panel mod-row ${on ? 'picked' : ''}" data-mod="${mod}">
+        <div class="row-line" style="align-items:flex-start">
+          <span class="tick ${on ? 'on' : ''}">${on ? '&#10003;' : ''}</span>
+          <div class="grow">
+            <div class="mod-name">${esc(MOD_INFO[mod].label)}</div>
+            <div class="mod-blurb">${esc(MOD_INFO[mod].blurb)}</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    box.querySelectorAll('[data-mod]').forEach((node) => {
+      node.onclick = () => {
+        const mod = node.dataset.mod;
+        const current = get();
+        set(current.includes(mod) ? current.filter((m) => m !== mod) : [...current, mod]);
+        paint();
+      };
+    });
+  };
+  paint();
+}
+
+/** What a room is playing with, so nobody discovers the +8 by eating one. */
+function modSummaryHtml(target) {
+  const mods = orderedMods(state.mods);
+  $(target).innerHTML = `
+    <div class="label">${mods.length ? 'PARTIE PERSONNALISÉE' : 'PARTIE NORMALE'}</div>
+    ${mods.length
+      ? mods.map((m) => `<span class="chip gold" style="margin-top:8px">${esc(MOD_INFO[m].label)}</span>`).join(' ')
+      : '<div style="color:var(--dim);font-size:13px;margin-top:8px">Règles maison habituelles, jeu de 108 cartes.</div>'}`;
+}
+
 function renderHostLobby() {
   rosterHtml('host-roster');
+  modSummaryHtml('host-mods');
   $('roster-label').textContent = `JOUEURS ${state.players.length}/${MAX_PLAYERS}`;
   const ready = state.players.length >= MIN_PLAYERS;
   $('host-start').disabled = !ready;
@@ -585,6 +655,7 @@ function renderHostLobby() {
 
 function renderGuestLobby() {
   rosterHtml('lobby-roster');
+  modSummaryHtml('lobby-mods');
   $('lobby-status').innerHTML = state.players.length
     ? '<div class="spinner"></div><span>En attente que l\'hôte lance…</span>'
     : '<div class="spinner"></div><span>Connexion au salon…</span>';
@@ -719,11 +790,15 @@ function renderGame() {
   if (v.ph === Phase.GAME_OVER) {
     text = V.youWon(v) ? 'Tu as gagné !' : `${V.nameOf(v, v.w)} a gagné`;
   } else if (V.mustAnswerPenalty(v) && v.pt === '4') {
-    text = `+${v.pd} — contre avec un +4 ou un +2 ${colorName(v.ac)}`;
+    text = `+${v.pd} — contre avec ${bigPenalties(v)} ou un +2 ${colorName(v.ac)}`;
   } else if (V.mustAnswerPenalty(v)) {
     text = `+${v.pd} — contre-attaque ou encaisse`;
   } else if (v.ph === Phase.DECIDE_AFTER_DRAW && yours) {
     text = 'Carte piochée : pose-la ou passe';
+  } else if (V.inBonus(v) && yours) {
+    text = `Coup double — ${cardsLeft(v.xp)} à poser`;
+  } else if (V.inBonus(v)) {
+    text = `Coup double de ${V.turnName(v)} — ${cardsLeft(v.xp)}`;
   } else if (mustDraw) {
     text = 'Rien à poser — touche la pioche';
   } else if (yours) {
@@ -735,6 +810,7 @@ function renderGame() {
   $('banner').innerHTML = arrow + `<span class="${yours ? 'mine' : ''}">${esc(text)}</span>`;
 
   $('pass-wrap').classList.toggle('hidden', !V.canPass(v));
+  $('pass-btn').textContent = V.inBonus(v) ? 'Arrêter là' : 'Passer mon tour';
 
   // ---- your hand
   if (v.rd !== knownRound) { knownCards = new Set(); knownRound = v.rd; }
@@ -837,11 +913,22 @@ function tapCard(cardId) {
 
 function illegalReason(v) {
   if (!V.yourTurn(v)) return "Ce n'est pas ton tour.";
-  if (v.pd > 0 && v.pt === '4') return `Il te faut un +4, ou un +2 ${colorName(v.ac)}.`;
-  if (v.pd > 0) return 'Il te faut un +2 (ou un +4) pour continuer la pile.';
+  if (v.pd > 0 && v.pt === '4') return `Il te faut ${bigPenalties(v)}, ou un +2 ${colorName(v.ac)}.`;
+  if (v.pd > 0) return `Il te faut un +2 (ou ${bigPenalties(v)}) pour continuer la pile.`;
   if (v.ph === Phase.DECIDE_AFTER_DRAW) return 'Tu ne peux poser que la carte piochée.';
+  if (V.inBonus(v) && !v.l.length) return 'Plus rien à poser : arrête le coup double.';
   if (!v.l.length) return 'Rien à poser : touche la pioche.';
   return 'Carte non jouable.';
+}
+
+/** "un +4", or "un +4 ou un +8" once the mod is on — never a rule the room is not playing. */
+function bigPenalties(v) {
+  return (v.md || []).includes(Mod.DRAW_EIGHT) ? 'un +4 ou un +8' : 'un +4';
+}
+
+/** "1 carte" / "2 cartes" — a bonus counter that reads as French, not as a number. */
+function cardsLeft(count) {
+  return count > 1 ? `${count} cartes` : `${count} carte`;
 }
 
 function openPicker(cardId) {

@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8733;
 const server = spawn('npx', ['http-server', webRoot, '-p', String(PORT), '-s'], { stdio: 'ignore' });
-await new Promise((r) => setTimeout(r, 2500));
+await new Promise((r) => setTimeout(r, 6000));
 
 const URL = `http://localhost:${PORT}/index.html`;
 const browser = await chromium.launch();
@@ -60,12 +60,17 @@ try {
   guard(solo, 'solo');
   await solo.goto(URL);
   await solo.click('#go-solo');
+  // Both mods on, so the solo pass covers the +8 and the Coup double as well.
+  await solo.click('#solo-mods [data-mod="d8"]');
+  await solo.click('#solo-mods [data-mod="x2"]');
   await solo.click('[data-difficulty="HARD"]');
   await solo.waitForSelector('#screen-game.on');
 
   let moves = 0;
   let over = false;
-  for (let i = 0; i < 400 && !over; i++) {
+  // Generous: every bot turn costs its 750 ms think time, and a long round is a normal
+  // round, not a hang.
+  for (let i = 0; i < 900 && !over; i++) {
     over = await solo.evaluate(() => document.getElementById('over').classList.contains('on'));
     if (over) break;
     const mine = await solo.evaluate(yourTurn);
@@ -99,7 +104,13 @@ try {
   await host.evaluate(() => localStorage.setItem('uno.profile',
     JSON.stringify({ name: 'Zak', avatarColor: 0, photo: null, stats: {} })));
   await host.reload();
+  // Through the create screen, with both mods on: the pairing, the lobby and a whole
+  // modded game all get covered in one pass.
   await host.click('#go-host');
+  await host.click('#create-custom');
+  await host.click('[data-mod="d8"]');
+  await host.click('[data-mod="x2"]');
+  await host.click('#create-go');
   await host.waitForFunction(() => document.querySelector('#qrbox svg'), null, { timeout: 15000 });
   const invite = await host.evaluate(() =>
     document.querySelector('#qrbox svg') && window.__lastInvite);
@@ -124,13 +135,24 @@ try {
   const roster = await host.$$eval('#host-roster .row-line', (n) => n.length);
   console.log(`  joueurs dans le salon : ${roster}`);
 
+  // The guest must be told what it is playing before a single card is dealt. The host
+  // sees its own roster fill first, so wait for the broadcast to land over there.
+  await guest.waitForFunction(
+    () => document.querySelectorAll('#lobby-mods .chip').length > 0,
+    null,
+    { timeout: 15000 },
+  );
+  const guestMods = await guest.$$eval('#lobby-mods .chip', (n) => n.map((c) => c.textContent));
+  console.log(`  mods annonces a l'invite : ${guestMods.join(', ') || 'aucun'}`);
+  if (guestMods.length !== 2) problems.push(`le salon invite annonce ${guestMods.length} mod(s) au lieu de 2`);
+
   await host.click('#host-start');
   await host.waitForSelector('#screen-game.on');
   await guest.waitForSelector('#screen-game.on', { timeout: 15000 });
   console.log('  les deux ecrans sont sur la table');
 
   let exchanged = 0;
-  for (let i = 0; i < 260; i++) {
+  for (let i = 0; i < 600; i++) {
     const done = await host.evaluate(() => document.getElementById('over').classList.contains('on'));
     if (done) break;
     for (const page of [host, guest]) {

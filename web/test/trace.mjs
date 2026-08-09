@@ -3,11 +3,11 @@
 //
 //   node web/test/trace.mjs > /tmp/trace-js.txt
 
-import { UnoEngine, Phase, Color } from '../src/engine.js';
+import { UnoEngine, Phase, Color, view as V } from '../src/engine.js';
 import { decide, Difficulty, DIFFICULTY_ORDER } from '../src/bot.js';
 import { KotlinRandom } from '../src/random.js';
 
-const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5 };
+const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7 };
 const COLOR_ORDER = { R: 0, Y: 1, G: 2, B: 3, W: 4 };
 
 // Kotlin prints enum names; map the wire codes back so the traces read the same.
@@ -25,63 +25,75 @@ function snapshot(tag, e) {
     .join('.');
   return [
     tag, e.turn, PHASE_NAME[e.phase], COLOR_ENUM[e.activeColor], e.pendingDraw,
-    PENALTY_NAME[e.pendingType], e.deckCount(), hands, e.top().i, e.direction,
+    PENALTY_NAME[e.pendingType], e.deckCount(), hands, e.top().i, e.direction, e.extraPlays,
     e.winner === null ? 'null' : e.winner, seat0, e.event,
   ].join('|');
 }
 
 const lines = [];
 
-for (let players = 2; players <= 5; players++) {
-  for (let seed = 1; seed <= 30; seed++) {
-    // ---- policy A: always the lowest legal card
-    let e = new UnoEngine(seed, 0, players);
-    e.startRound(seed % players);
-    lines.push(snapshot(`A${players}/${seed} deal`, e));
-    let guard = 0;
-    while (e.phase !== Phase.GAME_OVER && guard++ < 4000) {
-      e.autoAdvance();
-      lines.push(snapshot(`A${players}/${seed} auto`, e));
-      if (e.phase === Phase.GAME_OVER) break;
-      const seat = e.turn;
-      const legal = e.legalCardIds(seat).slice().sort((a, b) => a - b);
-      let action;
-      if (legal.length) {
-        e.playCard(seat, legal[0], Color.RED);
-        action = `play${legal[0]}`;
-      } else if (e.phase === Phase.DECIDE_AFTER_DRAW) {
-        e.pass(seat);
-        action = 'pass';
-      } else {
-        e.draw(seat);
-        action = 'draw';
-      }
-      lines.push(snapshot(`A${players}/${seed} ${action}`, e));
-    }
+// The plain game first, so a diff against an older trace starts with the lines that are
+// supposed to be untouched.
+const MOD_SETS = [
+  ['', []],
+  ['8', ['d8']],
+  ['D', ['x2']],
+  ['X', ['d8', 'x2']],
+];
 
-    // ---- policy B: the bot, every level
-    const rng = new KotlinRandom(seed * 31, 0);
-    e = new UnoEngine(seed, 0, players);
-    e.startRound(seed % players);
-    const levels = [...Array(players).keys()].map((i) => DIFFICULTY_ORDER[i % DIFFICULTY_ORDER.length]);
-    guard = 0;
-    while (e.phase !== Phase.GAME_OVER && guard++ < 4000) {
-      e.autoAdvance();
-      if (e.phase === Phase.GAME_OVER) break;
-      const seat = e.turn;
-      const move = decide(e.viewFor(seat), levels[seat], rng);
-      let action;
-      if (move.kind === 'play') {
-        e.playCard(seat, move.cardId, move.color);
-        action = `play${move.cardId}/${move.color === null ? 'null' : COLOR_ENUM[move.color]}`;
-      } else if (move.kind === 'draw') {
-        e.draw(seat);
-        action = 'draw';
-      } else {
-        e.pass(seat);
-        action = 'pass';
+for (const [tag, mods] of MOD_SETS) {
+  for (let players = 2; players <= 5; players++) {
+    for (let seed = 1; seed <= 30; seed++) {
+      // ---- policy A: always the lowest legal card
+      let e = new UnoEngine(seed, 0, players, mods);
+      e.startRound(seed % players);
+      lines.push(snapshot(`A${tag}${players}/${seed} deal`, e));
+      let guard = 0;
+      while (e.phase !== Phase.GAME_OVER && guard++ < 4000) {
+        e.autoAdvance();
+        lines.push(snapshot(`A${tag}${players}/${seed} auto`, e));
+        if (e.phase === Phase.GAME_OVER) break;
+        const seat = e.turn;
+        const legal = e.legalCardIds(seat).slice().sort((a, b) => a - b);
+        let action;
+        if (legal.length) {
+          e.playCard(seat, legal[0], Color.RED);
+          action = `play${legal[0]}`;
+        } else if (V.canPass(e.viewFor(seat))) {
+          e.pass(seat);
+          action = 'pass';
+        } else {
+          e.draw(seat);
+          action = 'draw';
+        }
+        lines.push(snapshot(`A${tag}${players}/${seed} ${action}`, e));
       }
-      lines.push(snapshot(`B${players}/${seed} ${action}`, e));
+
+      // ---- policy B: the bot, every level
+      const rng = new KotlinRandom(seed * 31, 0);
+      e = new UnoEngine(seed, 0, players, mods);
+      e.startRound(seed % players);
+      const levels = [...Array(players).keys()]
+        .map((i) => DIFFICULTY_ORDER[i % DIFFICULTY_ORDER.length]);
+      guard = 0;
+      while (e.phase !== Phase.GAME_OVER && guard++ < 4000) {
+        e.autoAdvance();
+        if (e.phase === Phase.GAME_OVER) break;
+        const seat = e.turn;
+        const move = decide(e.viewFor(seat), levels[seat], rng);
+        let action;
+        if (move.kind === 'play') {
+          e.playCard(seat, move.cardId, move.color);
+          action = `play${move.cardId}/${move.color === null ? 'null' : COLOR_ENUM[move.color]}`;
+        } else if (move.kind === 'draw') {
+          e.draw(seat);
+          action = 'draw';
+        } else {
+          e.pass(seat);
+          action = 'pass';
+        }
+        lines.push(snapshot(`B${tag}${players}/${seed} ${action}`, e));
+      }
     }
   }
 }

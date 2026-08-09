@@ -30,12 +30,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import com.zknw.unoduo.game.GameMod
 import com.zknw.unoduo.game.HOST_SEAT
 import com.zknw.unoduo.game.Seat
 import com.zknw.unoduo.net.LobbyPlayer
 import com.zknw.unoduo.ui.components.BrightScreen
 import com.zknw.unoduo.ui.components.GhostButton
 import com.zknw.unoduo.ui.components.MenuBackground
+import com.zknw.unoduo.ui.components.ModSummary
 import com.zknw.unoduo.ui.components.Panel
 import com.zknw.unoduo.ui.components.PrimaryButton
 import com.zknw.unoduo.ui.components.QrCode
@@ -52,6 +54,7 @@ fun HostScreen(
     link: LinkStatus,
     players: List<LobbyPlayer>,
     photos: Map<Seat, String>,
+    mods: Set<GameMod>,
     canStart: Boolean,
     onStart: () -> Unit,
     onBack: () -> Unit
@@ -119,6 +122,9 @@ fun HostScreen(
 
             Spacer(Modifier.height(16.dp))
             PlayerRoster(players, photos, mySeat = HOST_SEAT)
+
+            Spacer(Modifier.height(16.dp))
+            ModSummary(mods)
 
             Spacer(Modifier.height(16.dp))
             StatusRow(

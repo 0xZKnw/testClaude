@@ -101,6 +101,38 @@ function reverseGlyph(cx, cy, size, color) {
   return paint(arrow(startY, true)) + paint(arrow(startY + shaft + gap, false));
 }
 
+/**
+ * The +8: the +4's fan, dealt twice. Two staggered rows rather than eight cards in one
+ * row — the point of the card is "twice the +4", and eight slivers side by side would
+ * just read as noise.
+ */
+function wildEight(cx, cy, boxW) {
+  const four = [PALETTE.R, PALETTE.B, PALETTE.Y, PALETTE.G];
+  const drop = boxW * 0.19;
+  const shift = boxW * 0.06;
+  return miniCards(four, cx - shift / 2, cy - drop, boxW * 0.86)
+    + miniCards(four, cx + shift / 2, cy + drop, boxW * 0.86);
+}
+
+/**
+ * The Coup double: two blank cards with the multiplier over them. The cards alone would
+ * read as a +2, so this is the one glyph that carries lettering — fitting, since it is
+ * the one card whose effect is neither "somebody draws" nor "somebody is skipped".
+ */
+function doublePlay(cx, cy, boxW) {
+  // The badge sits in the corner of the fan rather than over its middle: centred, it
+  // covered the very cards it is there to count.
+  const r = boxW * 0.23;
+  const bx = cx + boxW * 0.30;
+  const by = cy + boxW * 0.32;
+  return `${miniCards([PALETTE.stock, PALETTE.stock], cx, cy, boxW)}
+    <circle cx="${bx}" cy="${by}" r="${r}" fill="${PALETTE.outline}"/>
+    <circle cx="${bx}" cy="${by}" r="${r * 0.78}" fill="${PALETTE.gold}"/>
+    <text x="${bx}" y="${by}" text-anchor="middle" dominant-baseline="central"
+      font-size="${r * 1.1}" font-weight="900" font-family="system-ui, sans-serif"
+      fill="${PALETTE.outline}">&#215;2</text>`;
+}
+
 function centreMark(card) {
   const cx = CARD_W / 2;
   const cy = CARD_H / 2;
@@ -117,20 +149,26 @@ function centreMark(card) {
     case Kind.WILD: return wheel(cx, cy, 27);
     case Kind.DRAW_FOUR:
       return miniCards([PALETTE.R, PALETTE.B, PALETTE.Y, PALETTE.G], cx, cy, 62);
+    case Kind.DRAW_EIGHT: return wildEight(cx, cy, 70);
+    case Kind.DOUBLE_PLAY: return doublePlay(cx - 5, cy - 8, 58);
     default: return '';
   }
 }
 
 function cornerMark(card, x, y, flip) {
   const rotate = flip ? `rotate(180 ${x} ${y})` : '';
-  const text = (t) => `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central"
+  const label = (t, fill) => `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central"
     font-size="20" font-weight="900" font-family="system-ui, sans-serif"
-    fill="${PALETTE.stock}" stroke="${PALETTE.outline}" stroke-width="2.2"
+    fill="${fill}" stroke="${PALETTE.outline}" stroke-width="2.2"
     stroke-linejoin="round" paint-order="stroke" transform="${rotate}">${t}</text>`;
+  const text = (t) => label(t, PALETTE.stock);
+  const goldText = (t) => label(t, PALETTE.gold);
   switch (card.k) {
     case Kind.NUMBER: return text(card.n);
     case Kind.DRAW_TWO: return text('+2');
     case Kind.DRAW_FOUR: return text('+4');
+    case Kind.DRAW_EIGHT: return text('+8');
+    case Kind.DOUBLE_PLAY: return goldText('&#215;2');
     case Kind.SKIP: return `<g transform="${rotate}">${skipGlyph(x, y, 20, PALETTE.stock)}</g>`;
     case Kind.REVERSE: return `<g transform="${rotate}">${reverseGlyph(x, y, 20, PALETTE.stock)}</g>`;
     case Kind.WILD: return `<g transform="${rotate}">${wheel(x, y, 9)}</g>`;
