@@ -67,6 +67,7 @@ import com.zknw.unoduo.game.Seat
 import com.zknw.unoduo.ui.components.AvatarLook
 import com.zknw.unoduo.ui.components.ColorChip
 import com.zknw.unoduo.ui.components.InkChip
+import com.zknw.unoduo.ui.components.InkSurface
 import com.zknw.unoduo.ui.components.InkIconButton
 import com.zknw.unoduo.ui.components.PlayerAvatar
 import com.zknw.unoduo.ui.components.GhostButton
@@ -77,6 +78,7 @@ import com.zknw.unoduo.ui.components.UnoCardBack
 import com.zknw.unoduo.ui.components.UnoCardFace
 import com.zknw.unoduo.ui.components.clickableNoRipple
 import com.zknw.unoduo.ui.theme.Palette
+import com.zknw.unoduo.vm.Social
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.min
@@ -86,11 +88,16 @@ fun GameScreen(
     view: GameView,
     photos: Map<Seat, String>,
     inputLocked: Boolean,
+    social: Social,
     onPlay: (Int, CardColor?) -> Unit,
     onDraw: () -> Unit,
     onPass: () -> Unit,
     onRematch: () -> Unit,
-    onQuit: () -> Unit
+    onQuit: () -> Unit,
+    onSticker: (Int) -> Unit = {},
+    onSendChat: (String) -> Unit = {},
+    onOpenChat: () -> Unit = {},
+    onCloseChat: () -> Unit = {}
 ) {
     var pendingWild by remember { mutableStateOf<Card?>(null) }
     var toast by remember { mutableStateOf("") }
@@ -131,7 +138,31 @@ fun GameScreen(
                         onDraw()
                     }
                 )
-                EventToast(toast, Modifier.align(Alignment.BottomCenter))
+
+                if (social.enabled) {
+                    StickerRail(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 8.dp)
+                    ) { index ->
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onSticker(index)
+                    }
+                }
+
+                // Stacked rather than overlaid: the log line and the chat both live at
+                // the bottom of the table, and they must not land on top of each other.
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                ) {
+                    if (social.flash.isNotEmpty()) {
+                        ChatFlash(social.flash, Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(6.dp))
+                    }
+                    EventToast(toast, Modifier.align(Alignment.CenterHorizontally))
+                }
             }
 
             TurnBanner(view)
@@ -165,7 +196,19 @@ fun GameScreen(
                     }
                 }
             )
+
+            if (social.enabled) {
+                ChatBar(
+                    social = social,
+                    onOpen = onOpenChat,
+                    modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp)
+                )
+            }
         }
+
+        // Above everything, including the cards: a sticker that slid under the hand
+        // would be a sticker nobody saw.
+        FlyingEmotes(social.emotes, view)
 
         pendingWild?.let { card ->
             ColorPicker(
@@ -175,6 +218,10 @@ fun GameScreen(
                 },
                 onCancel = { pendingWild = null }
             )
+        }
+
+        if (social.open) {
+            ChatSheet(social = social, onSend = onSendChat, onClose = onCloseChat)
         }
 
         penaltyHit?.let { PenaltyOverlay(it) }
@@ -712,7 +759,7 @@ private fun TurnBanner(view: GameView) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 6.dp),
+            .padding(horizontal = 18.dp, top = 6.dp, bottom = 10.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -725,6 +772,7 @@ private fun TurnBanner(view: GameView) {
             )
             Spacer(Modifier.width(8.dp))
         }
+
         AnimatedContent(
             targetState = text,
             transitionSpec = {
@@ -733,26 +781,23 @@ private fun TurnBanner(view: GameView) {
             },
             label = "turn-banner"
         ) { value ->
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(
-                        if (yours) Palette.Gold.copy(alpha = 0.18f)
-                        else Palette.Ink.copy(alpha = 0.5f)
-                    )
-                    .border(
-                        1.dp,
-                        if (yours) Palette.Gold.copy(alpha = 0.6f) else Palette.Line,
-                        RoundedCornerShape(14.dp)
-                    )
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            // The same flat fill, ink keyline and solid slab as every button and chip in
+            // the app. It used to be a translucent wash with a hairline border, which is
+            // the one thing this whole style says not to do.
+            InkSurface(
+                color = if (yours) Palette.Gold else Palette.Slate,
+                shape = RoundedCornerShape(15.dp),
+                depth = 4.dp,
+                border = 2.5.dp
             ) {
                 Text(
                     value,
-                    color = if (yours) Palette.Gold else Palette.TextDim,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
+                    color = if (yours) Palette.Outline else Palette.Text,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.3.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)
                 )
             }
         }

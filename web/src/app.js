@@ -14,6 +14,7 @@ import { cardFace, cardBack, colorChip, PALETTE } from './cards.js';
 import { WebRtcHost, WebRtcGuest } from './net.js';
 import { RULES } from './rules.js';
 import { loadProfile, saveProfile, recordRound, resetStats, AVATAR_COLORS, shrinkPhoto } from './profile.js';
+import { STICKERS, cleanLine, MAX_CHARS } from './talk.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
@@ -41,6 +42,9 @@ const state = {
   pendingWild: null,
   lastRecordedRound: -1,
   toastTimer: null,
+  // Chat and stickers. None of it touches the rules, so none of it is in a snapshot.
+  social: { enabled: false, chat: [], flash: [], open: false, unread: 0 },
+  socialId: 1,
 };
 
 // --------------------------------------------------------------------- screens
@@ -210,7 +214,10 @@ function teardown() {
     myView: null, mods: [], rematch: new Set(), seatOfKey: new Map(), keyOfSeat: new Map(),
     net: null, botTimer: null, pendingWild: null, lastRecordedRound: -1,
     nextStarter: 1,
+    social: { enabled: false, chat: [], flash: [], open: false, unread: 0 },
   });
+  $('chat').classList.remove('on');
+  $('emote-layer').innerHTML = '';
   $('over').classList.remove('on');
   $('picker').classList.remove('on');
   $('slam').classList.remove('on');
@@ -410,12 +417,36 @@ function onGuestMessage(key, msg) {
       else broadcast();
       break;
     }
+    case 'chat': {
+      const seat = state.seatOfKey.get(key);
+      const text = cleanLine(msg.m);
+      if (seat === undefined || !text) return;
+      // Relayed with the seat the host knows, never the one the guest claimed, and never
+      // back to the sender — its own line is already on its screen.
+      relay({ t: 'chat', s: seat, m: text }, key);
+      addChat(seat, text);
+      break;
+    }
+    case 'emo': {
+      const seat = state.seatOfKey.get(key);
+      if (seat === undefined || !STICKERS[msg.e]) return;
+      relay({ t: 'emo', s: seat, e: msg.e }, key);
+      addEmote(seat, msg.e);
+      break;
+    }
     case 'bye': {
       const seat = state.seatOfKey.get(key);
       dialog('Partie terminée', `${nameOfSeat(seat)} a quitté la partie.`);
       break;
     }
     default: break;
+  }
+}
+
+/** Relays a message to every guest but the one it came from. */
+function relay(msg, except) {
+  for (const key of state.seatOfKey.keys()) {
+    if (key !== except) state.net?.send(key, msg);
   }
 }
 
@@ -446,6 +477,14 @@ function onHostMessage(msg) {
       recordIfFinished(msg.v);
       show('game');
       renderGame();
+      break;
+    case 'chat': {
+      const text = cleanLine(msg.m);
+      if (text) addChat(msg.s ?? 0, text);
+      break;
+    }
+    case 'emo':
+      addEmote(msg.s ?? 0, msg.e);
       break;
     case 'bye':
       dialog('Partie terminée', "L'hôte a quitté la partie.");
@@ -530,6 +569,7 @@ async function openRoom(mods) {
   teardown();
   state.role = 'host';
   state.mods = orderedMods(mods);
+  state.social.enabled = true;
   state.mySeat = HOST_SEAT;
   state.players = [{ s: HOST_SEAT, n: myName(), a: state.profile.avatarColor }];
   state.photos = state.profile.photo ? { [HOST_SEAT]: state.profile.photo } : {};
@@ -671,6 +711,7 @@ async function joinWith(raw) {
   const offer = text.includes('#') ? decodeURIComponent(text.split('#')[1]) : text;
   teardown();
   state.role = 'guest';
+  state.social.enabled = true;
   state.net = new WebRtcGuest({
     onReady: () => {
       state.net.send({
@@ -710,6 +751,153 @@ $('lobby-copy').onclick = async () => {
   }
 };
 
+// ------------------------------------------------------------------- chat & stickers
+
+const FLASH_MS = 5000;
+const FADE_MS = 200;
+const EMOTE_MS = 2600;
+const CHAT_HISTORY = 60;
+
+function sendChat(raw) {
+  const text = cleanLine(raw);
+  if (!text) return;
+  const seat = state.mySeat;
+  const msg = { t: 'chat', s: seat, m: text };
+  if (state.role === 'guest') state.net?.send(msg);
+  else state.net?.broadcast(msg);
+  addChat(seat, text);
+}
+
+function sendSticker(index) {
+  if (!STICKERS[index]) return;
+  const seat = state.mySeat;
+  const msg = { t: 'emo', s: seat, e: index };
+  if (state.role === 'guest') state.net?.send(msg);
+  else state.net?.broadcast(msg);
+  addEmote(seat, index);
+}
+
+function addChat(seat, text) {
+  const mine = seat === state.mySeat;
+  const line = { id: state.socialId++, seat, name: nameOfSeat(seat), text, mine };
+  const social = state.social;
+  social.chat = [...social.chat, line].slice(-CHAT_HISTORY);
+  // Your own line does not need popping at you, and neither does one that arrives while
+  // the chat is already open in front of you.
+  if (!mine && !social.open) {
+    social.flash = [...social.flash, line];
+    social.unread += 1;
+    setTimeout(() => {
+      social.flash = social.flash.filter((l) => l.id !== line.id);
+      renderSocial();
+    }, FLASH_MS);
+  }
+  renderSocial();
+}
+
+function addEmote(seat, index) {
+  const sticker = STICKERS[index];
+  if (!sticker) return;
+  const layer = $('emote-layer');
+  const node = document.createElement('div');
+  // The sender's place on *this* screen: the rivals stand in a row along the top, so the
+  // one on the left throws from the left. Your own comes up from your hand, which is the
+  // only feedback you get that it actually went out.
+  const v = state.myView;
+  const rivals = v?.ri ?? [];
+  const index0 = rivals.findIndex((r) => r.s === seat);
+  const mine = !v || seat === v.y;
+  const x = mine || index0 < 0 ? 0.5 : (index0 + 0.5) / rivals.length;
+  node.className = `emote ${mine ? 'from-bottom' : 'from-top'}`;
+  node.style.left = `${x * 100}%`;
+  node.style.top = mine ? '72%' : '10%';
+  node.textContent = sticker;
+  layer.appendChild(node);
+  setTimeout(() => node.remove(), EMOTE_MS);
+}
+
+function openChat() {
+  state.social.open = true;
+  state.social.unread = 0;
+  state.social.flash = [];
+  $('chat').classList.add('on');
+  renderSocial();
+  // Focused on open so the keyboard comes up with the sheet rather than after it.
+  setTimeout(() => $('chat-input').focus(), 60);
+}
+
+function closeChat() {
+  state.social.open = false;
+  $('chat').classList.remove('on');
+  renderSocial();
+}
+
+function renderSocial() {
+  const social = state.social;
+  $('chat-bar').classList.toggle('hidden', !social.enabled);
+  $('sticker-rail').classList.toggle('hidden', !social.enabled);
+  if (!social.enabled) {
+    $('chat-flash').innerHTML = '';
+    return;
+  }
+
+  const last = social.chat[social.chat.length - 1];
+  const preview = $('chat-preview');
+  preview.textContent = last ? `${last.name} : ${last.text}` : 'Écrire un message…';
+  preview.classList.toggle('empty', !last);
+  $('chat-unread').textContent = String(social.unread);
+  $('chat-unread').classList.toggle('hidden', social.unread === 0);
+
+  // Three at a time: past that the table disappears behind the conversation.
+  $('chat-flash').innerHTML = social.flash.slice(-3).map((l) => `
+    <div class="flash"><div class="who">${esc(l.name)}</div>
+    <div class="what">${esc(l.text)}</div></div>`).join('');
+
+  $('chat-log').innerHTML = social.chat.map((l) => `
+    <div class="said ${l.mine ? 'mine' : ''}"><div class="bubble">
+      ${l.mine ? '' : `<div class="who">${esc(l.name)}</div>`}
+      <div>${esc(l.text)}</div>
+    </div></div>`).join('');
+  const log = $('chat-log');
+  log.scrollTop = log.scrollHeight;
+}
+
+$('sticker-rail').innerHTML = STICKERS
+  .map((s, i) => `<button type="button" data-sticker="${i}">${s}</button>`).join('');
+$('sticker-rail').querySelectorAll('[data-sticker]').forEach((node) => {
+  node.onclick = () => sendSticker(Number(node.dataset.sticker));
+});
+
+$('chat-bar').onclick = openChat;
+$('chat-close').onclick = closeChat;
+$('chat').onclick = (e) => { if (e.target === $('chat')) closeChat(); };
+$('chat-send').onclick = () => {
+  sendChat($('chat-input').value);
+  $('chat-input').value = '';
+};
+$('chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); $('chat-send').click(); }
+});
+$('chat-input').setAttribute('maxlength', String(MAX_CHARS));
+
+/**
+ * Keeps the sheet above the keyboard.
+ *
+ * There is no portable CSS for "how tall is the keyboard": the one thing every mobile
+ * browser agrees on is that the visual viewport shrinks. The difference between it and
+ * the layout viewport is the keyboard, so that is what the sheet is lifted by.
+ */
+if (window.visualViewport) {
+  const lift = () => {
+    const vv = window.visualViewport;
+    const hidden = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--kb', `${Math.round(hidden)}px`);
+  };
+  window.visualViewport.addEventListener('resize', lift);
+  window.visualViewport.addEventListener('scroll', lift);
+  lift();
+}
+
 // ------------------------------------------------------------------- the table
 
 /**
@@ -741,6 +929,7 @@ function revealedStrip(cards) {
 function renderGame() {
   const v = state.myView;
   if (!v) return;
+  renderSocial();
 
   // ---- rivals
   const single = v.ri.length === 1 ? v.ri[0] : null;

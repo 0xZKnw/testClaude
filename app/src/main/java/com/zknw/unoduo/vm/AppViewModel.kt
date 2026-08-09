@@ -23,6 +23,7 @@ import com.zknw.unoduo.net.JoinLink
 import com.zknw.unoduo.net.LobbyPlayer
 import com.zknw.unoduo.net.NetMsg
 import com.zknw.unoduo.net.RoomCode
+import com.zknw.unoduo.net.Talk
 import com.zknw.unoduo.profile.AvatarImage
 import com.zknw.unoduo.profile.Profile
 import com.zknw.unoduo.profile.ProfileStore
@@ -54,6 +55,29 @@ sealed interface UpdateState {
 
 enum class LinkStatus { IDLE, ADVERTISING, SEARCHING, CONNECTING, CONNECTED, LOST }
 
+/** One line of chat. [id] only exists so the UI can key an animation on it. */
+data class ChatLine(
+    val id: Long,
+    val seat: Seat,
+    val name: String,
+    val text: String,
+    val mine: Boolean
+)
+
+/** A sticker in flight. It is removed by the view model once its animation is over. */
+data class Emote(val id: Long, val seat: Seat, val sticker: String)
+
+/** Everything that is said rather than played. Empty and hidden in a solo game. */
+data class Social(
+    val enabled: Boolean = false,
+    val chat: List<ChatLine> = emptyList(),
+    /** The lines still worth popping over the hand; each expires on its own. */
+    val flash: List<ChatLine> = emptyList(),
+    val emotes: List<Emote> = emptyList(),
+    val open: Boolean = false,
+    val unread: Int = 0
+)
+
 data class UiState(
     val screen: Screen = Screen.HOME,
     val isHost: Boolean = false,
@@ -77,7 +101,9 @@ data class UiState(
     /** Set while playing against the machine; null for a real table. */
     val solo: Difficulty? = null,
     /** The optional rules this room plays with. Empty for a standard game. */
-    val mods: Set<GameMod> = emptySet()
+    val mods: Set<GameMod> = emptySet(),
+    /** Chat and stickers. Nothing here ever reaches the engine. */
+    val social: Social = Social()
 ) {
     val playerName: String get() = profile.name
     val canStart: Boolean get() = isHost && players.size >= MIN_PLAYERS
@@ -115,6 +141,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** My own picture, encoded once so it is not re-compressed for every guest. */
     private var myPhoto: String? = null
+
+    /** Only ever used to key an animation, so a plain counter is enough. */
+    private var nextSocialId: Long = 1
 
     // ------------------------------------------------------------- navigation
 
@@ -248,6 +277,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 photos = emptyMap(),
                 offline = emptySet(),
                 mods = mods,
+                social = Social(enabled = true),
                 error = null
             )
         }
@@ -345,6 +375,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     broadcast()
                 }
+            }
+
+            is NetMsg.Say -> {
+                val seat = seatOfKey[key] ?: return
+                val text = Talk.clean(msg.text) ?: return
+                // Relayed with the seat the host knows, never the one the guest claimed,
+                // and never back to the sender — its own line is already on its screen.
+                relay(NetMsg.Say(seat, text), except = key)
+                addChat(seat, text)
+            }
+
+            is NetMsg.Emote -> {
+                val seat = seatOfKey[key] ?: return
+                if (Talk.sticker(msg.index) == null) return
+                relay(NetMsg.Emote(seat, msg.index), except = key)
+                addEmote(seat, msg.index)
             }
 
             NetMsg.Bye -> handleGuestBye(key)
@@ -526,6 +572,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 photos = emptyMap(),
                 offline = emptySet(),
                 mods = mods,
+                // Nobody to talk to: the chat bar and the sticker rail stay away.
+                social = Social(enabled = false),
                 error = null
             )
         }
@@ -577,6 +625,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 photos = emptyMap(),
                 offline = emptySet(),
                 mods = emptySet(),
+                social = Social(enabled = true),
                 error = null
             )
         }
@@ -681,6 +730,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 maybeRecordRound(msg.view)
             }
 
+            is NetMsg.Say -> Talk.clean(msg.text)?.let { addChat(msg.seat, it) }
+
+            is NetMsg.Emote -> addEmote(msg.seat, msg.index)
+
             NetMsg.Bye -> _state.update {
                 it.copy(link = LinkStatus.LOST, error = "L'hôte a quitté la partie.")
             }
@@ -757,6 +810,75 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // --------------------------------------------------------------- chat & stickers
+
+    /**
+     * Chat is a side channel, not part of the game: it never enters the engine and never
+     * rides in a snapshot. The host relays, everybody renders, and nothing is remembered
+     * past the room.
+     */
+    fun sendChat(raw: String) {
+        val text = Talk.clean(raw) ?: return
+        val seat = _state.value.mySeat
+        if (_state.value.isHost) host?.broadcast(NetMsg.Say(seat, text))
+        else guest?.send(NetMsg.Say(seat, text))
+        addChat(seat, text)
+    }
+
+    fun sendSticker(index: Int) {
+        if (Talk.sticker(index) == null) return
+        val seat = _state.value.mySeat
+        if (_state.value.isHost) host?.broadcast(NetMsg.Emote(seat, index))
+        else guest?.send(NetMsg.Emote(seat, index))
+        addEmote(seat, index)
+    }
+
+    fun openChat() = _state.update {
+        it.copy(social = it.social.copy(open = true, unread = 0, flash = emptyList()))
+    }
+
+    fun closeChat() = _state.update { it.copy(social = it.social.copy(open = false)) }
+
+    /** Relays a message to every guest but the one it came from. */
+    private fun relay(msg: NetMsg, except: String) {
+        seatOfKey.keys.forEach { key -> if (key != except) host?.send(key, msg) }
+    }
+
+    private fun addChat(seat: Seat, text: String) {
+        val mine = seat == _state.value.mySeat
+        val line = ChatLine(nextSocialId++, seat, nameOfSeat(seat), text, mine)
+        _state.update { s ->
+            val social = s.social
+            s.copy(
+                social = social.copy(
+                    chat = (social.chat + line).takeLast(CHAT_HISTORY),
+                    // Your own line does not need popping at you, and neither does one
+                    // that arrives while the chat is already open in front of you.
+                    flash = if (mine || social.open) social.flash else social.flash + line,
+                    unread = if (mine || social.open) social.unread else social.unread + 1
+                )
+            )
+        }
+        if (!mine) viewModelScope.launch {
+            delay(FLASH_MS)
+            _state.update { s ->
+                s.copy(social = s.social.copy(flash = s.social.flash.filterNot { it.id == line.id }))
+            }
+        }
+    }
+
+    private fun addEmote(seat: Seat, index: Int) {
+        val sticker = Talk.sticker(index) ?: return
+        val emote = Emote(nextSocialId++, seat, sticker)
+        _state.update { it.copy(social = it.social.copy(emotes = it.social.emotes + emote)) }
+        viewModelScope.launch {
+            delay(EMOTE_MS)
+            _state.update { s ->
+                s.copy(social = s.social.copy(emotes = s.social.emotes.filterNot { it.id == emote.id }))
+            }
+        }
+    }
+
     // ----------------------------------------------------------------- misc
 
     fun leaveGame() {
@@ -788,6 +910,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         /** Long enough to read the bot's move as a move, short enough not to drag. */
         const val BOT_THINK_MS = 750L
+
+        /** How long an incoming line stays popped over the hand before it folds away. */
+        const val FLASH_MS = 5_000L
+
+        /** A sticker's whole flight, after which it is dropped from the state. */
+        const val EMOTE_MS = 2_600L
+
+        /** Deep enough to scroll back through a round, shallow enough to stay cheap. */
+        const val CHAT_HISTORY = 60
         const val BOT_AVATAR = 5
         const val BOT_AVATAR_ALT = 2
     }

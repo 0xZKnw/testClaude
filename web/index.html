@@ -123,7 +123,10 @@ textarea {
 .chip-svg { display: block; width: 100%; height: auto; }
 
 /* ------------------------------------------------------------------ game table */
-#screen-game { background: radial-gradient(circle at 50% 38%, var(--felt-light), var(--felt) 45%, var(--felt-dark)); }
+#screen-game {
+  position: relative;
+  background: radial-gradient(circle at 50% 38%, var(--felt-light), var(--felt) 45%, var(--felt-dark));
+}
 .rivals { display: flex; align-items: center; gap: 10px; padding: 10px 14px 0; }
 .rival { display: flex; flex-direction: column; align-items: center; width: 64px; }
 .rival .name { font-size: 11px; font-weight: 700; color: var(--dim); max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -148,24 +151,122 @@ textarea {
   border-radius: 14px; padding: 5px 14px; font-size: 20px; font-weight: 900;
   animation: breathe 1.2s ease-in-out infinite;
 }
+/* Laid out by #table-bottom rather than pinned on its own, so the chat bubbles stack
+   above it instead of landing on it. */
 #toast {
-  position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
   background: rgba(11,14,20,.82); border: 2px solid var(--line); border-radius: 12px;
   padding: 5px 12px; font-size: 12px; color: var(--text); white-space: nowrap;
   max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
 }
-#banner { text-align: center; padding: 4px 16px 8px; }
+/* The same flat fill, ink keyline and solid slab as every button and chip in the app.
+   It used to be a translucent wash with a hairline border, which is the one thing this
+   style says not to do. */
+#banner { text-align: center; padding: 4px 16px 12px; }
 #banner span {
-  display: inline-block; border-radius: 14px; padding: 7px 15px;
-  font-size: 13.5px; font-weight: 800; border: 1px solid var(--line);
-  background: rgba(11,14,20,.5); color: var(--dim);
+  display: inline-block; border-radius: 15px; padding: 8px 16px;
+  font-size: 13px; font-weight: 900; letter-spacing: .3px;
+  border: 2.5px solid var(--ink); box-shadow: 0 4px 0 var(--ink);
+  background: var(--slate); color: var(--text);
 }
-#banner span.mine { background: rgba(255,197,49,.18); border-color: rgba(255,197,49,.6); color: var(--gold); }
+#banner span.mine { background: var(--gold); color: var(--ink); }
 #hand {
   display: flex; flex-direction: column; align-items: center; gap: 0;
-  padding: 8px 12px 14px;
+  padding: 8px 12px 10px;
   background: linear-gradient(transparent, var(--felt-dark));
 }
+
+/* ---------------------------------------------------------------- chat & stickers */
+#table-bottom {
+  position: absolute; left: 0; right: 0; bottom: 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  pointer-events: none;
+}
+#chat-flash {
+  align-self: stretch; display: flex; flex-direction: column; gap: 6px;
+  padding: 0 64px 0 14px;
+}
+.flash {
+  align-self: flex-start; max-width: 260px;
+  background: var(--slate); border: 2.5px solid var(--ink); border-radius: 14px;
+  padding: 8px 12px; animation: flash-in .2s ease-out both;
+}
+@keyframes flash-in { from { opacity: 0; transform: translateY(6px) } to { opacity: 1 } }
+.flash.leaving { animation: flash-out .2s ease-in both; }
+@keyframes flash-out { to { opacity: 0 } }
+.flash .who { color: var(--gold); font-size: 10px; font-weight: 900; }
+.flash .what { font-size: 13px; margin-top: 2px; word-break: break-word; }
+
+/* Pinned to the right edge at the height of the deck. Always open rather than behind a
+   button: a sticker you have to go looking for is a sticker nobody sends. */
+#sticker-rail {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 5px; padding: 7px 5px;
+  background: var(--slate); border: 3px solid var(--ink); border-radius: 20px;
+  box-shadow: 0 4px 0 var(--ink);
+}
+#sticker-rail button {
+  width: 34px; height: 34px; border: 0; border-radius: 50%;
+  background: var(--slate-high); font-size: 19px; line-height: 1;
+  cursor: pointer; padding: 0; color: inherit;
+}
+#sticker-rail button:active { transform: scale(.9); }
+
+#chat-bar {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  margin: 0 14px 10px; padding: 10px 14px;
+  background: var(--slate); border: 3px solid var(--ink); border-radius: 16px;
+  box-shadow: 0 4px 0 var(--ink); font-size: 13px;
+}
+#chat-bar .bubble-icon { font-size: 17px; }
+#chat-bar .chip.red { background: var(--red); color: var(--stock); }
+#chat-preview.empty { color: var(--dim); font-weight: 400; }
+#chat-preview { font-weight: 700; }
+
+/* Above everything, including the cards: a sticker that slid under the hand would be a
+   sticker nobody saw. */
+#emote-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 15; }
+.emote {
+  position: absolute; font-size: 58px; line-height: 1;
+  transform: translate(-50%, 0); will-change: transform, opacity;
+}
+.emote.from-top { animation: emote-down 2.4s cubic-bezier(.15,.7,.3,1) both; }
+.emote.from-bottom { animation: emote-up 2.4s cubic-bezier(.15,.7,.3,1) both; }
+@keyframes emote-down {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(.4) }
+  12% { opacity: 1; transform: translate(-50%, 4vh) scale(1) }
+  75% { opacity: 1; transform: translate(-50%, 26vh) scale(1) }
+  100% { opacity: 0; transform: translate(-50%, 30vh) scale(1.15) }
+}
+@keyframes emote-up {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(.4) }
+  12% { opacity: 1; transform: translate(-50%, -4vh) scale(1) }
+  75% { opacity: 1; transform: translate(-50%, -26vh) scale(1) }
+  100% { opacity: 0; transform: translate(-50%, -30vh) scale(1.15) }
+}
+
+/* The sheet rides on the keyboard: --kb is kept in step with the visual viewport, which
+   is the only thing every mobile browser agrees on. */
+.overlay.sheet { align-items: flex-end; padding: 0; }
+.overlay.sheet .panel { margin: 10px; margin-bottom: calc(10px + var(--kb, 0px)); }
+#chat-log { max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+#chat-log:empty::after {
+  content: "Rien pour l'instant. Lance la conversation.";
+  color: var(--dim); font-size: 13px; padding: 18px 0; display: block;
+}
+.said { display: flex; }
+.said.mine { justify-content: flex-end; }
+.said .bubble {
+  max-width: 260px; border: 2.5px solid var(--ink); border-radius: 14px;
+  padding: 8px 12px; background: var(--slate-high); font-size: 13px;
+  word-break: break-word;
+}
+.said.mine .bubble { background: var(--gold); color: var(--ink); }
+.said .who { color: var(--gold); font-size: 10px; font-weight: 900; margin-bottom: 2px; }
+#chat-input {
+  background: #0b0e14; color: var(--text); border: 3px solid var(--ink);
+  border-radius: 14px; padding: 12px 14px; font: inherit; font-size: 15px; min-width: 0;
+}
+#chat-input:focus { outline: none; border-color: var(--gold); }
 #hand .row { display: flex; justify-content: center; }
 #pass-wrap { padding: 0 20px; }
 
@@ -420,11 +521,21 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
     </div>
     <div id="discard"></div>
     <div id="pending" class="hidden"></div>
-    <div id="toast" class="hidden"></div>
+    <div id="sticker-rail" class="hidden"></div>
+    <div id="table-bottom">
+      <div id="chat-flash"></div>
+      <div id="toast" class="hidden"></div>
+    </div>
   </div>
   <div id="banner"></div>
   <div id="pass-wrap" class="hidden"><button class="btn" id="pass-btn">Passer mon tour</button></div>
   <div id="hand"></div>
+  <div id="chat-bar" class="hidden">
+    <span class="bubble-icon">&#128172;</span>
+    <span class="grow ellipsis" id="chat-preview">Écrire un message…</span>
+    <span class="chip red hidden" id="chat-unread">0</span>
+  </div>
+  <div id="emote-layer"></div>
 </section>
 
 <!-- ------------------------------------------------------------------ overlays -->
@@ -447,6 +558,23 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
     <div id="over-scores" style="margin-bottom:18px"></div>
     <button class="btn" id="rematch-btn">Revanche</button>
     <button class="btn ghost" id="quit-btn">Quitter</button>
+  </div>
+</div>
+
+<!-- The sheet is anchored to the bottom and lifted by the keyboard: what you type has
+     to stay in sight while you type it. -->
+<div class="overlay sheet" id="chat">
+  <div class="panel" id="chat-panel">
+    <div class="row-line" style="padding:0 0 10px">
+      <div class="grow" style="font-weight:900;font-size:18px">Chat</div>
+      <span class="chip" id="chat-close" style="cursor:pointer">Fermer</span>
+    </div>
+    <div id="chat-log"></div>
+    <div class="row-line" style="padding:12px 0 0">
+      <input id="chat-input" class="grow" maxlength="120" placeholder="Ton message"
+             autocomplete="off" enterkeyhint="send">
+      <button class="btn" id="chat-send" style="width:118px;margin:0">Envoyer</button>
+    </div>
   </div>
 </div>
 

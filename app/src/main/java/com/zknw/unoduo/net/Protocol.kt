@@ -106,6 +106,27 @@ sealed class NetMsg {
     @SerialName("rematch")
     data object Rematch : NetMsg()
 
+    /**
+     * A typed line. The seat is filled in by the host when it relays, so a guest cannot
+     * put words in somebody else's mouth.
+     */
+    @Serializable
+    @SerialName("chat")
+    data class Say(
+        @SerialName("s") val seat: Seat = 0,
+        // "m", not "t": "t" is the class discriminator, and a subclass field that
+        // collides with it makes the whole message unserialisable at runtime.
+        @SerialName("m") val text: String
+    ) : NetMsg()
+
+    /** A sticker, sent as an index into [Talk.STICKERS]. */
+    @Serializable
+    @SerialName("emo")
+    data class Emote(
+        @SerialName("s") val seat: Seat = 0,
+        @SerialName("e") val index: Int
+    ) : NetMsg()
+
     @Serializable
     @SerialName("bye")
     data object Bye : NetMsg()

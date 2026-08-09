@@ -154,6 +154,47 @@ try {
   await guest.waitForSelector('#screen-game.on', { timeout: 15000 });
   console.log('  les deux ecrans sont sur la table');
 
+  // ------------------------------------------------------------ chat and stickers
+  await guest.click('#chat-bar');
+  await guest.fill('#chat-input', 'salut mon reuf');
+  await guest.click('#chat-send');
+  await host.waitForTimeout(600);
+
+  const flash = await host.$$eval('#chat-flash .flash .what', (n) => n.map((x) => x.textContent));
+  console.log(`  bulle recue par l'hote : ${JSON.stringify(flash)}`);
+  if (!flash.includes('salut mon reuf')) problems.push("le message n'arrive pas chez l'hote");
+  if (await host.textContent('#chat-unread') !== '1') problems.push('le compteur de non-lus est faux');
+  // The sender is not flashed at with its own line, but it is in its own log.
+  if (await guest.$$eval('#chat-flash .flash', (n) => n.length) !== 0) {
+    problems.push("l'expediteur voit sa propre bulle");
+  }
+  if (await guest.$$eval('#chat-log .said', (n) => n.length) !== 1) {
+    problems.push("la ligne manque dans le log de l'expediteur");
+  }
+  await guest.click('#chat-close');
+
+  await host.click('#sticker-rail [data-sticker="5"]');
+  await guest.waitForTimeout(400);
+  const emotes = await guest.$$eval('#emote-layer .emote', (n) => n.map((x) => x.className));
+  console.log(`  emoji recu par l'invite : ${emotes.length ? emotes[0] : 'aucun'}`);
+  if (!emotes.length) problems.push("l'emoji n'arrive pas chez l'invite");
+  // The host is the rival along the top of the guest's screen, so it comes down.
+  else if (!emotes[0].includes('from-top')) problems.push("l'emoji arrive du mauvais cote");
+
+  // Both are transient: the sticker clears itself, the bubble folds away after 5 s.
+  await guest.waitForTimeout(2800);
+  if (await guest.$$eval('#emote-layer .emote', (n) => n.length) !== 0) {
+    problems.push("l'emoji ne disparait pas");
+  }
+  // Five seconds from when it arrived, not from here: the sticker checks above already
+  // burned part of that, and hard-coding the remainder is how a test starts flaking.
+  const folded = await host.waitForFunction(
+    () => document.querySelectorAll('#chat-flash .flash').length === 0,
+    null,
+    { timeout: 4000 },
+  ).then(() => true).catch(() => false);
+  if (!folded) problems.push('la bulle ne disparait pas apres 5 s');
+
   let exchanged = 0;
   for (let i = 0; i < 600; i++) {
     const done = await host.evaluate(() => document.getElementById('over').classList.contains('on'));
