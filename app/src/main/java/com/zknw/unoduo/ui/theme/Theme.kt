@@ -36,11 +36,19 @@ object Palette {
     /** Solid dark wash used to mute a card without making it transparent. */
     val Scrim = Color(0xFF0C1018)
 
-    // An indigo table: green felt fought with the green cards, and every colour of
-    // the deck pops against it.
-    val FeltLight = Color(0xFF4B3B96)
-    val Felt = Color(0xFF33286E)
-    val FeltDark = Color(0xFF1A1342)
+    // The table is deliberately colourless — the same near-black family as the ink
+    // keyline every card is drawn with, so the world reads as ink on colour.
+    //
+    // Green felt fought the green cards; indigo then fought the blue ones and tinted
+    // the warm white stock mauve. Any hue here competes with a deck that already owns
+    // four of them. A dark neutral competes with none, lets all four sing at once, and
+    // makes the gold of a playable card read instantly.
+    //
+    // The lit centre stays a step below SlateHigh so the chips and panels drawn on top
+    // never sink into it.
+    val FeltLight = Color(0xFF2A3444)
+    val Felt = Color(0xFF171D27)
+    val FeltDark = Color(0xFF080A10)
 
     val Red = Color(0xFFF23B2E)
     val RedDeep = Color(0xFFC01C12)
@@ -84,7 +92,7 @@ object Palette {
 
     /** Menu backdrop, same family as the table so screens feel like one place. */
     fun menuBrush(): Brush = Brush.verticalGradient(
-        colors = listOf(Color(0xFF2A2159), Color(0xFF15102F))
+        colors = listOf(Color(0xFF19202C), Color(0xFF080A0F))
     )
 
     /** Avatar backgrounds. Same flat, saturated logic as the cards. */

@@ -19,9 +19,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.location.LocationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -61,16 +60,34 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        goFullScreen()
         setContent {
             UnoDuoTheme {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .windowInsetsPadding(WindowInsets.systemBars)
-                ) {
-                    App()
-                }
+                Box(Modifier.fillMaxSize()) { App() }
             }
+        }
+    }
+
+    // Android puts the bars back after a dialog, a permission prompt or a trip to the
+    // recents screen, so hiding them once at startup is not enough.
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) goFullScreen()
+    }
+
+    /**
+     * Nothing but the game on screen. The bars are hidden rather than merely made
+     * transparent — left visible they cut a black band across the table, and the game is
+     * played in portrait with a hand that wants every pixel of height.
+     *
+     * They come back on a swipe from the edge and go away again on their own, so
+     * navigation is never actually lost.
+     */
+    private fun goFullScreen() {
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
 }

@@ -11,7 +11,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -54,7 +58,9 @@ fun TableBackground(content: @Composable () -> Unit) {
             .fillMaxSize()
             .background(Palette.Felt)
             .background(Palette.feltBrush())
-    ) { content() }
+    ) {
+        Box(Modifier.safeArea()) { content() }
+    }
 }
 
 @Composable
@@ -64,8 +70,22 @@ fun MenuBackground(content: @Composable () -> Unit) {
             .fillMaxSize()
             .background(Palette.Felt)
             .background(Palette.menuBrush())
-    ) { content() }
+    ) {
+        Box(Modifier.safeArea()) { content() }
+    }
 }
+
+/**
+ * The colour runs to the very edge of the screen; only the content is held back, and
+ * only by what would actually hide it — a camera notch, or the system bars on the rare
+ * phone that refuses to hide them. The keyboard is deliberately left out: the join
+ * screen sizes its viewfinder from the space it is given, and shrinking that space
+ * would push the code field off the bottom rather than into view.
+ */
+private fun Modifier.safeArea(): Modifier = this
+    .fillMaxSize()
+    .windowInsetsPadding(WindowInsets.systemBars)
+    .windowInsetsPadding(WindowInsets.displayCutout)
 
 /** Flat slab with an ink keyline and a solid drop under it. */
 @Composable
