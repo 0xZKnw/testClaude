@@ -759,7 +759,7 @@ private fun TurnBanner(view: GameView) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp, top = 6.dp, bottom = 10.dp),
+            .padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 10.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
