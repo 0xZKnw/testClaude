@@ -19,13 +19,15 @@ export const Kind = {
   NUMBER: 'n', SKIP: 's', REVERSE: 'r', DRAW_TWO: 'd2', WILD: 'w', DRAW_FOUR: 'd4',
   // Only ever in the deck when the matching mod is on. Appended, like Kotlin's enum, so
   // a standard game sorts exactly as it always did.
-  DRAW_EIGHT: 'd8', DOUBLE_PLAY: 'x2', SPY: 'sp',
+  DRAW_EIGHT: 'd8', DOUBLE_PLAY: 'x2', SPY: 'sp', DRAW_TWELVE: 'd12',
 };
-const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7, sp: 8 };
+const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7, sp: 8, d12: 9 };
 
 /** The optional rules a host can switch on. Order matters: it numbers the extra cards. */
-export const Mod = { DRAW_EIGHT: 'd8', DOUBLE_PLAY: 'x2', SPY: 'sp' };
-export const MOD_ORDER = [Mod.DRAW_EIGHT, Mod.DOUBLE_PLAY, Mod.SPY];
+export const Mod = {
+  DRAW_EIGHT: 'd8', DOUBLE_PLAY: 'x2', SPY: 'sp', DRAW_TWELVE: 'd12',
+};
+export const MOD_ORDER = [Mod.DRAW_EIGHT, Mod.DOUBLE_PLAY, Mod.SPY, Mod.DRAW_TWELVE];
 export const MOD_INFO = {
   d8: {
     label: 'Les +8',
@@ -44,6 +46,11 @@ export const MOD_INFO = {
       + "qu'il te montre une carte au hasard du joueur suivant. Toi seul la vois, et tu "
       + "la vois jusqu'à ce qu'il la pose.",
   },
+  d12: {
+    label: 'Le +12',
+    blurb: 'Une seule carte, jamais distribuée : elle est cachée au hasard dans la pioche '
+      + "et ne s'attrape qu'en piochant. Elle frappe comme un +4, en trois fois pire.",
+  },
 };
 export const orderedMods = (mods) => MOD_ORDER.filter((m) => mods.includes(m));
 
@@ -52,6 +59,8 @@ const BONUS_PLAYS = 2;
 export const DRAW_EIGHTS = 2;
 export const DOUBLE_PLAYS = 3;
 export const SPIES = 3;
+/** Exactly one, and startRound keeps it out of every starting hand. */
+export const DRAW_TWELVES = 1;
 
 export const Penalty = { NONE: '0', DRAW_TWO: '2', DRAW_FOUR: '4' };
 export const Phase = { PLAYING: 'p', DECIDE_AFTER_DRAW: 'd', GAME_OVER: 'o' };
@@ -61,9 +70,10 @@ export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 5;
 
 export const isWild = (card) => card.k === Kind.WILD || card.k === Kind.DRAW_FOUR
-  || card.k === Kind.DRAW_EIGHT || card.k === Kind.DOUBLE_PLAY || card.k === Kind.SPY;
+  || card.k === Kind.DRAW_EIGHT || card.k === Kind.DOUBLE_PLAY || card.k === Kind.SPY
+  || card.k === Kind.DRAW_TWELVE;
 export const isPenalty = (card) => card.k === Kind.DRAW_TWO || card.k === Kind.DRAW_FOUR
-  || card.k === Kind.DRAW_EIGHT;
+  || card.k === Kind.DRAW_EIGHT || card.k === Kind.DRAW_TWELVE;
 export const isRealColor = (color) => color !== Color.WILD;
 
 const COLOR_NAME = { R: 'rouge', Y: 'jaune', G: 'vert', B: 'bleu', W: '-' };
@@ -71,7 +81,7 @@ const COLOR_NAME = { R: 'rouge', Y: 'jaune', G: 'vert', B: 'bleu', W: '-' };
 export function cardLabel(card) {
   const kindName = {
     n: String(card.n), s: 'Passe', r: 'Sens interdit', d2: '+2', w: 'Joker', d4: '+4',
-    d8: '+8', x2: 'Coup double', sp: 'Espion',
+    d8: '+8', x2: 'Coup double', sp: 'Espion', d12: '+12',
   }[card.k];
   const colorName = card.c === Color.WILD ? '' : COLOR_NAME[card.c];
   return colorName ? `${kindName} ${colorName}` : kindName;
@@ -115,6 +125,11 @@ export function buildDeck(mods) {
   if (mods.includes(Mod.SPY)) {
     for (let i = 0; i < SPIES; i++) {
       cards.push({ i: id++, c: Color.WILD, k: Kind.SPY, n: -1 });
+    }
+  }
+  if (mods.includes(Mod.DRAW_TWELVE)) {
+    for (let i = 0; i < DRAW_TWELVES; i++) {
+      cards.push({ i: id++, c: Color.WILD, k: Kind.DRAW_TWELVE, n: -1 });
     }
   }
   return cards;
@@ -225,6 +240,12 @@ export class UnoEngine {
     this.drawPile = shuffled(buildDeck(this.mods), this.rng);
     this.discardPile = [];
 
+    // The +12 is dealt to nobody. It is lifted out before the hands go round and slipped
+    // back into the pile afterwards, which is the whole mod: the only way to meet it is
+    // to draw it.
+    const hidden = this.drawPile.filter((c) => c.k === Kind.DRAW_TWELVE);
+    if (hidden.length) this.drawPile = this.drawPile.filter((c) => c.k !== Kind.DRAW_TWELVE);
+
     for (let round = 0; round < 7; round++) {
       for (const seat of this.seats) this.hands[seat].push(this.drawPile.pop());
     }
@@ -240,6 +261,12 @@ export class UnoEngine {
     const start = starterCard ?? { i: -1, c: Color.RED, k: Kind.NUMBER, n: 0 };
     this.drawPile.push(...setAside);
     shuffleInPlace(this.drawPile, this.rng);
+
+    // Somewhere at random in what is left, so nobody can count the deck down to it. The
+    // draw comes off the end of the array, so index 0 is the very bottom.
+    for (const card of hidden) {
+      this.drawPile.splice(this.rng.nextIntBelow(this.drawPile.length + 1), 0, card);
+    }
 
     this.discardPile.push(start);
     this.activeColor = start.c;
@@ -275,6 +302,7 @@ export class UnoEngine {
         // A wild penalty is answered by another one, or by a +2 of the chosen colour.
         // The +8 is a +4 that hits harder, so it lands in both places.
         allowed = hand.filter((c) => c.k === Kind.DRAW_FOUR || c.k === Kind.DRAW_EIGHT
+          || c.k === Kind.DRAW_TWELVE
           || (c.k === Kind.DRAW_TWO && c.c === this.activeColor));
       } else {
         allowed = [];
@@ -324,7 +352,8 @@ export class UnoEngine {
     const tally = this.stats[seat];
     tally.cp++;
     if (card.k === Kind.DRAW_TWO) { tally.d2++; if (wasCountering) tally.co++; }
-    else if (card.k === Kind.DRAW_FOUR || card.k === Kind.DRAW_EIGHT) {
+    else if (card.k === Kind.DRAW_FOUR || card.k === Kind.DRAW_EIGHT
+      || card.k === Kind.DRAW_TWELVE) {
       tally.d4++; if (wasCountering) tally.co++;
     } else if (card.k === Kind.WILD || card.k === Kind.DOUBLE_PLAY || card.k === Kind.SPY) {
       tally.w++;
@@ -377,6 +406,16 @@ export class UnoEngine {
         tally.bd = Math.max(tally.bd, this.pendingDraw);
         this.turn = this.seatAfter(seat);
         this.pushEvent(`${name} pose +4 ${COLOR_NAME[this.activeColor]} — total +${this.pendingDraw}`);
+        break;
+      case Kind.DRAW_TWELVE:
+        this.activeColor = chosenColor;
+        this.pendingDraw += 12;
+        // Same family as the +4 and the +8, so every rule that reads the penalty type
+        // treats the three the same way.
+        this.pendingType = Penalty.DRAW_FOUR;
+        tally.bd = Math.max(tally.bd, this.pendingDraw);
+        this.turn = this.seatAfter(seat);
+        this.pushEvent(`${name} pose +12 ${COLOR_NAME[this.activeColor]} — total +${this.pendingDraw}`);
         break;
       case Kind.DRAW_EIGHT:
         this.activeColor = chosenColor;

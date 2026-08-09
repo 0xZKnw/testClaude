@@ -37,6 +37,13 @@ enum class GameMod(val label: String, val blurb: String) {
         "Trois cartes en plus. Un Joker ordinaire — tu annonces une couleur — sauf " +
             "qu'il te montre une carte au hasard du joueur suivant. Toi seul la vois, " +
             "et tu la vois jusqu'à ce qu'il la pose."
+    ),
+
+    @SerialName("d12")
+    DRAW_TWELVE(
+        "Le +12",
+        "Une seule carte, jamais distribuée : elle est cachée au hasard dans la pioche " +
+            "et ne s'attrape qu'en piochant. Elle frappe comme un +4, en trois fois pire."
     );
 
     companion object {
@@ -51,6 +58,7 @@ enum class GameMod(val label: String, val blurb: String) {
             DRAW_EIGHT -> "d8"
             DOUBLE_PLAY -> "x2"
             SPY -> "sp"
+            DRAW_TWELVE -> "d12"
         }
 }
 

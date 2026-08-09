@@ -244,14 +244,32 @@ fun DrawScope.drawWildFour(boxSize: Size, origin: Offset, outline: Color) {
  * point of the card is "twice the +4", and a doubled fan says that at a glance where a
  * row of eight slivers would just read as noise.
  */
-fun DrawScope.drawWildEight(boxSize: Size, origin: Offset, outline: Color) {
-    val rowHeight = boxSize.height * 0.62f
-    val drop = boxSize.height - rowHeight
-    val shift = boxSize.width * 0.06f
-    val row = Size(boxSize.width - shift, rowHeight)
+fun DrawScope.drawWildEight(boxSize: Size, origin: Offset, outline: Color) =
+    drawWildRows(boxSize, origin, outline, rows = 2)
 
-    drawWildFour(row, Offset(origin.x, origin.y), outline)
-    drawWildFour(row, Offset(origin.x + shift, origin.y + drop), outline)
+/** The +12: the same fan a third time. One card in the deck, and it looks like it. */
+fun DrawScope.drawWildTwelve(boxSize: Size, origin: Offset, outline: Color) =
+    drawWildRows(boxSize, origin, outline, rows = 3)
+
+/**
+ * [rows] copies of the four-colour fan, stacked and staggered. They overlap by design:
+ * laid out edge to edge the whole glyph would shrink to nothing, and the point is the
+ * pile, not the individual cards.
+ */
+private fun DrawScope.drawWildRows(
+    boxSize: Size,
+    origin: Offset,
+    outline: Color,
+    rows: Int
+) {
+    val rowHeight = boxSize.height / (1f + (rows - 1) * 0.62f)
+    val step = rowHeight * 0.62f
+    val shift = boxSize.width * 0.06f
+    val row = Size(boxSize.width - shift * (rows - 1), rowHeight)
+
+    repeat(rows) { index ->
+        drawWildFour(row, Offset(origin.x + shift * index, origin.y + step * index), outline)
+    }
 }
 
 /**

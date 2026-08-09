@@ -39,7 +39,10 @@ enum class CardKind {
     @SerialName("x2") DOUBLE_PLAY,
 
     /** [GameMod.SPY] — choose a colour, and turn one of the next player's cards face up. */
-    @SerialName("sp") SPY
+    @SerialName("sp") SPY,
+
+    /** [GameMod.DRAW_TWELVE] — the single card hidden in the draw pile. */
+    @SerialName("d12") WILD_DRAW_TWELVE
 }
 
 /**
@@ -60,12 +63,14 @@ data class Card(
             kind == CardKind.WILD_DRAW_FOUR ||
             kind == CardKind.WILD_DRAW_EIGHT ||
             kind == CardKind.DOUBLE_PLAY ||
-            kind == CardKind.SPY
+            kind == CardKind.SPY ||
+            kind == CardKind.WILD_DRAW_TWELVE
 
     val isPenalty: Boolean
         get() = kind == CardKind.DRAW_TWO ||
             kind == CardKind.WILD_DRAW_FOUR ||
-            kind == CardKind.WILD_DRAW_EIGHT
+            kind == CardKind.WILD_DRAW_EIGHT ||
+            kind == CardKind.WILD_DRAW_TWELVE
 
     /** Short human label, used in the event feed ("+2 rouge", "8 bleu", ...). */
     fun label(): String {
@@ -86,6 +91,7 @@ data class Card(
             CardKind.WILD_DRAW_EIGHT -> "+8"
             CardKind.DOUBLE_PLAY -> "Coup double"
             CardKind.SPY -> "Espion"
+            CardKind.WILD_DRAW_TWELVE -> "+12"
         }
         return if (colorName.isEmpty()) kindName else "$kindName $colorName"
     }
@@ -96,6 +102,12 @@ object Deck {
     const val DRAW_EIGHTS = 2
     const val DOUBLE_PLAYS = 3
     const val SPIES = 3
+
+    /**
+     * Exactly one, and it never reaches a starting hand: [UnoEngine.startRound] pulls it
+     * out before dealing and slips it back into the draw pile afterwards.
+     */
+    const val DRAW_TWELVES = 1
 
     /**
      * The classic 108-card deck: per colour one 0, two of each 1..9, two Skip,
@@ -109,7 +121,7 @@ object Deck {
      * mods existed, whatever is switched on.
      */
     fun build(mods: Set<GameMod>): List<Card> {
-        val cards = ArrayList<Card>(108 + DRAW_EIGHTS + DOUBLE_PLAYS + SPIES)
+        val cards = ArrayList<Card>(108 + DRAW_EIGHTS + DOUBLE_PLAYS + SPIES + DRAW_TWELVES)
         var id = 0
         for (color in CardColor.playable) {
             cards += Card(id++, color, CardKind.NUMBER, 0)
@@ -133,6 +145,9 @@ object Deck {
         }
         if (GameMod.SPY in mods) {
             repeat(SPIES) { cards += Card(id++, CardColor.WILD, CardKind.SPY) }
+        }
+        if (GameMod.DRAW_TWELVE in mods) {
+            repeat(DRAW_TWELVES) { cards += Card(id++, CardColor.WILD, CardKind.WILD_DRAW_TWELVE) }
         }
         return cards
     }

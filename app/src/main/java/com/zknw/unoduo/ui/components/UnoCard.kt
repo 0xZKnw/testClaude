@@ -187,6 +187,12 @@ private fun BoxScope.CenterMark(card: Card, width: Dp) {
                 drawEye(Rect(Offset.Zero, size), Palette.Outline)
             }
         }
+
+        CardKind.WILD_DRAW_TWELVE -> Box(box.size(width * 0.74f)) {
+            Canvas(Modifier.fillMaxSize()) {
+                drawWildTwelve(size, Offset.Zero, Palette.Outline)
+            }
+        }
     }
 }
 
@@ -260,6 +266,15 @@ private fun BoxScope.CornerMark(
                 drawEye(Rect(Offset.Zero, size), Palette.Outline)
             }
         }
+
+        CardKind.WILD_DRAW_TWELVE -> OutlinedGlyphText(
+            text = "+12",
+            // A third digit in the same box as "+8" would touch the keyline.
+            fontSize = with(density) { (width * 0.165f).toSp() },
+            fill = Palette.Stock,
+            outlineWidth = width * 0.022f,
+            modifier = base
+        )
     }
 }
 

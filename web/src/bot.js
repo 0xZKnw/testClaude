@@ -80,6 +80,9 @@ function score(card, v, sharp) {
     case Kind.DRAW_FOUR: value = threatened ? 65 : 6; break;
     // Same card, twice the bite: never worth less than a +4.
     case Kind.DRAW_EIGHT: value = threatened ? 90 : 8; break;
+    // There is one in the whole deck: worth holding, worth more still on somebody who is
+    // about to go out.
+    case Kind.DRAW_TWELVE: value = threatened ? 120 : 10; break;
     // Two cards gone for the price of one, and the colour is yours to pick.
     case Kind.DOUBLE_PLAY: value = v.h.length > 2 ? 60 : 4; break;
     // A Joker that also buys information: a little more than a bare one, no more.

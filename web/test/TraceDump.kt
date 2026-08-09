@@ -40,6 +40,7 @@ fun main() {
         "8" to setOf(GameMod.DRAW_EIGHT),
         "D" to setOf(GameMod.DOUBLE_PLAY),
         "S" to setOf(GameMod.SPY),
+        "T" to setOf(GameMod.DRAW_TWELVE),
         "X" to GameMod.entries.toSet()
     )
 

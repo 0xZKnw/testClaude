@@ -147,6 +147,12 @@ class UnoEngine(
 
         drawPile.addAll(Deck.build(mods).shuffled(rng))
 
+        // The +12 is dealt to nobody. It is lifted out before the hands go round and
+        // slipped back into the pile afterwards, which is the whole mod: the only way to
+        // meet it is to draw it.
+        val hidden = drawPile.filter { it.kind == CardKind.WILD_DRAW_TWELVE }
+        drawPile.removeAll(hidden.toSet())
+
         repeat(7) {
             seats.forEach { seat ->
                 hands.getValue(seat).add(drawPile.removeAt(drawPile.size - 1))
@@ -167,6 +173,10 @@ class UnoEngine(
         val start = starterCard ?: Card(-1, CardColor.RED, CardKind.NUMBER, 0)
         drawPile.addAll(setAside)
         drawPile.shuffle(rng)
+
+        // Somewhere at random in what is left, so nobody can count the deck down to it.
+        // The draw comes off the end of the list, so index 0 is the very bottom.
+        hidden.forEach { drawPile.add(rng.nextInt(drawPile.size + 1), it) }
 
         discardPile.add(start)
         activeColor = start.color
@@ -202,6 +212,7 @@ class UnoEngine(
                 Penalty.DRAW_FOUR -> hand.filter {
                     it.kind == CardKind.WILD_DRAW_FOUR ||
                         it.kind == CardKind.WILD_DRAW_EIGHT ||
+                        it.kind == CardKind.WILD_DRAW_TWELVE ||
                         (it.kind == CardKind.DRAW_TWO && it.color == activeColor)
                 }
                 Penalty.NONE -> emptyList()
@@ -261,7 +272,7 @@ class UnoEngine(
                 if (wasCountering) tally.countersPlayed++
             }
 
-            CardKind.WILD_DRAW_FOUR, CardKind.WILD_DRAW_EIGHT -> {
+            CardKind.WILD_DRAW_FOUR, CardKind.WILD_DRAW_EIGHT, CardKind.WILD_DRAW_TWELVE -> {
                 tally.drawFoursPlayed++
                 if (wasCountering) tally.countersPlayed++
             }
@@ -322,6 +333,17 @@ class UnoEngine(
                 tally.biggestStackDealt = maxOf(tally.biggestStackDealt, pendingDraw)
                 turn = seatAfter(seat)
                 pushEvent("$name pose +4 ${colorName(activeColor)} — total +$pendingDraw")
+            }
+
+            CardKind.WILD_DRAW_TWELVE -> {
+                activeColor = chosenColor!!
+                pendingDraw += 12
+                // Same family as the +4 and the +8, so every rule that reads the penalty
+                // type treats the three the same way.
+                pendingType = Penalty.DRAW_FOUR
+                tally.biggestStackDealt = maxOf(tally.biggestStackDealt, pendingDraw)
+                turn = seatAfter(seat)
+                pushEvent("$name pose +12 ${colorName(activeColor)} — total +$pendingDraw")
             }
 
             CardKind.WILD_DRAW_EIGHT -> {
@@ -630,6 +652,9 @@ class UnoEngine(
     }
 
     // ------------------------------------------------------- test entry points
+
+    /** Test-only: the draw pile as it stands, bottom card first. */
+    internal fun pileForTest(): List<Card> = drawPile.toList()
 
     /** Test-only: hand the table back to one seat, mid-scenario. */
     internal fun forceTurn(seat: Seat) {

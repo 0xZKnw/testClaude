@@ -106,13 +106,21 @@ function reverseGlyph(cx, cy, size, color) {
  * row — the point of the card is "twice the +4", and eight slivers side by side would
  * just read as noise.
  */
-function wildEight(cx, cy, boxW) {
+function wildRows(cx, cy, boxW, rows) {
   const four = [PALETTE.R, PALETTE.B, PALETTE.Y, PALETTE.G];
-  const drop = boxW * 0.19;
+  const step = boxW * 0.38;
   const shift = boxW * 0.06;
-  return miniCards(four, cx - shift / 2, cy - drop, boxW * 0.86)
-    + miniCards(four, cx + shift / 2, cy + drop, boxW * 0.86);
+  const first = -(rows - 1) / 2;
+  let out = '';
+  for (let i = 0; i < rows; i++) {
+    out += miniCards(four, cx + shift * (first + i), cy + step * (first + i), boxW * 0.86);
+  }
+  return out;
 }
+
+const wildEight = (cx, cy, boxW) => wildRows(cx, cy, boxW, 2);
+/** The +12: the same fan a third time. One card in the deck, and it looks like it. */
+const wildTwelve = (cx, cy, boxW) => wildRows(cx, cy, boxW, 3);
 
 /**
  * The Coup double: two blank cards with the multiplier over them. The cards alone would
@@ -170,6 +178,7 @@ function centreMark(card) {
     case Kind.DRAW_EIGHT: return wildEight(cx, cy, 70);
     case Kind.DOUBLE_PLAY: return doublePlay(cx - 5, cy - 8, 58);
     case Kind.SPY: return eyeGlyph(cx, cy, 66);
+    case Kind.DRAW_TWELVE: return wildTwelve(cx, cy, 58);
     default: return '';
   }
 }
@@ -189,6 +198,12 @@ function cornerMark(card, x, y, flip) {
     case Kind.DRAW_EIGHT: return text('+8');
     case Kind.DOUBLE_PLAY: return goldText('&#215;2');
     case Kind.SPY: return `<g transform="${rotate}">${eyeGlyph(x, y, 24)}</g>`;
+    // A third digit needs a smaller face, or it touches the keyline.
+    case Kind.DRAW_TWELVE: return `<text x="${x}" y="${y}" text-anchor="middle"
+      dominant-baseline="central" font-size="16.5" font-weight="900"
+      font-family="system-ui, sans-serif" fill="${PALETTE.stock}" stroke="${PALETTE.outline}"
+      stroke-width="2.2" stroke-linejoin="round" paint-order="stroke"
+      transform="${rotate}">+12</text>`;
     case Kind.SKIP: return `<g transform="${rotate}">${skipGlyph(x, y, 20, PALETTE.stock)}</g>`;
     case Kind.REVERSE: return `<g transform="${rotate}">${reverseGlyph(x, y, 20, PALETTE.stock)}</g>`;
     case Kind.WILD: return `<g transform="${rotate}">${wheel(x, y, 9)}</g>`;

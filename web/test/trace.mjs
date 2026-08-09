@@ -7,7 +7,7 @@ import { UnoEngine, Phase, Color, view as V } from '../src/engine.js';
 import { decide, Difficulty, DIFFICULTY_ORDER } from '../src/bot.js';
 import { KotlinRandom } from '../src/random.js';
 
-const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7, sp: 8 };
+const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7, sp: 8, d12: 9 };
 const COLOR_ORDER = { R: 0, Y: 1, G: 2, B: 3, W: 4 };
 
 // Kotlin prints enum names; map the wire codes back so the traces read the same.
@@ -44,7 +44,8 @@ const MOD_SETS = [
   ['8', ['d8']],
   ['D', ['x2']],
   ['S', ['sp']],
-  ['X', ['d8', 'x2', 'sp']],
+  ['T', ['d12']],
+  ['X', ['d8', 'x2', 'sp', 'd12']],
 ];
 
 for (const [tag, mods] of MOD_SETS) {

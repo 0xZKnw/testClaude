@@ -41,6 +41,7 @@ class GameModTest {
             setOf(GameMod.DRAW_EIGHT),
             setOf(GameMod.DOUBLE_PLAY),
             setOf(GameMod.SPY),
+            setOf(GameMod.DRAW_TWELVE),
             both,
             every
         )) {
@@ -56,12 +57,14 @@ class GameModTest {
         assertEquals(110, Deck.build(setOf(GameMod.DRAW_EIGHT)).size)
         assertEquals(111, Deck.build(setOf(GameMod.DOUBLE_PLAY)).size)
         assertEquals(111, Deck.build(setOf(GameMod.SPY)).size)
-        assertEquals(116, Deck.build(every).size)
+        assertEquals(109, Deck.build(setOf(GameMod.DRAW_TWELVE)).size)
+        assertEquals(117, Deck.build(every).size)
 
         val deck = Deck.build(every)
         assertEquals(2, deck.count { it.kind == CardKind.WILD_DRAW_EIGHT })
         assertEquals(3, deck.count { it.kind == CardKind.DOUBLE_PLAY })
         assertEquals(3, deck.count { it.kind == CardKind.SPY })
+        assertEquals(1, deck.count { it.kind == CardKind.WILD_DRAW_TWELVE })
         // They are all colourless, so they can be laid on anything.
         assertTrue(deck.filter { it.isWild }.all { it.color == CardColor.WILD })
     }
@@ -74,6 +77,7 @@ class GameModTest {
         assertEquals(CardKind.WILD_DRAW_EIGHT, one[108].kind)
         assertEquals(CardKind.DOUBLE_PLAY, one[110].kind)
         assertEquals(CardKind.SPY, one[113].kind)
+        assertEquals(CardKind.WILD_DRAW_TWELVE, Deck.build(every)[116].kind)
     }
 
     @Test
@@ -83,7 +87,7 @@ class GameModTest {
         plain.startRound(HOST)
         modded.startRound(HOST)
         assertEquals(108 - 15, plain.deckCount())
-        assertEquals(116 - 15, modded.deckCount())
+        assertEquals(117 - 15, modded.deckCount())
         // Same seed, different deck: the extra cards really are in play.
         assertNotEquals(plain.handOf(HOST), modded.handOf(HOST))
     }
@@ -181,6 +185,105 @@ class GameModTest {
         assertFalse(e.playCard(HOST, 1, null))
         assertFalse(e.playCard(HOST, 1, CardColor.WILD))
         assertTrue(e.playCard(HOST, 1, CardColor.YELLOW))
+    }
+
+    // ---------------------------------------------------------------------- +12
+
+    @Test
+    fun `the plus twelve is never dealt, and there is exactly one, in the pile`() {
+        for (players in MIN_PLAYERS..MAX_PLAYERS) {
+            for (seed in 1..60) {
+                val e = engine(seed = seed.toLong(), players = players, mods = every)
+                e.startRound(seed % players)
+                val inHands = (0 until players)
+                    .sumOf { seat -> e.handOf(seat).count { it.kind == CardKind.WILD_DRAW_TWELVE } }
+                assertEquals("à $players joueurs, graine $seed : distribué", 0, inHands)
+                assertEquals(
+                    "à $players joueurs, graine $seed : pas exactement un dans la pioche",
+                    1,
+                    e.pileForTest().count { it.kind == CardKind.WILD_DRAW_TWELVE }
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `the plus twelve does not always sit in the same place`() {
+        // Hidden at a fixed depth it would be countable, which defeats the point.
+        val depths = (1..40).map { seed ->
+            val e = engine(seed = seed.toLong(), mods = setOf(GameMod.DRAW_TWELVE))
+            e.startRound(HOST)
+            e.pileForTest().indexOfFirst { it.kind == CardKind.WILD_DRAW_TWELVE }
+        }
+        assertTrue("toutes les positions identiques : $depths", depths.toSet().size > 10)
+        assertTrue("jamais en fond de pioche", depths.any { it < 40 })
+        assertTrue("jamais en haut de pioche", depths.any { it > 50 })
+    }
+
+    @Test
+    fun `a drawn plus twelve plays like a plus four, only heavier`() {
+        val e = engine(mods = setOf(GameMod.DRAW_TWELVE))
+        e.forceState(
+            playerHands = listOf(
+                listOf(card(1, CardColor.WILD, CardKind.WILD_DRAW_TWELVE)) + filler(2, 700),
+                listOf(
+                    card(2, CardColor.BLUE, CardKind.DRAW_TWO),  // announced colour
+                    card(3, CardColor.RED, CardKind.DRAW_TWO)    // wrong colour
+                ) + filler(2, 800)
+            ),
+            top = card(50, CardColor.GREEN, CardKind.NUMBER, 5),
+            color = CardColor.GREEN,
+            turnSeat = HOST,
+            deck = filler(40, 100)
+        )
+        assertFalse("un wild sans couleur est refusé", e.playCard(HOST, 1, null))
+        assertTrue(e.playCard(HOST, 1, CardColor.BLUE))
+        assertEquals(12, e.pendingDraw)
+        assertEquals(Penalty.DRAW_FOUR, e.pendingType)
+
+        // Countered by a +2 of the announced colour, exactly like a +4 or a +8.
+        assertEquals(setOf(2), e.legalCardIds(GUEST))
+        assertTrue(e.playCard(GUEST, 2, null))
+        assertEquals(14, e.pendingDraw)
+    }
+
+    @Test
+    fun `eating a plus twelve costs the turn`() {
+        val e = engine(mods = setOf(GameMod.DRAW_TWELVE))
+        e.forceState(
+            playerHands = listOf(
+                listOf(card(1, CardColor.WILD, CardKind.WILD_DRAW_TWELVE)) + filler(2, 700),
+                filler(3, 800)
+            ),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = HOST,
+            deck = filler(40, 100)
+        )
+        e.playCard(HOST, 1, CardColor.BLUE)
+        val before = e.handOf(GUEST).size
+        assertTrue(e.draw(GUEST))
+        assertEquals(before + 12, e.handOf(GUEST).size)
+        assertEquals(HOST, e.turn)
+    }
+
+    @Test
+    fun `a plus twelve stacks with the other wild penalties`() {
+        val e = engine(mods = setOf(GameMod.DRAW_EIGHT, GameMod.DRAW_TWELVE))
+        e.forceState(
+            playerHands = listOf(
+                listOf(card(1, CardColor.WILD, CardKind.WILD_DRAW_EIGHT)) + filler(2, 700),
+                listOf(card(2, CardColor.WILD, CardKind.WILD_DRAW_TWELVE)) + filler(2, 800)
+            ),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = HOST,
+            deck = filler(40, 100)
+        )
+        e.playCard(HOST, 1, CardColor.BLUE)
+        assertTrue(e.legalCardIds(GUEST).contains(2))
+        assertTrue(e.playCard(GUEST, 2, CardColor.RED))
+        assertEquals(20, e.pendingDraw)
     }
 
     // --------------------------------------------------------------- coup double
@@ -363,11 +466,11 @@ class GameModTest {
 
     @Test
     fun `the wire codes survive a round trip`() {
-        assertEquals(every, GameMod.of(listOf("d8", "x2", "sp")))
+        assertEquals(every, GameMod.of(listOf("d8", "x2", "sp", "d12")))
         assertEquals(setOf(GameMod.DRAW_EIGHT), GameMod.of(listOf("d8", "inconnu")))
         assertTrue(GameMod.of(emptyList()).isEmpty())
         assertEquals(
-            listOf(GameMod.DRAW_EIGHT, GameMod.DOUBLE_PLAY, GameMod.SPY),
+            listOf(GameMod.DRAW_EIGHT, GameMod.DOUBLE_PLAY, GameMod.SPY, GameMod.DRAW_TWELVE),
             every.ordered()
         )
         // One code per entry, all distinct: two mods sharing one would silently merge.
@@ -548,6 +651,7 @@ class GameModTest {
             setOf(GameMod.DRAW_EIGHT),
             setOf(GameMod.DOUBLE_PLAY),
             setOf(GameMod.SPY),
+            setOf(GameMod.DRAW_TWELVE),
             every
         )
         for (mods in combos) {

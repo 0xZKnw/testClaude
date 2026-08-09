@@ -95,6 +95,9 @@ object Bot {
             CardKind.WILD_DRAW_FOUR -> if (threatened) 65 else 6
             // Same card, twice the bite: never worth less than a +4.
             CardKind.WILD_DRAW_EIGHT -> if (threatened) 90 else 8
+            // There is one in the whole deck. Holding it is worth something, but not as
+            // much as landing it on somebody who is about to go out.
+            CardKind.WILD_DRAW_TWELVE -> if (threatened) 120 else 10
             // Two cards gone for the price of one, and the colour is yours to pick.
             // Worth playing early rather than hoarded — unless the hand is down to it
             // plus one card, where a plain card followed by the wild is the safer out.

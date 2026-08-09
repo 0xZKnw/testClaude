@@ -76,6 +76,15 @@ export const RULES = [
     ],
   },
   {
+    title: 'Mod « Le +12 »',
+    lines: [
+      'Une seule carte +12 pour toute la partie.',
+      "Elle n'est jamais distribuée : elle est glissée au hasard dans la pioche une fois les mains faites. On ne peut donc que tomber dessus en piochant.",
+      'Une fois en main, elle se joue comme un +4 : cumul avec les +4, +8 et +12, tu annonces une couleur, et un +2 de cette couleur la contre.',
+      'Encaisser une pile terminée par un +12 coûte aussi le tour.',
+    ],
+  },
+  {
     title: 'Mod « Espion »',
     lines: [
       "3 cartes Espion rejoignent le paquet. C'est un Joker ordinaire : tu la poses quand tu veux et tu annonces une couleur.",

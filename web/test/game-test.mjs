@@ -61,10 +61,11 @@ try {
   guard(solo, 'solo');
   await solo.goto(URL);
   await solo.click('#go-solo');
-  // Every mod on, so the solo pass covers the +8, the Coup double and the Espion.
+  // Every mod on, so the solo pass covers the +8, the +12, the Coup double and the Espion.
   await solo.click('#solo-mods [data-mod="d8"]');
   await solo.click('#solo-mods [data-mod="x2"]');
   await solo.click('#solo-mods [data-mod="sp"]');
+  await solo.click('#solo-mods [data-mod="d12"]');
   await solo.click('[data-difficulty="HARD"]');
   await solo.waitForSelector('#screen-game.on');
 
@@ -113,6 +114,7 @@ try {
   await host.click('[data-mod="d8"]');
   await host.click('[data-mod="x2"]');
   await host.click('[data-mod="sp"]');
+  await host.click('[data-mod="d12"]');
   await host.click('#create-go');
   await host.waitForFunction(() => document.querySelector('#qrbox svg'), null, { timeout: 15000 });
   const invite = await host.evaluate(() =>
@@ -147,7 +149,7 @@ try {
   );
   const guestMods = await guest.$$eval('#lobby-mods .chip', (n) => n.map((c) => c.textContent));
   console.log(`  mods annonces a l'invite : ${guestMods.join(', ') || 'aucun'}`);
-  if (guestMods.length !== 3) problems.push(`le salon invite annonce ${guestMods.length} mod(s) au lieu de 3`);
+  if (guestMods.length !== 4) problems.push(`le salon invite annonce ${guestMods.length} mod(s) au lieu de 4`);
 
   await host.click('#host-start');
   await host.waitForSelector('#screen-game.on');
