@@ -23,8 +23,10 @@ function snapshot(tag, e) {
       (KIND_ORDER[a.k] - KIND_ORDER[b.k]) || (a.n - b.n))
     .map((c) => c.i)
     .join('.');
-  const faceUp = e.hands
-    .map((_, seat) => e.revealedIn(seat).map((c) => c.i).join('.'))
+  // What each seat has been shown by its own Espions, sorted so the two engines cannot
+  // differ on set iteration order alone.
+  const faceUp = e.seen
+    .map((ids) => [...ids].sort((a, b) => a - b).join('.'))
     .join(',');
   return [
     tag, e.turn, PHASE_NAME[e.phase], COLOR_ENUM[e.activeColor], e.pendingDraw,

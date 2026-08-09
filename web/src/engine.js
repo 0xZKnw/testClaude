@@ -41,8 +41,8 @@ export const MOD_INFO = {
   sp: {
     label: 'Espion',
     blurb: 'Trois cartes en plus. Un Joker ordinaire — tu annonces une couleur — sauf '
-      + "qu'il retourne au passage une carte au hasard du joueur suivant. Elle reste "
-      + "visible de tous jusqu'à ce qu'il la pose.",
+      + "qu'il te montre une carte au hasard du joueur suivant. Toi seul la vois, et tu "
+      + "la vois jusqu'à ce qu'il la pose.",
   },
 };
 export const orderedMods = (mods) => MOD_ORDER.filter((m) => mods.includes(m));
@@ -157,9 +157,11 @@ export class UnoEngine {
     this.winner = null;
     this.direction = 1;
     this.extraPlays = 0;
-    // Ids of the cards sitting face up, turned over by an Espion. Public on purpose: a
-    // card turned face up is face up for everybody. It leaves the set when it is played.
-    this.revealed = new Set();
+    // Who has seen what, thanks to an Espion: watching seat -> ids it has been shown.
+    // Private on purpose — the card is turned over for the player who spent the Espion
+    // and for nobody else, not even the victim. An id drops out of every watcher's set
+    // the moment that card is played.
+    this.seen = this.seats.map(() => new Set());
     this.drawnCardId = -1;
     this.event = '';
     this.eventId = 0;
@@ -246,7 +248,7 @@ export class UnoEngine {
     this.pendingDraw = 0;
     this.pendingType = Penalty.NONE;
     this.extraPlays = 0;
-    this.revealed.clear();
+    this.seen.forEach((s) => s.clear());
     this.phase = Phase.PLAYING;
     this.winner = null;
     this.drawnCardId = -1;
@@ -312,7 +314,7 @@ export class UnoEngine {
     const wasCountering = this.pendingDraw > 0;
     const card = hand.splice(index, 1)[0];
     // A card that has been played is no longer anybody's to hide.
-    this.revealed.delete(card.i);
+    this.seen.forEach((s) => s.delete(card.i));
     this.discardPile.push(card);
     this.drawnCardId = -1;
     this.lastPlayedBy = seat;
@@ -395,11 +397,13 @@ export class UnoEngine {
       case Kind.SPY: {
         this.activeColor = chosenColor;
         const victim = this.seatAfter(seat);
-        const spied = this.revealOne(victim);
+        const spied = this.revealOne(seat, victim);
         this.turn = victim;
+        // Deliberately vague: the event line is read by the whole table, and naming the
+        // card here would hand everyone what the Espion just bought.
         this.pushEvent(spied === null
           ? `${name} choisit ${COLOR_NAME[this.activeColor]} — rien à espionner`
-          : `${name} retourne ${cardLabel(spied)} chez ${this.seatName(victim)}`);
+          : `${name} espionne une carte de ${this.seatName(victim)}`);
         break;
       }
       default:
@@ -505,20 +509,24 @@ export class UnoEngine {
   }
 
   /**
-   * Turns one of `seat`'s hidden cards face up, picked at random. Null when there is
-   * nothing left to turn. The candidates are taken in the hand's own order, not the
-   * display order: the two engines must draw the same card from the same seed.
+   * Shows `watcher` one of `holder`'s cards, picked at random from the ones that watcher
+   * has not already been shown. Null when there is nothing left to show. The candidates
+   * are taken in the hand's own order, not the display order: the two engines must draw
+   * the same card from the same seed.
    */
-  revealOne(seat) {
-    const candidates = this.hands[seat].filter((c) => !this.revealed.has(c.i));
+  revealOne(watcher, holder) {
+    const known = this.seen[watcher];
+    const candidates = this.hands[holder].filter((c) => !known.has(c.i));
     if (!candidates.length) return null;
     const card = candidates[this.rng.nextIntBelow(candidates.length)];
-    this.revealed.add(card.i);
+    known.add(card.i);
     return card;
   }
 
-  revealedIn(seat) {
-    return this.hands[seat].filter((c) => this.revealed.has(c.i));
+  /** The cards of `holder` that `watcher` has been shown. */
+  revealedTo(watcher, holder) {
+    if (watcher === holder) return [];
+    return this.hands[holder].filter((c) => this.seen[watcher].has(c.i));
   }
 
   clearPenaltyMark() {
@@ -597,7 +605,6 @@ export class UnoEngine {
       // player is laying three cards in a row.
       xp: this.extraPlays,
       md: this.mods,
-      yr: this.revealedIn(seat).map((c) => c.i),
     };
   }
 
@@ -613,7 +620,9 @@ export class UnoEngine {
         c: this.hands[other].length,
         p: this.scores[other],
         r: rematch.has(other),
-        rv: this.revealedIn(other),
+        // Only what *this* seat has been shown. Every player gets a different answer
+        // here, which is the point of the Espion.
+        rv: this.revealedTo(seat, other),
       });
     }
     return out;

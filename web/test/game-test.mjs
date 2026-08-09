@@ -48,10 +48,11 @@ async function takeTurn(page) {
   return picked;
 }
 
-const yourTurn = () => document.getElementById('banner').textContent.includes('À toi') ||
-  document.getElementById('banner').textContent.includes('touche la pioche') ||
-  document.getElementById('banner').textContent.includes('pose-la ou passe') ||
-  document.getElementById('banner').textContent.includes('contre');
+// The banner marks its own text with .mine exactly when the view says it is your turn.
+// Matching the wording instead used to work until a mod added a banner it did not know
+// ("Coup double — 2 cartes à poser"), and the harness then sat waiting for a player who
+// was in fact waiting for it.
+const yourTurn = () => !!document.querySelector('#banner .mine');
 
 try {
   // ------------------------------------------------------------------ solo game

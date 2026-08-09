@@ -16,7 +16,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -45,8 +44,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -79,7 +76,6 @@ import com.zknw.unoduo.ui.components.TableBackground
 import com.zknw.unoduo.ui.components.UnoCardBack
 import com.zknw.unoduo.ui.components.UnoCardFace
 import com.zknw.unoduo.ui.components.clickableNoRipple
-import com.zknw.unoduo.ui.components.drawEye
 import com.zknw.unoduo.ui.theme.Palette
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -415,8 +411,8 @@ private fun RivalTile(rival: Rival, onTurn: Boolean, photo: String?) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        // Whatever an Espion turned over, under the face that holds it — otherwise a
-        // rival who is not on turn would keep a secret the whole table is meant to see.
+        // What your own Espion showed you, under the face that holds it — a rival who is
+        // not on turn has no fan drawn, and the intel would otherwise be invisible.
         if (rival.revealed.isNotEmpty()) {
             Spacer(Modifier.height(3.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(-6.dp)) {
@@ -448,9 +444,9 @@ private fun CardCountLine(count: Int) {
 }
 
 /**
- * The opponent's hand. Cards an Espion has turned over are drawn face up at the end of
- * the fan rather than off to one side: they are still in that hand, and putting them
- * anywhere else would read as a second pile.
+ * The opponent's hand. Cards *you* have been shown by an Espion are drawn face up at the
+ * end of the fan rather than off to one side: they are still in that hand, and putting
+ * them anywhere else would read as a second pile. Nobody else's screen shows them.
  */
 @Composable
 private fun OpponentFan(count: Int, revealed: List<Card> = emptyList()) {
@@ -855,7 +851,6 @@ private fun PlayerHand(view: GameView, enabled: Boolean, onCardTap: (Card) -> Un
                             width = metrics.cardWidth,
                             playable = enabled && card.id in view.legal,
                             dimmed = enabled && card.id !in view.legal,
-                            exposed = card.id in view.yourRevealed,
                             fresh = isFresh,
                             delayMillis = if (fresh.size > 2) order * 55 else 0,
                             ringAlpha = ringAlpha,
@@ -874,7 +869,6 @@ private fun HandCard(
     width: Dp,
     playable: Boolean,
     dimmed: Boolean,
-    exposed: Boolean,
     fresh: Boolean,
     delayMillis: Int,
     ringAlpha: Float,
@@ -916,25 +910,6 @@ private fun HandCard(
         )
         if (playable) {
             PlayableRing(width, ringAlpha)
-        }
-        // An Espion turned this one over: the whole table can see it, and you should
-        // know which one it is before you plan around it.
-        if (exposed) {
-            Box(
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(width * 0.06f)
-                    .size(width * 0.30f)
-                    .clip(CircleShape)
-                    .background(Palette.Outline)
-                    .padding(width * 0.028f)
-                    .clip(CircleShape)
-                    .background(Palette.Gold)
-            ) {
-                Canvas(Modifier.fillMaxSize()) {
-                    drawEye(Rect(Offset.Zero, size), Palette.Outline)
-                }
-            }
         }
     }
 }

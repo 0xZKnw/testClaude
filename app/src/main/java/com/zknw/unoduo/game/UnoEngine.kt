@@ -60,17 +60,23 @@ class UnoEngine(
         private set
 
     /**
-     * Ids of the cards sitting face up on the table, turned over by an Espion. Public on
-     * purpose: a card turned face up is face up for everybody, and the whole table
-     * watching the same card is more fun than one player holding a secret.
+     * Who has seen what, thanks to an Espion: for each watching seat, the ids of the
+     * cards it has been shown.
      *
-     * A card leaves this set the moment it is played, which is what "jusqu'à ce qu'il la
-     * pose" means.
+     * Private on purpose. The card is turned over *for the player who spent the Espion*
+     * and for nobody else — the victim is not even told which of its cards leaked, which
+     * is the whole value of the card. A card drops out of every watcher's list the moment
+     * it is played, which is what "jusqu'à ce qu'il la pose" means.
      */
-    private val revealed = mutableSetOf<Int>()
+    private val seen: Map<Seat, MutableSet<Int>> = seats.associateWith { mutableSetOf() }
 
-    fun revealedIn(seat: Seat): List<Card> =
-        hands.getValue(seat).filter { it.id in revealed }
+    /** Ids [watcher] has been shown, whoever holds them. */
+    fun seenBy(watcher: Seat): Set<Int> = seen.getValue(watcher)
+
+    /** The cards of [holder] that [watcher] has been shown. */
+    fun revealedTo(watcher: Seat, holder: Seat): List<Card> =
+        if (watcher == holder) emptyList()
+        else hands.getValue(holder).filter { it.id in seen.getValue(watcher) }
 
     /** Id of the card just drawn in [Phase.DECIDE_AFTER_DRAW], -1 otherwise. */
     private var drawnCardId: Int = -1
@@ -169,7 +175,7 @@ class UnoEngine(
         pendingDraw = 0
         pendingType = Penalty.NONE
         extraPlays = 0
-        revealed.clear()
+        seen.values.forEach { it.clear() }
         phase = Phase.PLAYING
         winner = null
         drawnCardId = -1
@@ -240,7 +246,7 @@ class UnoEngine(
         val wasCountering = pendingDraw > 0
         val card = hand.removeAt(index)
         // A card that has been played is no longer anybody's to hide.
-        revealed.remove(card.id)
+        seen.values.forEach { it.remove(card.id) }
         discardPile.add(card)
         drawnCardId = -1
         lastPlayedBy = seat
@@ -340,13 +346,15 @@ class UnoEngine(
             CardKind.SPY -> {
                 activeColor = chosenColor!!
                 val victim = seatAfter(seat)
-                val spied = revealOne(victim)
+                val spied = revealOne(watcher = seat, holder = victim)
                 turn = victim
+                // Deliberately vague: the event line is read by the whole table, and
+                // naming the card here would hand everyone what the Espion just bought.
                 pushEvent(
                     if (spied == null) {
                         "$name choisit ${colorName(activeColor)} — rien à espionner"
                     } else {
-                        "$name retourne ${spied.label()} chez ${seatName(victim)}"
+                        "$name espionne une carte de ${seatName(victim)}"
                     }
                 )
             }
@@ -464,18 +472,22 @@ class UnoEngine(
     }
 
     /**
-     * Turns one of [seat]'s hidden cards face up, picked at random. Null when there is
-     * nothing left to turn — every card already face up, or an empty hand.
+     * Shows [watcher] one of [holder]'s cards, picked at random from the ones that
+     * watcher has not already been shown. Null when there is nothing left to show.
+     *
+     * Each spy builds their own knowledge: a card already known to somebody else is
+     * still a fair thing to learn.
      *
      * The candidates are taken in the hand's own order, not the display order: the two
      * engines must draw the same card from the same seed, and only the storage order is
      * guaranteed to be the same on both.
      */
-    private fun revealOne(seat: Seat): Card? {
-        val candidates = hands.getValue(seat).filter { it.id !in revealed }
+    private fun revealOne(watcher: Seat, holder: Seat): Card? {
+        val known = seen.getValue(watcher)
+        val candidates = hands.getValue(holder).filter { it.id !in known }
         if (candidates.isEmpty()) return null
         val card = candidates[rng.nextInt(candidates.size)]
-        revealed.add(card.id)
+        known.add(card.id)
         return card
     }
 
@@ -559,8 +571,7 @@ class UnoEngine(
         // Sent to everyone, not just the player on turn: the table wants to know why
         // one player is laying three cards in a row.
         extraPlays = extraPlays,
-        mods = mods.ordered(),
-        yourRevealed = revealedIn(seat).map { it.id }
+        mods = mods.ordered()
     )
 
     /**
@@ -577,7 +588,9 @@ class UnoEngine(
                 cards = hands.getValue(other).size,
                 score = scores.getValue(other),
                 rematch = other in rematch,
-                revealed = revealedIn(other)
+                // Only what *this* seat has been shown. Every player gets a different
+                // answer here, which is the point of the Espion.
+                revealed = revealedTo(watcher = seat, holder = other)
             )
         }
 
@@ -634,7 +647,7 @@ class UnoEngine(
         deck: List<Card> = emptyList(),
         way: Int = 1,
         bonus: Int = 0,
-        faceUp: Set<Int> = emptySet()
+        faceUp: Map<Seat, Set<Int>> = emptyMap()
     ) {
         require(playerHands.size == playerCount) { "Il faut une main par joueur" }
         playerHands.forEachIndexed { seat, cards ->
@@ -651,8 +664,8 @@ class UnoEngine(
         pendingDraw = pending
         pendingType = penalty
         extraPlays = bonus
-        revealed.clear()
-        revealed.addAll(faceUp)
+        seen.values.forEach { it.clear() }
+        faceUp.forEach { (watcher, ids) -> seen.getValue(watcher).addAll(ids) }
         phase = Phase.PLAYING
         winner = null
         drawnCardId = -1

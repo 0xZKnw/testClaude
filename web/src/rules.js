@@ -79,9 +79,10 @@ export const RULES = [
     title: 'Mod « Espion »',
     lines: [
       "3 cartes Espion rejoignent le paquet. C'est un Joker ordinaire : tu la poses quand tu veux et tu annonces une couleur.",
-      'En prime, elle retourne face visible une carte au hasard de la main du joueur suivant.',
-      "Cette carte reste visible par toute la table jusqu'à ce que son propriétaire la pose.",
-      "Si toutes ses cartes sont déjà retournées, l'Espion ne fait que changer la couleur.",
+      'En prime, elle te montre une carte au hasard de la main du joueur suivant.',
+      "Toi seul la vois : elle apparaît face visible au bout de sa main sur ton écran, et lui ne sait même pas laquelle a fuité.",
+      "Tu la vois jusqu'à ce qu'il la pose.",
+      "Chaque espion a ses propres informations : si tu as déjà vu toutes ses cartes, l'Espion ne fait que changer la couleur.",
     ],
   },
   {

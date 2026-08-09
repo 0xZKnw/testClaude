@@ -24,8 +24,10 @@ fun main() {
         val seat0 = e.handOf(0).sortedWith(
             compareBy({ it.color.ordinal }, { it.kind.ordinal }, { it.number })
         ).joinToString(".") { it.id.toString() }
+        // What each seat has been shown by its own Espions, sorted so the two engines
+        // cannot differ on set iteration order alone.
         val faceUp = (0 until e.playerCount)
-            .joinToString(",") { seat -> e.revealedIn(seat).joinToString(".") { it.id.toString() } }
+            .joinToString(",") { w -> e.seenBy(w).sorted().joinToString(".") }
         return "$tag|${e.turn}|${e.phase}|${e.activeColor}|${e.pendingDraw}|${e.pendingType}|" +
             "${e.deckCount()}|$hands|${e.top().id}|${e.direction}|${e.extraPlays}|" +
             "$faceUp|${e.winner}|$seat0|${e.event}"

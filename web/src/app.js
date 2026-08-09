@@ -731,7 +731,7 @@ function handMetrics(count, available) {
 let knownCards = new Set();
 let knownRound = -1;
 
-/** The face-up cards under a rival's tile, so a player off turn keeps no secret. */
+/** What your own Espion showed you, under the tile of the rival who holds it. */
 function revealedStrip(cards) {
   if (!cards || !cards.length) return '';
   return `<div class="revealed">${cards.slice(0, 3)
@@ -775,8 +775,9 @@ function renderGame() {
   $('quit-x').onclick = leaveGame;
 
   // ---- the fan of whoever the table waits on
-  // Cards an Espion turned over are drawn face up at the end of the fan rather than off
-  // to one side: they are still in that hand, and anywhere else reads as a second pile.
+  // Cards *you* have been shown by an Espion are drawn face up at the end of the fan
+  // rather than off to one side: they are still in that hand, and anywhere else reads as
+  // a second pile. Nobody else's screen shows them.
   const shown = single ?? v.ri.find((r) => r.s === v.ts);
   const total = Math.min(shown?.c ?? 0, 14);
   const faceUp = (shown?.rv ?? []).slice(0, total);
@@ -836,12 +837,10 @@ function renderGame() {
     const playable = yours && v.l.includes(card.i);
     const dimmed = yours && !v.l.includes(card.i);
     const fresh = !knownCards.has(card.i);
-    // An Espion turned this one over: the table can see it, and so should you.
-    const exposed = (v.yr ?? []).includes(card.i);
     return `<div class="card ${playable ? 'playable' : ''} ${fresh ? 'fresh' : ''}"
       data-card="${card.i}"
       style="width:${m.width}px;margin-left:${i ? step - m.width : 0}px">
-      ${cardFace(card, { dimmed })}${exposed ? '<span class="exposed">&#128065;</span>' : ''}</div>`;
+      ${cardFace(card, { dimmed })}</div>`;
   }).join('') + `</div>`).join('');
   v.h.forEach((c) => knownCards.add(c.i));
 

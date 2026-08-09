@@ -395,21 +395,72 @@ class GameModTest {
     }
 
     @Test
-    fun `an espion changes the colour and turns one of the next hand face up`() {
+    fun `an espion changes the colour and shows the spy one of the next hand`() {
         val e = spyGame(
             mine = listOf(card(1, CardColor.WILD, CardKind.SPY)) + filler(2, 700),
             theirs = filler(4, 800)
         )
-        assertTrue(e.revealedIn(GUEST).isEmpty())
+        assertTrue(e.revealedTo(watcher = HOST, holder = GUEST).isEmpty())
         assertTrue(e.playCard(HOST, 1, CardColor.GREEN))
 
         assertEquals(CardColor.GREEN, e.activeColor)
         // A plain colour change otherwise: the turn simply moves on.
         assertEquals(GUEST, e.turn)
 
-        val faceUp = e.revealedIn(GUEST)
+        val faceUp = e.revealedTo(watcher = HOST, holder = GUEST)
         assertEquals(1, faceUp.size)
-        assertTrue("la carte retournée doit venir de sa main", faceUp[0] in e.handOf(GUEST))
+        assertTrue("la carte montrée doit venir de sa main", faceUp[0] in e.handOf(GUEST))
+    }
+
+    @Test
+    fun `the victim is not told which of its cards leaked`() {
+        val e = spyGame(
+            mine = listOf(card(1, CardColor.WILD, CardKind.SPY)) + filler(2, 700),
+            theirs = filler(4, 800),
+            players = 3
+        )
+        e.playCard(HOST, 1, CardColor.RED)
+        val spied = e.revealedTo(watcher = HOST, holder = GUEST).single()
+
+        // The spy sees it…
+        assertEquals(listOf(spied), e.viewFor(HOST).rivalOf(GUEST)?.revealed)
+        // …the victim's own snapshot says nothing about it…
+        assertTrue(e.viewFor(GUEST).rivals.all { it.revealed.isEmpty() })
+        // …and the third player at the table learns nothing either.
+        assertTrue(e.viewFor(2).rivals.all { it.revealed.isEmpty() })
+        // Not even the event line names the card.
+        assertFalse(e.event.contains(spied.label()))
+        assertTrue(e.event.contains("espionne"))
+    }
+
+    @Test
+    fun `two spies keep their own notes`() {
+        val e = engine(mods = setOf(GameMod.SPY), players = 3)
+        e.forceState(
+            playerHands = listOf(
+                listOf(card(1, CardColor.WILD, CardKind.SPY)) + filler(2, 700),
+                listOf(card(2, CardColor.WILD, CardKind.SPY)) + filler(2, 750),
+                listOf(
+                    card(10, CardColor.RED, CardKind.NUMBER, 1),
+                    card(11, CardColor.RED, CardKind.NUMBER, 2)
+                )
+            ),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = 1,
+            deck = filler(20, 100)
+        )
+        // Seat 1 spies on seat 2, then seat 0 spies on seat 1.
+        assertTrue(e.playCard(1, 2, CardColor.RED))
+        val known = e.revealedTo(watcher = 1, holder = 2).single()
+
+        e.forceTurn(HOST)
+        assertTrue(e.playCard(HOST, 1, CardColor.RED))
+
+        // Seat 1 keeps what it learned, and seat 0 learned something about seat 1 only.
+        assertEquals(listOf(known), e.revealedTo(watcher = 1, holder = 2))
+        assertTrue(e.revealedTo(watcher = HOST, holder = 2).isEmpty())
+        assertEquals(1, e.revealedTo(watcher = HOST, holder = 1).size)
     }
 
     @Test
@@ -433,18 +484,18 @@ class GameModTest {
             )
         )
         e.playCard(HOST, 1, CardColor.RED)
-        val turned = e.revealedIn(GUEST).single()
+        val turned = e.revealedTo(watcher = HOST, holder = GUEST).single()
 
-        // Turns go by and it is still face up: only posing it takes it off the table.
+        // Turns go by and you still see it: only posing it takes it off the table.
         val other = e.handOf(GUEST).first { it.id != turned.id }
         if (other.id in e.legalCardIds(GUEST)) {
             assertTrue(e.playCard(GUEST, other.id, null))
-            assertEquals(listOf(turned.id), e.revealedIn(GUEST).map { it.id })
+            assertEquals(listOf(turned.id), e.revealedTo(HOST, GUEST).map { it.id })
             e.forceTurn(GUEST)
         }
 
         assertTrue(e.playCard(GUEST, turned.id, null))
-        assertTrue(e.revealedIn(GUEST).isEmpty())
+        assertTrue(e.revealedTo(HOST, GUEST).isEmpty())
     }
 
     @Test
@@ -463,35 +514,16 @@ class GameModTest {
             ),
             players = 3
         )
-        // Seat 1 only has two cards, so the third Espion finds nothing left to turn.
+        // Seat 1 only has two cards, so the third Espion finds nothing new to show.
         e.playCard(HOST, 1, CardColor.RED)
-        assertEquals(1, e.revealedIn(1).size)
+        assertEquals(1, e.revealedTo(HOST, 1).size)
         e.forceTurn(HOST)
         e.playCard(HOST, 2, CardColor.RED)
-        assertEquals(2, e.revealedIn(1).size)
+        assertEquals(2, e.revealedTo(HOST, 1).size)
         e.forceTurn(HOST)
         e.playCard(HOST, 3, CardColor.RED)
-        assertEquals(2, e.revealedIn(1).size)
+        assertEquals(2, e.revealedTo(HOST, 1).size)
         assertTrue(e.event.contains("rien à espionner"))
-    }
-
-    @Test
-    fun `the whole table sees the same face-up cards`() {
-        val e = spyGame(
-            mine = listOf(card(1, CardColor.WILD, CardKind.SPY)) + filler(2, 700),
-            theirs = filler(4, 800),
-            players = 3
-        )
-        e.playCard(HOST, 1, CardColor.RED)
-        val turned = e.revealedIn(1).single()
-
-        // The victim knows which of its own cards is exposed…
-        assertEquals(listOf(turned.id), e.viewFor(1).yourRevealed)
-        // …and everybody else sees the card itself, not just the count.
-        assertEquals(listOf(turned), e.viewFor(HOST).rivalOf(1)?.revealed)
-        assertEquals(listOf(turned), e.viewFor(2).rivalOf(1)?.revealed)
-        // Nobody else has anything face up.
-        assertTrue(e.viewFor(HOST).rivalOf(2)?.revealed.isNullOrEmpty())
     }
 
     @Test
@@ -501,10 +533,10 @@ class GameModTest {
             theirs = filler(4, 800)
         )
         e.playCard(HOST, 1, CardColor.RED)
-        assertEquals(1, e.revealedIn(GUEST).size)
+        assertEquals(1, e.revealedTo(HOST, GUEST).size)
         e.startRound(HOST)
-        assertTrue(e.revealedIn(GUEST).isEmpty())
-        assertTrue(e.revealedIn(HOST).isEmpty())
+        assertTrue(e.seenBy(HOST).isEmpty())
+        assertTrue(e.seenBy(GUEST).isEmpty())
     }
 
     // ----------------------------------------------------------- no dead tables

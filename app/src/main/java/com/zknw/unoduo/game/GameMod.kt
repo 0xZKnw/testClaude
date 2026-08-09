@@ -35,8 +35,8 @@ enum class GameMod(val label: String, val blurb: String) {
     SPY(
         "Espion",
         "Trois cartes en plus. Un Joker ordinaire — tu annonces une couleur — sauf " +
-            "qu'il retourne au passage une carte au hasard du joueur suivant. Elle " +
-            "reste visible de tous jusqu'à ce qu'il la pose."
+            "qu'il te montre une carte au hasard du joueur suivant. Toi seul la vois, " +
+            "et tu la vois jusqu'à ce qu'il la pose."
     );
 
     companion object {
