@@ -99,6 +99,9 @@ object Bot {
             // Worth playing early rather than hoarded — unless the hand is down to it
             // plus one card, where a plain card followed by the wild is the safer out.
             CardKind.DOUBLE_PLAY -> if (view.hand.size > 2) 60 else 4
+            // A Joker that also buys information. Worth a little more than a bare one,
+            // but still a wild you would rather keep for when nothing else fits.
+            CardKind.SPY -> 9
         }
 
         if (sharp) {

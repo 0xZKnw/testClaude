@@ -59,6 +59,19 @@ class UnoEngine(
     var extraPlays: Int = 0
         private set
 
+    /**
+     * Ids of the cards sitting face up on the table, turned over by an Espion. Public on
+     * purpose: a card turned face up is face up for everybody, and the whole table
+     * watching the same card is more fun than one player holding a secret.
+     *
+     * A card leaves this set the moment it is played, which is what "jusqu'à ce qu'il la
+     * pose" means.
+     */
+    private val revealed = mutableSetOf<Int>()
+
+    fun revealedIn(seat: Seat): List<Card> =
+        hands.getValue(seat).filter { it.id in revealed }
+
     /** Id of the card just drawn in [Phase.DECIDE_AFTER_DRAW], -1 otherwise. */
     private var drawnCardId: Int = -1
 
@@ -156,6 +169,7 @@ class UnoEngine(
         pendingDraw = 0
         pendingType = Penalty.NONE
         extraPlays = 0
+        revealed.clear()
         phase = Phase.PLAYING
         winner = null
         drawnCardId = -1
@@ -225,6 +239,8 @@ class UnoEngine(
         if (hand[index].isWild && (chosenColor == null || !chosenColor.isRealColor)) return false
         val wasCountering = pendingDraw > 0
         val card = hand.removeAt(index)
+        // A card that has been played is no longer anybody's to hide.
+        revealed.remove(card.id)
         discardPile.add(card)
         drawnCardId = -1
         lastPlayedBy = seat
@@ -244,7 +260,7 @@ class UnoEngine(
                 if (wasCountering) tally.countersPlayed++
             }
 
-            CardKind.WILD, CardKind.DOUBLE_PLAY -> tally.wildsPlayed++
+            CardKind.WILD, CardKind.DOUBLE_PLAY, CardKind.SPY -> tally.wildsPlayed++
             CardKind.SKIP, CardKind.REVERSE -> tally.skipsPlayed++
             CardKind.NUMBER -> Unit
         }
@@ -319,6 +335,20 @@ class UnoEngine(
                 // The turn stays put: the two bonus cards are laid down right now.
                 turn = seat
                 pushEvent("$name joue un coup double en ${colorName(activeColor)}")
+            }
+
+            CardKind.SPY -> {
+                activeColor = chosenColor!!
+                val victim = seatAfter(seat)
+                val spied = revealOne(victim)
+                turn = victim
+                pushEvent(
+                    if (spied == null) {
+                        "$name choisit ${colorName(activeColor)} — rien à espionner"
+                    } else {
+                        "$name retourne ${spied.label()} chez ${seatName(victim)}"
+                    }
+                )
             }
         }
 
@@ -433,6 +463,22 @@ class UnoEngine(
         return true
     }
 
+    /**
+     * Turns one of [seat]'s hidden cards face up, picked at random. Null when there is
+     * nothing left to turn — every card already face up, or an empty hand.
+     *
+     * The candidates are taken in the hand's own order, not the display order: the two
+     * engines must draw the same card from the same seed, and only the storage order is
+     * guaranteed to be the same on both.
+     */
+    private fun revealOne(seat: Seat): Card? {
+        val candidates = hands.getValue(seat).filter { it.id !in revealed }
+        if (candidates.isEmpty()) return null
+        val card = candidates[rng.nextInt(candidates.size)]
+        revealed.add(card.id)
+        return card
+    }
+
     private fun clearPenaltyMark() {
         penaltyTaken = 0
         penaltyVictim = null
@@ -513,7 +559,8 @@ class UnoEngine(
         // Sent to everyone, not just the player on turn: the table wants to know why
         // one player is laying three cards in a row.
         extraPlays = extraPlays,
-        mods = mods.ordered()
+        mods = mods.ordered(),
+        yourRevealed = revealedIn(seat).map { it.id }
     )
 
     /**
@@ -529,7 +576,8 @@ class UnoEngine(
                 avatar = avatars.getValue(other),
                 cards = hands.getValue(other).size,
                 score = scores.getValue(other),
-                rematch = other in rematch
+                rematch = other in rematch,
+                revealed = revealedIn(other)
             )
         }
 
@@ -570,6 +618,11 @@ class UnoEngine(
 
     // ------------------------------------------------------- test entry points
 
+    /** Test-only: hand the table back to one seat, mid-scenario. */
+    internal fun forceTurn(seat: Seat) {
+        turn = seat
+    }
+
     /** Test-only: force a precise situation without replaying a whole game. */
     internal fun forceState(
         playerHands: List<List<Card>>,
@@ -580,7 +633,8 @@ class UnoEngine(
         penalty: Penalty = Penalty.NONE,
         deck: List<Card> = emptyList(),
         way: Int = 1,
-        bonus: Int = 0
+        bonus: Int = 0,
+        faceUp: Set<Int> = emptySet()
     ) {
         require(playerHands.size == playerCount) { "Il faut une main par joueur" }
         playerHands.forEachIndexed { seat, cards ->
@@ -597,6 +651,8 @@ class UnoEngine(
         pendingDraw = pending
         pendingType = penalty
         extraPlays = bonus
+        revealed.clear()
+        revealed.addAll(faceUp)
         phase = Phase.PLAYING
         winner = null
         drawnCardId = -1

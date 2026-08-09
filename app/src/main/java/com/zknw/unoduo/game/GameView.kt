@@ -46,7 +46,9 @@ data class Rival(
     @SerialName("a") val avatar: Int,
     @SerialName("c") val cards: Int,
     @SerialName("p") val score: Int = 0,
-    @SerialName("r") val rematch: Boolean = false
+    @SerialName("r") val rematch: Boolean = false,
+    /** Their cards an Espion has turned face up. Public knowledge, like the count. */
+    @SerialName("rv") val revealed: List<Card> = emptyList()
 )
 
 /**
@@ -85,7 +87,9 @@ data class GameView(
     /** Cards the player on turn still owes after a Coup double. 0 the rest of the time. */
     @SerialName("xp") val extraPlays: Int = 0,
     /** The optional rules this room is playing with, so every device can say so. */
-    @SerialName("md") val mods: List<GameMod> = emptyList()
+    @SerialName("md") val mods: List<GameMod> = emptyList(),
+    /** Ids of your own cards an Espion has turned face up — the table can see these. */
+    @SerialName("yr") val yourRevealed: List<Int> = emptyList()
 ) {
     val playerCount: Int get() = rivals.size + 1
 

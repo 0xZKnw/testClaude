@@ -26,9 +26,17 @@ enum class GameMod(val label: String, val blurb: String) {
     @SerialName("x2")
     DOUBLE_PLAY(
         "Coup double",
-        "Cinq cartes en plus. Tu annonces une couleur, puis tu poses deux cartes de " +
+        "Trois cartes en plus. Tu annonces une couleur, puis tu poses deux cartes de " +
             "suite. Une carte d'attaque met fin au coup double : la pile part chez le " +
             "voisin."
+    ),
+
+    @SerialName("sp")
+    SPY(
+        "Espion",
+        "Trois cartes en plus. Un Joker ordinaire — tu annonces une couleur — sauf " +
+            "qu'il retourne au passage une carte au hasard du joueur suivant. Elle " +
+            "reste visible de tous jusqu'à ce qu'il la pose."
     );
 
     companion object {
@@ -42,6 +50,7 @@ enum class GameMod(val label: String, val blurb: String) {
         get() = when (this) {
             DRAW_EIGHT -> "d8"
             DOUBLE_PLAY -> "x2"
+            SPY -> "sp"
         }
 }
 

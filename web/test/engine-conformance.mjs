@@ -1,7 +1,7 @@
 // Locks the JavaScript engine to the Kotlin one.
 //
-// The two were compared move by move — 960 complete games covering every combination of
-// mods, every shuffle, every event string — and the resulting trace was hashed. Re-running
+// The two were compared move by move — 1200 complete games covering the plain game, each mod on its own and all of them at
+// once, every shuffle, every event string — and the resulting trace was hashed. Re-running
 // this checks the JavaScript side still produces that exact trace, so any drift in the
 // rules or in the bot breaks the build instead of quietly changing how the web version
 // plays.
@@ -27,7 +27,7 @@ const trace = execFileSync(process.execPath, [join(here, 'trace.mjs')], {
 const actual = createHash('sha256').update(trace, 'utf8').digest('hex');
 const lines = trace.trimEnd().split('\n').length;
 
-console.log(`\n  ${lines} etats rejoues (960 parties, 2 a 5 joueurs, tous les mods, moteur + bot)`);
+console.log(`\n  ${lines} etats rejoues (1200 parties, 2 a 5 joueurs, tous les mods, moteur + bot)`);
 if (actual !== expected) {
   console.log(`\n  DIVERGENCE : le moteur JavaScript ne joue plus les memes parties.`);
   console.log(`  attendu : ${expected}`);

@@ -82,6 +82,8 @@ function score(card, v, sharp) {
     case Kind.DRAW_EIGHT: value = threatened ? 90 : 8; break;
     // Two cards gone for the price of one, and the colour is yours to pick.
     case Kind.DOUBLE_PLAY: value = v.h.length > 2 ? 60 : 4; break;
+    // A Joker that also buys information: a little more than a bare one, no more.
+    case Kind.SPY: value = 9; break;
     default: value = 0;
   }
 

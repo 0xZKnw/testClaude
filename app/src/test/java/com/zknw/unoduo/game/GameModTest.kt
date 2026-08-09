@@ -30,6 +30,7 @@ class GameModTest {
         (0 until count).map { card(from + it, CardColor.RED, CardKind.NUMBER, 5) }
 
     private val both = setOf(GameMod.DRAW_EIGHT, GameMod.DOUBLE_PLAY)
+    private val every = GameMod.entries.toSet()
 
     // ------------------------------------------------------------------- the deck
 
@@ -39,7 +40,9 @@ class GameModTest {
         for (mods in listOf(
             setOf(GameMod.DRAW_EIGHT),
             setOf(GameMod.DOUBLE_PLAY),
-            both
+            setOf(GameMod.SPY),
+            both,
+            every
         )) {
             val deck = Deck.build(mods)
             assertEquals("les 108 premières cartes doivent être identiques", plain, deck.take(108))
@@ -51,33 +54,36 @@ class GameModTest {
     fun `each mod adds exactly its own cards`() {
         assertEquals(108, Deck.build(emptySet()).size)
         assertEquals(110, Deck.build(setOf(GameMod.DRAW_EIGHT)).size)
-        assertEquals(113, Deck.build(setOf(GameMod.DOUBLE_PLAY)).size)
-        assertEquals(115, Deck.build(both).size)
+        assertEquals(111, Deck.build(setOf(GameMod.DOUBLE_PLAY)).size)
+        assertEquals(111, Deck.build(setOf(GameMod.SPY)).size)
+        assertEquals(116, Deck.build(every).size)
 
-        val deck = Deck.build(both)
+        val deck = Deck.build(every)
         assertEquals(2, deck.count { it.kind == CardKind.WILD_DRAW_EIGHT })
-        assertEquals(5, deck.count { it.kind == CardKind.DOUBLE_PLAY })
-        // Both are colourless, so they can be laid on anything.
+        assertEquals(3, deck.count { it.kind == CardKind.DOUBLE_PLAY })
+        assertEquals(3, deck.count { it.kind == CardKind.SPY })
+        // They are all colourless, so they can be laid on anything.
         assertTrue(deck.filter { it.isWild }.all { it.color == CardColor.WILD })
     }
 
     @Test
     fun `the extra cards are numbered in a fixed order whatever the set iterates like`() {
-        val one = Deck.build(setOf(GameMod.DOUBLE_PLAY, GameMod.DRAW_EIGHT))
-        val other = Deck.build(setOf(GameMod.DRAW_EIGHT, GameMod.DOUBLE_PLAY))
+        val one = Deck.build(setOf(GameMod.SPY, GameMod.DOUBLE_PLAY, GameMod.DRAW_EIGHT))
+        val other = Deck.build(setOf(GameMod.DRAW_EIGHT, GameMod.DOUBLE_PLAY, GameMod.SPY))
         assertEquals(one, other)
         assertEquals(CardKind.WILD_DRAW_EIGHT, one[108].kind)
         assertEquals(CardKind.DOUBLE_PLAY, one[110].kind)
+        assertEquals(CardKind.SPY, one[113].kind)
     }
 
     @Test
     fun `a round without mods deals the deck it always dealt`() {
         val plain = engine(seed = 9)
-        val modded = engine(seed = 9, mods = both)
+        val modded = engine(seed = 9, mods = every)
         plain.startRound(HOST)
         modded.startRound(HOST)
         assertEquals(108 - 15, plain.deckCount())
-        assertEquals(115 - 15, modded.deckCount())
+        assertEquals(116 - 15, modded.deckCount())
         // Same seed, different deck: the extra cards really are in play.
         assertNotEquals(plain.handOf(HOST), modded.handOf(HOST))
     }
@@ -357,10 +363,148 @@ class GameModTest {
 
     @Test
     fun `the wire codes survive a round trip`() {
-        assertEquals(both, GameMod.of(listOf("d8", "x2")))
+        assertEquals(every, GameMod.of(listOf("d8", "x2", "sp")))
         assertEquals(setOf(GameMod.DRAW_EIGHT), GameMod.of(listOf("d8", "inconnu")))
         assertTrue(GameMod.of(emptyList()).isEmpty())
-        assertEquals(listOf(GameMod.DRAW_EIGHT, GameMod.DOUBLE_PLAY), both.ordered())
+        assertEquals(
+            listOf(GameMod.DRAW_EIGHT, GameMod.DOUBLE_PLAY, GameMod.SPY),
+            every.ordered()
+        )
+        // One code per entry, all distinct: two mods sharing one would silently merge.
+        assertEquals(GameMod.entries.size, GameMod.entries.map { it.code }.toSet().size)
+    }
+
+    // -------------------------------------------------------------------- espion
+
+    private fun spyGame(
+        mine: List<Card>,
+        theirs: List<Card>,
+        players: Int = 2
+    ): UnoEngine {
+        val e = engine(mods = setOf(GameMod.SPY), players = players)
+        val hands = mutableListOf(mine, theirs)
+        while (hands.size < players) hands += filler(4, 600 + hands.size * 50)
+        e.forceState(
+            playerHands = hands,
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = HOST,
+            deck = filler(20, 100)
+        )
+        return e
+    }
+
+    @Test
+    fun `an espion changes the colour and turns one of the next hand face up`() {
+        val e = spyGame(
+            mine = listOf(card(1, CardColor.WILD, CardKind.SPY)) + filler(2, 700),
+            theirs = filler(4, 800)
+        )
+        assertTrue(e.revealedIn(GUEST).isEmpty())
+        assertTrue(e.playCard(HOST, 1, CardColor.GREEN))
+
+        assertEquals(CardColor.GREEN, e.activeColor)
+        // A plain colour change otherwise: the turn simply moves on.
+        assertEquals(GUEST, e.turn)
+
+        val faceUp = e.revealedIn(GUEST)
+        assertEquals(1, faceUp.size)
+        assertTrue("la carte retournée doit venir de sa main", faceUp[0] in e.handOf(GUEST))
+    }
+
+    @Test
+    fun `an espion needs a colour like every wild`() {
+        val e = spyGame(
+            mine = listOf(card(1, CardColor.WILD, CardKind.SPY)) + filler(2, 700),
+            theirs = filler(4, 800)
+        )
+        assertFalse(e.playCard(HOST, 1, null))
+        assertFalse(e.playCard(HOST, 1, CardColor.WILD))
+        assertTrue(e.playCard(HOST, 1, CardColor.BLUE))
+    }
+
+    @Test
+    fun `a revealed card stays face up until it is played`() {
+        val e = spyGame(
+            mine = listOf(card(1, CardColor.WILD, CardKind.SPY)) + filler(2, 700),
+            theirs = listOf(
+                card(2, CardColor.RED, CardKind.NUMBER, 3),
+                card(3, CardColor.BLUE, CardKind.NUMBER, 9)
+            )
+        )
+        e.playCard(HOST, 1, CardColor.RED)
+        val turned = e.revealedIn(GUEST).single()
+
+        // Turns go by and it is still face up: only posing it takes it off the table.
+        val other = e.handOf(GUEST).first { it.id != turned.id }
+        if (other.id in e.legalCardIds(GUEST)) {
+            assertTrue(e.playCard(GUEST, other.id, null))
+            assertEquals(listOf(turned.id), e.revealedIn(GUEST).map { it.id })
+            e.forceTurn(GUEST)
+        }
+
+        assertTrue(e.playCard(GUEST, turned.id, null))
+        assertTrue(e.revealedIn(GUEST).isEmpty())
+    }
+
+    @Test
+    fun `the espion only ever turns over a card that is still hidden`() {
+        val e = spyGame(
+            // A spare card so the third Espion is not also the winning move, which
+            // would overwrite the event we are reading.
+            mine = listOf(
+                card(1, CardColor.WILD, CardKind.SPY),
+                card(2, CardColor.WILD, CardKind.SPY),
+                card(3, CardColor.WILD, CardKind.SPY)
+            ) + filler(1, 700),
+            theirs = listOf(
+                card(10, CardColor.RED, CardKind.NUMBER, 1),
+                card(11, CardColor.RED, CardKind.NUMBER, 2)
+            ),
+            players = 3
+        )
+        // Seat 1 only has two cards, so the third Espion finds nothing left to turn.
+        e.playCard(HOST, 1, CardColor.RED)
+        assertEquals(1, e.revealedIn(1).size)
+        e.forceTurn(HOST)
+        e.playCard(HOST, 2, CardColor.RED)
+        assertEquals(2, e.revealedIn(1).size)
+        e.forceTurn(HOST)
+        e.playCard(HOST, 3, CardColor.RED)
+        assertEquals(2, e.revealedIn(1).size)
+        assertTrue(e.event.contains("rien à espionner"))
+    }
+
+    @Test
+    fun `the whole table sees the same face-up cards`() {
+        val e = spyGame(
+            mine = listOf(card(1, CardColor.WILD, CardKind.SPY)) + filler(2, 700),
+            theirs = filler(4, 800),
+            players = 3
+        )
+        e.playCard(HOST, 1, CardColor.RED)
+        val turned = e.revealedIn(1).single()
+
+        // The victim knows which of its own cards is exposed…
+        assertEquals(listOf(turned.id), e.viewFor(1).yourRevealed)
+        // …and everybody else sees the card itself, not just the count.
+        assertEquals(listOf(turned), e.viewFor(HOST).rivalOf(1)?.revealed)
+        assertEquals(listOf(turned), e.viewFor(2).rivalOf(1)?.revealed)
+        // Nobody else has anything face up.
+        assertTrue(e.viewFor(HOST).rivalOf(2)?.revealed.isNullOrEmpty())
+    }
+
+    @Test
+    fun `nothing stays face up from one round to the next`() {
+        val e = spyGame(
+            mine = listOf(card(1, CardColor.WILD, CardKind.SPY)) + filler(2, 700),
+            theirs = filler(4, 800)
+        )
+        e.playCard(HOST, 1, CardColor.RED)
+        assertEquals(1, e.revealedIn(GUEST).size)
+        e.startRound(HOST)
+        assertTrue(e.revealedIn(GUEST).isEmpty())
+        assertTrue(e.revealedIn(HOST).isEmpty())
     }
 
     // ----------------------------------------------------------- no dead tables
@@ -371,7 +515,8 @@ class GameModTest {
             emptySet(),
             setOf(GameMod.DRAW_EIGHT),
             setOf(GameMod.DOUBLE_PLAY),
-            both
+            setOf(GameMod.SPY),
+            every
         )
         for (mods in combos) {
             for (players in MIN_PLAYERS..MAX_PLAYERS) {

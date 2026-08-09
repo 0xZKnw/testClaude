@@ -20,8 +20,8 @@ enum class CardColor {
 
 /**
  * The order matters twice over: it is how a hand is sorted, and it is [Enum.ordinal] on
- * both sides of the wire. The two kinds that only exist under a [GameMod] are appended
- * at the end so a standard game sorts and serialises exactly as it always did.
+ * both sides of the wire. The kinds that only exist under a [GameMod] are appended at
+ * the end so a standard game sorts and serialises exactly as it always did.
  */
 @Serializable
 enum class CardKind {
@@ -36,7 +36,10 @@ enum class CardKind {
     @SerialName("d8") WILD_DRAW_EIGHT,
 
     /** [GameMod.DOUBLE_PLAY] — choose a colour, then lay two more cards. */
-    @SerialName("x2") DOUBLE_PLAY
+    @SerialName("x2") DOUBLE_PLAY,
+
+    /** [GameMod.SPY] — choose a colour, and turn one of the next player's cards face up. */
+    @SerialName("sp") SPY
 }
 
 /**
@@ -56,7 +59,8 @@ data class Card(
         get() = kind == CardKind.WILD ||
             kind == CardKind.WILD_DRAW_FOUR ||
             kind == CardKind.WILD_DRAW_EIGHT ||
-            kind == CardKind.DOUBLE_PLAY
+            kind == CardKind.DOUBLE_PLAY ||
+            kind == CardKind.SPY
 
     val isPenalty: Boolean
         get() = kind == CardKind.DRAW_TWO ||
@@ -81,6 +85,7 @@ data class Card(
             CardKind.WILD_DRAW_FOUR -> "+4"
             CardKind.WILD_DRAW_EIGHT -> "+8"
             CardKind.DOUBLE_PLAY -> "Coup double"
+            CardKind.SPY -> "Espion"
         }
         return if (colorName.isEmpty()) kindName else "$kindName $colorName"
     }
@@ -89,7 +94,8 @@ data class Card(
 object Deck {
     /** How many of each extra card a mod puts in the deck. */
     const val DRAW_EIGHTS = 2
-    const val DOUBLE_PLAYS = 5
+    const val DOUBLE_PLAYS = 3
+    const val SPIES = 3
 
     /**
      * The classic 108-card deck: per colour one 0, two of each 1..9, two Skip,
@@ -103,7 +109,7 @@ object Deck {
      * mods existed, whatever is switched on.
      */
     fun build(mods: Set<GameMod>): List<Card> {
-        val cards = ArrayList<Card>(108 + DRAW_EIGHTS + DOUBLE_PLAYS)
+        val cards = ArrayList<Card>(108 + DRAW_EIGHTS + DOUBLE_PLAYS + SPIES)
         var id = 0
         for (color in CardColor.playable) {
             cards += Card(id++, color, CardKind.NUMBER, 0)
@@ -124,6 +130,9 @@ object Deck {
         }
         if (GameMod.DOUBLE_PLAY in mods) {
             repeat(DOUBLE_PLAYS) { cards += Card(id++, CardColor.WILD, CardKind.DOUBLE_PLAY) }
+        }
+        if (GameMod.SPY in mods) {
+            repeat(SPIES) { cards += Card(id++, CardColor.WILD, CardKind.SPY) }
         }
         return cards
     }

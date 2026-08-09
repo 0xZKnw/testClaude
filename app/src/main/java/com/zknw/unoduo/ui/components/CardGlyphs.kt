@@ -254,6 +254,44 @@ fun DrawScope.drawWildEight(boxSize: Size, origin: Offset, outline: Color) {
     drawWildFour(row, Offset(origin.x + shift, origin.y + drop), outline)
 }
 
+/**
+ * The Espion: an eye whose iris is the Wild pinwheel.
+ *
+ * It has to say two things at once — "this changes the colour" and "this looks at your
+ * hand" — and one emblem carrying both reads faster than a wheel with a badge stuck on
+ * it. The almond is the warm white of the card stock, so it stands out on the dark face.
+ */
+fun DrawScope.drawEye(rect: Rect, outline: Color) {
+    val w = rect.width
+    val h = w * 0.62f
+    val cx = rect.center.x
+    val cy = rect.center.y
+    val keyline = w * 0.055f
+
+    // Two arcs meeting at the corners: the classic almond, built from the width so the
+    // proportions hold at any size.
+    val almond = Path().apply {
+        moveTo(cx - w / 2f, cy)
+        quadraticTo(cx, cy - h, cx + w / 2f, cy)
+        quadraticTo(cx, cy + h, cx - w / 2f, cy)
+        close()
+    }
+    drawPath(
+        path = almond,
+        color = outline,
+        style = Stroke(width = keyline * 2f, join = StrokeJoin.Round, cap = StrokeCap.Round)
+    )
+    drawPath(almond, Palette.Stock)
+
+    val iris = w * 0.21f
+    drawWildWheel(
+        Rect(Offset(cx - iris, cy - iris), Size(iris * 2f, iris * 2f)),
+        outline
+    )
+    // A pupil over the hub, so the wheel reads as an eye rather than as a badge.
+    drawCircle(color = outline, radius = iris * 0.34f, center = Offset(cx, cy))
+}
+
 /** Slanted oval every UNO face carries behind its glyph, ink keyline included. */
 fun DrawScope.drawFaceOval(fill: Color, outline: Color, tilt: Float = -22f) {
     rotate(tilt, pivot = center) {

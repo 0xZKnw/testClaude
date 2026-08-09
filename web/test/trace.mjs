@@ -7,7 +7,7 @@ import { UnoEngine, Phase, Color, view as V } from '../src/engine.js';
 import { decide, Difficulty, DIFFICULTY_ORDER } from '../src/bot.js';
 import { KotlinRandom } from '../src/random.js';
 
-const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7 };
+const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7, sp: 8 };
 const COLOR_ORDER = { R: 0, Y: 1, G: 2, B: 3, W: 4 };
 
 // Kotlin prints enum names; map the wire codes back so the traces read the same.
@@ -23,10 +23,13 @@ function snapshot(tag, e) {
       (KIND_ORDER[a.k] - KIND_ORDER[b.k]) || (a.n - b.n))
     .map((c) => c.i)
     .join('.');
+  const faceUp = e.hands
+    .map((_, seat) => e.revealedIn(seat).map((c) => c.i).join('.'))
+    .join(',');
   return [
     tag, e.turn, PHASE_NAME[e.phase], COLOR_ENUM[e.activeColor], e.pendingDraw,
     PENALTY_NAME[e.pendingType], e.deckCount(), hands, e.top().i, e.direction, e.extraPlays,
-    e.winner === null ? 'null' : e.winner, seat0, e.event,
+    faceUp, e.winner === null ? 'null' : e.winner, seat0, e.event,
   ].join('|');
 }
 
@@ -38,7 +41,8 @@ const MOD_SETS = [
   ['', []],
   ['8', ['d8']],
   ['D', ['x2']],
-  ['X', ['d8', 'x2']],
+  ['S', ['sp']],
+  ['X', ['d8', 'x2', 'sp']],
 ];
 
 for (const [tag, mods] of MOD_SETS) {

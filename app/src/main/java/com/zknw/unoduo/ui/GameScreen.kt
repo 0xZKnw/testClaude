@@ -16,6 +16,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +45,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -76,6 +79,7 @@ import com.zknw.unoduo.ui.components.TableBackground
 import com.zknw.unoduo.ui.components.UnoCardBack
 import com.zknw.unoduo.ui.components.UnoCardFace
 import com.zknw.unoduo.ui.components.clickableNoRipple
+import com.zknw.unoduo.ui.components.drawEye
 import com.zknw.unoduo.ui.theme.Palette
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -366,13 +370,14 @@ private fun RivalsRow(view: GameView, photos: Map<Seat, String>, onQuit: () -> U
 
         Spacer(Modifier.height(6.dp))
         if (single != null) {
-            OpponentFan(single.cards)
+            OpponentFan(single.cards, single.revealed)
         } else {
             // Only the player the table is waiting on gets their hand drawn — four fans
             // would not fit. The height is held even when that player is you, so the
             // table does not jump every time the turn comes back round.
             Box(Modifier.height(58.dp), contentAlignment = Alignment.Center) {
-                OpponentFan(view.rivals.firstOrNull { it.seat == view.turn }?.cards ?: 0)
+                val onTurn = view.rivals.firstOrNull { it.seat == view.turn }
+                OpponentFan(onTurn?.cards ?: 0, onTurn?.revealed ?: emptyList())
             }
         }
     }
@@ -410,6 +415,16 @@ private fun RivalTile(rival: Rival, onTurn: Boolean, photo: String?) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+        // Whatever an Espion turned over, under the face that holds it — otherwise a
+        // rival who is not on turn would keep a secret the whole table is meant to see.
+        if (rival.revealed.isNotEmpty()) {
+            Spacer(Modifier.height(3.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(-6.dp)) {
+                rival.revealed.take(3).forEach { card ->
+                    UnoCardFace(card = card, width = 20.dp, elevation = 2.dp)
+                }
+            }
+        }
     }
 }
 
@@ -432,19 +447,37 @@ private fun CardCountLine(count: Int) {
     }
 }
 
+/**
+ * The opponent's hand. Cards an Espion has turned over are drawn face up at the end of
+ * the fan rather than off to one side: they are still in that hand, and putting them
+ * anywhere else would read as a second pile.
+ */
 @Composable
-private fun OpponentFan(count: Int) {
+private fun OpponentFan(count: Int, revealed: List<Card> = emptyList()) {
     val shown = min(count, 14)
+    val faceUp = revealed.take(shown)
+    val backs = shown - faceUp.size
     val width by animateDpAsState(
         targetValue = if (shown > 10) 30.dp else 38.dp,
         label = "opp-card-width"
     )
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Row(horizontalArrangement = Arrangement.spacedBy(-(width * 0.55f))) {
-            repeat(shown) { index ->
-                val mid = (shown - 1) / 2f
+            val mid = (shown - 1) / 2f
+            repeat(backs) { index ->
                 val delta = index - mid
                 UnoCardBack(
+                    width = width,
+                    modifier = Modifier
+                        .offset(y = (abs(delta) * 1.4f).dp)
+                        .graphicsLayer { rotationZ = delta * 3f },
+                    elevation = 3.dp
+                )
+            }
+            faceUp.forEachIndexed { offset, card ->
+                val delta = backs + offset - mid
+                UnoCardFace(
+                    card = card,
                     width = width,
                     modifier = Modifier
                         .offset(y = (abs(delta) * 1.4f).dp)
@@ -822,6 +855,7 @@ private fun PlayerHand(view: GameView, enabled: Boolean, onCardTap: (Card) -> Un
                             width = metrics.cardWidth,
                             playable = enabled && card.id in view.legal,
                             dimmed = enabled && card.id !in view.legal,
+                            exposed = card.id in view.yourRevealed,
                             fresh = isFresh,
                             delayMillis = if (fresh.size > 2) order * 55 else 0,
                             ringAlpha = ringAlpha,
@@ -840,6 +874,7 @@ private fun HandCard(
     width: Dp,
     playable: Boolean,
     dimmed: Boolean,
+    exposed: Boolean,
     fresh: Boolean,
     delayMillis: Int,
     ringAlpha: Float,
@@ -881,6 +916,25 @@ private fun HandCard(
         )
         if (playable) {
             PlayableRing(width, ringAlpha)
+        }
+        // An Espion turned this one over: the whole table can see it, and you should
+        // know which one it is before you plan around it.
+        if (exposed) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(width * 0.06f)
+                    .size(width * 0.30f)
+                    .clip(CircleShape)
+                    .background(Palette.Outline)
+                    .padding(width * 0.028f)
+                    .clip(CircleShape)
+                    .background(Palette.Gold)
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    drawEye(Rect(Offset.Zero, size), Palette.Outline)
+                }
+            }
         }
     }
 }

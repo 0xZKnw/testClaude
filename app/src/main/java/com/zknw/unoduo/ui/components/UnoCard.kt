@@ -181,6 +181,12 @@ private fun BoxScope.CenterMark(card: Card, width: Dp) {
                 )
             }
         }
+
+        CardKind.SPY -> Box(box.size(width * 0.66f)) {
+            Canvas(Modifier.fillMaxSize()) {
+                drawEye(Rect(Offset.Zero, size), Palette.Outline)
+            }
+        }
     }
 }
 
@@ -248,6 +254,12 @@ private fun BoxScope.CornerMark(
             outlineWidth = width * 0.022f,
             modifier = base
         )
+
+        CardKind.SPY -> Box(base.size(width * 0.26f)) {
+            Canvas(Modifier.fillMaxSize()) {
+                drawEye(Rect(Offset.Zero, size), Palette.Outline)
+            }
+        }
     }
 }
 

@@ -80,6 +80,15 @@ object Rules {
             )
         ),
         Section(
+            "Mod « ${GameMod.SPY.label} »",
+            listOf(
+                "${Deck.SPIES} cartes Espion rejoignent le paquet. C'est un Joker ordinaire : tu la poses quand tu veux et tu annonces une couleur.",
+                "En prime, elle retourne face visible une carte au hasard de la main du joueur suivant.",
+                "Cette carte reste visible par toute la table jusqu'à ce que son propriétaire la pose.",
+                "Si toutes ses cartes sont déjà retournées, l'Espion ne fait que changer la couleur."
+            )
+        ),
+        Section(
             "Mod « ${GameMod.DOUBLE_PLAY.label} »",
             listOf(
                 "${Deck.DOUBLE_PLAYS} cartes Coup double rejoignent le paquet. Elles se posent sur n'importe quoi, comme un Joker.",

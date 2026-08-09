@@ -19,13 +19,13 @@ export const Kind = {
   NUMBER: 'n', SKIP: 's', REVERSE: 'r', DRAW_TWO: 'd2', WILD: 'w', DRAW_FOUR: 'd4',
   // Only ever in the deck when the matching mod is on. Appended, like Kotlin's enum, so
   // a standard game sorts exactly as it always did.
-  DRAW_EIGHT: 'd8', DOUBLE_PLAY: 'x2',
+  DRAW_EIGHT: 'd8', DOUBLE_PLAY: 'x2', SPY: 'sp',
 };
-const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7 };
+const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7, sp: 8 };
 
 /** The optional rules a host can switch on. Order matters: it numbers the extra cards. */
-export const Mod = { DRAW_EIGHT: 'd8', DOUBLE_PLAY: 'x2' };
-export const MOD_ORDER = [Mod.DRAW_EIGHT, Mod.DOUBLE_PLAY];
+export const Mod = { DRAW_EIGHT: 'd8', DOUBLE_PLAY: 'x2', SPY: 'sp' };
+export const MOD_ORDER = [Mod.DRAW_EIGHT, Mod.DOUBLE_PLAY, Mod.SPY];
 export const MOD_INFO = {
   d8: {
     label: 'Les +8',
@@ -35,8 +35,14 @@ export const MOD_INFO = {
   },
   x2: {
     label: 'Coup double',
-    blurb: 'Cinq cartes en plus. Tu annonces une couleur, puis tu poses deux cartes de '
+    blurb: 'Trois cartes en plus. Tu annonces une couleur, puis tu poses deux cartes de '
       + 'suite. Une carte d\'attaque met fin au coup double : la pile part chez le voisin.',
+  },
+  sp: {
+    label: 'Espion',
+    blurb: 'Trois cartes en plus. Un Joker ordinaire — tu annonces une couleur — sauf '
+      + "qu'il retourne au passage une carte au hasard du joueur suivant. Elle reste "
+      + "visible de tous jusqu'à ce qu'il la pose.",
   },
 };
 export const orderedMods = (mods) => MOD_ORDER.filter((m) => mods.includes(m));
@@ -44,7 +50,8 @@ export const orderedMods = (mods) => MOD_ORDER.filter((m) => mods.includes(m));
 /** How many cards a Coup double buys. */
 const BONUS_PLAYS = 2;
 export const DRAW_EIGHTS = 2;
-export const DOUBLE_PLAYS = 5;
+export const DOUBLE_PLAYS = 3;
+export const SPIES = 3;
 
 export const Penalty = { NONE: '0', DRAW_TWO: '2', DRAW_FOUR: '4' };
 export const Phase = { PLAYING: 'p', DECIDE_AFTER_DRAW: 'd', GAME_OVER: 'o' };
@@ -54,7 +61,7 @@ export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 5;
 
 export const isWild = (card) => card.k === Kind.WILD || card.k === Kind.DRAW_FOUR
-  || card.k === Kind.DRAW_EIGHT || card.k === Kind.DOUBLE_PLAY;
+  || card.k === Kind.DRAW_EIGHT || card.k === Kind.DOUBLE_PLAY || card.k === Kind.SPY;
 export const isPenalty = (card) => card.k === Kind.DRAW_TWO || card.k === Kind.DRAW_FOUR
   || card.k === Kind.DRAW_EIGHT;
 export const isRealColor = (color) => color !== Color.WILD;
@@ -64,7 +71,7 @@ const COLOR_NAME = { R: 'rouge', Y: 'jaune', G: 'vert', B: 'bleu', W: '-' };
 export function cardLabel(card) {
   const kindName = {
     n: String(card.n), s: 'Passe', r: 'Sens interdit', d2: '+2', w: 'Joker', d4: '+4',
-    d8: '+8', x2: 'Coup double',
+    d8: '+8', x2: 'Coup double', sp: 'Espion',
   }[card.k];
   const colorName = card.c === Color.WILD ? '' : COLOR_NAME[card.c];
   return colorName ? `${kindName} ${colorName}` : kindName;
@@ -103,6 +110,11 @@ export function buildDeck(mods) {
   if (mods.includes(Mod.DOUBLE_PLAY)) {
     for (let i = 0; i < DOUBLE_PLAYS; i++) {
       cards.push({ i: id++, c: Color.WILD, k: Kind.DOUBLE_PLAY, n: -1 });
+    }
+  }
+  if (mods.includes(Mod.SPY)) {
+    for (let i = 0; i < SPIES; i++) {
+      cards.push({ i: id++, c: Color.WILD, k: Kind.SPY, n: -1 });
     }
   }
   return cards;
@@ -145,6 +157,9 @@ export class UnoEngine {
     this.winner = null;
     this.direction = 1;
     this.extraPlays = 0;
+    // Ids of the cards sitting face up, turned over by an Espion. Public on purpose: a
+    // card turned face up is face up for everybody. It leaves the set when it is played.
+    this.revealed = new Set();
     this.drawnCardId = -1;
     this.event = '';
     this.eventId = 0;
@@ -231,6 +246,7 @@ export class UnoEngine {
     this.pendingDraw = 0;
     this.pendingType = Penalty.NONE;
     this.extraPlays = 0;
+    this.revealed.clear();
     this.phase = Phase.PLAYING;
     this.winner = null;
     this.drawnCardId = -1;
@@ -295,6 +311,8 @@ export class UnoEngine {
 
     const wasCountering = this.pendingDraw > 0;
     const card = hand.splice(index, 1)[0];
+    // A card that has been played is no longer anybody's to hide.
+    this.revealed.delete(card.i);
     this.discardPile.push(card);
     this.drawnCardId = -1;
     this.lastPlayedBy = seat;
@@ -306,7 +324,9 @@ export class UnoEngine {
     if (card.k === Kind.DRAW_TWO) { tally.d2++; if (wasCountering) tally.co++; }
     else if (card.k === Kind.DRAW_FOUR || card.k === Kind.DRAW_EIGHT) {
       tally.d4++; if (wasCountering) tally.co++;
-    } else if (card.k === Kind.WILD || card.k === Kind.DOUBLE_PLAY) tally.w++;
+    } else if (card.k === Kind.WILD || card.k === Kind.DOUBLE_PLAY || card.k === Kind.SPY) {
+      tally.w++;
+    }
     else if (card.k === Kind.SKIP || card.k === Kind.REVERSE) tally.sk++;
 
     const name = this.seatName(seat);
@@ -372,6 +392,16 @@ export class UnoEngine {
         this.turn = seat;
         this.pushEvent(`${name} joue un coup double en ${COLOR_NAME[this.activeColor]}`);
         break;
+      case Kind.SPY: {
+        this.activeColor = chosenColor;
+        const victim = this.seatAfter(seat);
+        const spied = this.revealOne(victim);
+        this.turn = victim;
+        this.pushEvent(spied === null
+          ? `${name} choisit ${COLOR_NAME[this.activeColor]} — rien à espionner`
+          : `${name} retourne ${cardLabel(spied)} chez ${this.seatName(victim)}`);
+        break;
+      }
       default:
         break;
     }
@@ -474,6 +504,23 @@ export class UnoEngine {
     return true;
   }
 
+  /**
+   * Turns one of `seat`'s hidden cards face up, picked at random. Null when there is
+   * nothing left to turn. The candidates are taken in the hand's own order, not the
+   * display order: the two engines must draw the same card from the same seed.
+   */
+  revealOne(seat) {
+    const candidates = this.hands[seat].filter((c) => !this.revealed.has(c.i));
+    if (!candidates.length) return null;
+    const card = candidates[this.rng.nextIntBelow(candidates.length)];
+    this.revealed.add(card.i);
+    return card;
+  }
+
+  revealedIn(seat) {
+    return this.hands[seat].filter((c) => this.revealed.has(c.i));
+  }
+
   clearPenaltyMark() {
     this.penaltyTaken = 0;
     this.penaltyVictim = null;
@@ -550,6 +597,7 @@ export class UnoEngine {
       // player is laying three cards in a row.
       xp: this.extraPlays,
       md: this.mods,
+      yr: this.revealedIn(seat).map((c) => c.i),
     };
   }
 
@@ -565,6 +613,7 @@ export class UnoEngine {
         c: this.hands[other].length,
         p: this.scores[other],
         r: rematch.has(other),
+        rv: this.revealedIn(other),
       });
     }
     return out;

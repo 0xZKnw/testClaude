@@ -76,9 +76,18 @@ export const RULES = [
     ],
   },
   {
+    title: 'Mod « Espion »',
+    lines: [
+      "3 cartes Espion rejoignent le paquet. C'est un Joker ordinaire : tu la poses quand tu veux et tu annonces une couleur.",
+      'En prime, elle retourne face visible une carte au hasard de la main du joueur suivant.',
+      "Cette carte reste visible par toute la table jusqu'à ce que son propriétaire la pose.",
+      "Si toutes ses cartes sont déjà retournées, l'Espion ne fait que changer la couleur.",
+    ],
+  },
+  {
     title: 'Mod « Coup double »',
     lines: [
-      "5 cartes Coup double rejoignent le paquet. Elles se posent sur n'importe quoi, comme un Joker.",
+      "3 cartes Coup double rejoignent le paquet. Elles se posent sur n'importe quoi, comme un Joker.",
       'Tu annonces une couleur, puis tu poses deux cartes de plus en suivant les règles habituelles.',
       "Une carte d'attaque (Passe, Sens interdit, +2, +4, +8) met fin au coup double sur-le-champ : la main passe au joueur suivant.",
       "Tu peux t'arrêter avant d'avoir posé tes deux cartes, et si tu n'as rien de jouable le coup double s'arrête tout seul.",

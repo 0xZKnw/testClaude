@@ -24,9 +24,11 @@ fun main() {
         val seat0 = e.handOf(0).sortedWith(
             compareBy({ it.color.ordinal }, { it.kind.ordinal }, { it.number })
         ).joinToString(".") { it.id.toString() }
+        val faceUp = (0 until e.playerCount)
+            .joinToString(",") { seat -> e.revealedIn(seat).joinToString(".") { it.id.toString() } }
         return "$tag|${e.turn}|${e.phase}|${e.activeColor}|${e.pendingDraw}|${e.pendingType}|" +
             "${e.deckCount()}|$hands|${e.top().id}|${e.direction}|${e.extraPlays}|" +
-            "${e.winner}|$seat0|${e.event}"
+            "$faceUp|${e.winner}|$seat0|${e.event}"
     }
 
     // The plain game first, so a diff against an older trace starts with the lines that
@@ -35,7 +37,8 @@ fun main() {
         "" to emptySet<GameMod>(),
         "8" to setOf(GameMod.DRAW_EIGHT),
         "D" to setOf(GameMod.DOUBLE_PLAY),
-        "X" to setOf(GameMod.DRAW_EIGHT, GameMod.DOUBLE_PLAY)
+        "S" to setOf(GameMod.SPY),
+        "X" to GameMod.entries.toSet()
     )
 
     for ((tag, mods) in modSets) {

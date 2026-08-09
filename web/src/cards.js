@@ -133,6 +133,24 @@ function doublePlay(cx, cy, boxW) {
       fill="${PALETTE.outline}">&#215;2</text>`;
 }
 
+/**
+ * The Espion: an eye whose iris is the Wild pinwheel. It has to say two things at once —
+ * "this changes the colour" and "this looks at your hand" — and one emblem carrying both
+ * reads faster than a wheel with a badge stuck on it.
+ */
+function eyeGlyph(cx, cy, boxW) {
+  const w = boxW;
+  const h = w * 0.62;
+  const key = w * 0.055;
+  const almond = `M${cx - w / 2} ${cy} Q${cx} ${cy - h} ${cx + w / 2} ${cy}`
+    + ` Q${cx} ${cy + h} ${cx - w / 2} ${cy} Z`;
+  const iris = w * 0.21;
+  return `<path d="${almond}" fill="${PALETTE.stock}" stroke="${PALETTE.outline}"
+      stroke-width="${key * 2}" stroke-linejoin="round" paint-order="stroke"/>
+    ${wheel(cx, cy, iris)}
+    <circle cx="${cx}" cy="${cy}" r="${iris * 0.34}" fill="${PALETTE.outline}"/>`;
+}
+
 function centreMark(card) {
   const cx = CARD_W / 2;
   const cy = CARD_H / 2;
@@ -151,6 +169,7 @@ function centreMark(card) {
       return miniCards([PALETTE.R, PALETTE.B, PALETTE.Y, PALETTE.G], cx, cy, 62);
     case Kind.DRAW_EIGHT: return wildEight(cx, cy, 70);
     case Kind.DOUBLE_PLAY: return doublePlay(cx - 5, cy - 8, 58);
+    case Kind.SPY: return eyeGlyph(cx, cy, 66);
     default: return '';
   }
 }
@@ -169,6 +188,7 @@ function cornerMark(card, x, y, flip) {
     case Kind.DRAW_FOUR: return text('+4');
     case Kind.DRAW_EIGHT: return text('+8');
     case Kind.DOUBLE_PLAY: return goldText('&#215;2');
+    case Kind.SPY: return `<g transform="${rotate}">${eyeGlyph(x, y, 24)}</g>`;
     case Kind.SKIP: return `<g transform="${rotate}">${skipGlyph(x, y, 20, PALETTE.stock)}</g>`;
     case Kind.REVERSE: return `<g transform="${rotate}">${reverseGlyph(x, y, 20, PALETTE.stock)}</g>`;
     case Kind.WILD: return `<g transform="${rotate}">${wheel(x, y, 9)}</g>`;

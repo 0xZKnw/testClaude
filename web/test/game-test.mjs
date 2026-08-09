@@ -60,9 +60,10 @@ try {
   guard(solo, 'solo');
   await solo.goto(URL);
   await solo.click('#go-solo');
-  // Both mods on, so the solo pass covers the +8 and the Coup double as well.
+  // Every mod on, so the solo pass covers the +8, the Coup double and the Espion.
   await solo.click('#solo-mods [data-mod="d8"]');
   await solo.click('#solo-mods [data-mod="x2"]');
+  await solo.click('#solo-mods [data-mod="sp"]');
   await solo.click('[data-difficulty="HARD"]');
   await solo.waitForSelector('#screen-game.on');
 
@@ -104,12 +105,13 @@ try {
   await host.evaluate(() => localStorage.setItem('uno.profile',
     JSON.stringify({ name: 'Zak', avatarColor: 0, photo: null, stats: {} })));
   await host.reload();
-  // Through the create screen, with both mods on: the pairing, the lobby and a whole
+  // Through the create screen, with every mod on: the pairing, the lobby and a whole
   // modded game all get covered in one pass.
   await host.click('#go-host');
   await host.click('#create-custom');
   await host.click('[data-mod="d8"]');
   await host.click('[data-mod="x2"]');
+  await host.click('[data-mod="sp"]');
   await host.click('#create-go');
   await host.waitForFunction(() => document.querySelector('#qrbox svg'), null, { timeout: 15000 });
   const invite = await host.evaluate(() =>
@@ -144,7 +146,7 @@ try {
   );
   const guestMods = await guest.$$eval('#lobby-mods .chip', (n) => n.map((c) => c.textContent));
   console.log(`  mods annonces a l'invite : ${guestMods.join(', ') || 'aucun'}`);
-  if (guestMods.length !== 2) problems.push(`le salon invite annonce ${guestMods.length} mod(s) au lieu de 2`);
+  if (guestMods.length !== 3) problems.push(`le salon invite annonce ${guestMods.length} mod(s) au lieu de 3`);
 
   await host.click('#host-start');
   await host.waitForSelector('#screen-game.on');
