@@ -519,13 +519,15 @@ textarea {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   pointer-events: none;
 }
-/* Back at deck height on the right edge, where it started: it was pushed into the corner
-   to get out of the chat's way, and the chat is gone. Folded away it is one button, so it
-   no longer crowds the pile the way six of them did. */
+/* Flush against the right edge at deck height, rounded on the inside only: the rail is a
+   tab attached to the edge of the screen rather than a widget parked near it, and running
+   it off the edge is what buys back the width in front of the pile. Folded away it is one
+   button, so it no longer crowds the discard the way six of them did. */
 #sticker-rail {
-  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-  display: flex; flex-direction: column; gap: 5px; padding: 6px 5px;
-  background: var(--slate); border: 3px solid var(--ink); border-radius: 20px;
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 5px; padding: 6px 3px 6px 5px;
+  background: var(--slate); border: 3px solid var(--ink); border-right: 0;
+  border-radius: 20px 0 0 20px;
   box-shadow: 0 4px 0 var(--ink);
 }
 #sticker-rail button {

@@ -1196,6 +1196,10 @@ function renderSocial() {
 /**
  * Folded away by default — one button — and opened on demand. Left permanently open it
  * was a column of emoji sitting next to the table the whole game.
+ *
+ * Once open it stays open until the cross is tapped: throwing one sticker usually means
+ * throwing three, and a rail that shut itself after each one made the next two cost two
+ * taps apiece.
  */
 let railOpen = false;
 
@@ -1210,11 +1214,7 @@ function renderRail() {
       + '<button type="button" class="shut" data-rail="0">&#10005;</button>'
     : `<button type="button" data-rail="1">${mine[0].text}</button>`;
   rail.querySelectorAll('[data-sticker]').forEach((node) => {
-    node.onclick = () => {
-      railOpen = false;
-      renderRail();
-      sendSticker(Number(node.dataset.sticker));
-    };
+    node.onclick = () => sendSticker(Number(node.dataset.sticker));
   });
   rail.querySelectorAll('[data-rail]').forEach((node) => {
     node.onclick = () => { railOpen = node.dataset.rail === '1'; renderRail(); };

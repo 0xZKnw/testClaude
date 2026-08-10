@@ -201,14 +201,12 @@ fun GameScreen(
                 )
 
                 if (social.enabled) {
-                    // Back at deck height on the right edge, where it started: it was
-                    // pushed into the corner to get out of the chat's way, and the chat
-                    // is gone. Folded away it is one button, so it no longer crowds the
-                    // pile the way six of them did.
+                    // Flush against the right edge at deck height. No padding on that
+                    // side on purpose: the rail is a tab attached to the edge of the
+                    // screen, not a floating widget parked near it, and running it off
+                    // the edge is what buys back the width in front of the pile.
                     StickerRail(
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .padding(end = 6.dp),
+                        modifier = Modifier.align(Alignment.CenterEnd),
                         unlocked = look.stickers
                     ) { index ->
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)

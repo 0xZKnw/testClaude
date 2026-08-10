@@ -318,10 +318,23 @@ try {
   }
   await host.click('#sticker-rail [data-rail="1"]');
   await host.click('#sticker-rail [data-sticker="5"]');
-  // Picking one folds the rail back down.
-  if (await host.$$eval('#sticker-rail [data-sticker]', (n) => n.length) !== 0) {
-    problems.push('le rail ne se referme pas apres un envoi');
+  // It stays open afterwards — throwing one sticker usually means throwing three — and
+  // the cross is the only thing that folds it back down.
+  if (await host.$$eval('#sticker-rail [data-sticker]', (n) => n.length) === 0) {
+    problems.push('le rail se referme tout seul apres un envoi');
   }
+  await host.click('#sticker-rail [data-rail="0"]');
+  if (await host.$$eval('#sticker-rail [data-sticker]', (n) => n.length) !== 0) {
+    problems.push('la croix ne referme pas le rail');
+  }
+  // Flush against the edge, not parked a few pixels short of it.
+  const railGap = await host.evaluate(() => {
+    const rail = document.getElementById('sticker-rail');
+    const frame = rail.offsetParent ?? document.documentElement;
+    return Math.round(frame.getBoundingClientRect().right - rail.getBoundingClientRect().right);
+  });
+  console.log(`  rail colle au bord droit : ${railGap} px`);
+  if (railGap !== 0) problems.push(`le rail est a ${railGap} px du bord`);
   await guest.waitForTimeout(400);
   const emotes = await guest.$$eval('#emote-layer .emote', (n) => n.map((x) => x.className));
   console.log(`  emoji recu par l'invite : ${emotes.length ? emotes[0] : 'aucun'}`);

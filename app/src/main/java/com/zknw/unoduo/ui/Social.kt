@@ -52,11 +52,13 @@ import com.zknw.unoduo.vm.Emote
  */
 
 /**
- * The sticker rail, tucked against the right edge at the height of the deck.
+ * The sticker rail, flush against the right edge at the height of the deck.
  *
  * Folded down to a single button by default: open, six of them ran the length of the
  * table and crowded the discard pile, which is the one thing that must stay clear. One
- * tap opens it, picking one closes it again.
+ * tap opens it and it stays open — throwing one sticker usually means throwing three,
+ * and a rail that shut itself after each one made the second and third cost two taps.
+ * The cross is the only thing that closes it.
  */
 @Composable
 fun StickerRail(
@@ -71,11 +73,13 @@ fun StickerRail(
     InkSurface(
         modifier = modifier,
         color = Palette.Slate,
-        shape = RoundedCornerShape(22.dp),
+        // Rounded on the inside only: the two corners against the screen edge are square
+        // so the rail reads as growing out of it rather than floating beside it.
+        shape = RoundedCornerShape(topStart = 22.dp, bottomStart = 22.dp),
         depth = 4.dp
     ) {
         Column(
-            Modifier.padding(horizontal = 5.dp, vertical = 6.dp),
+            Modifier.padding(start = 5.dp, end = 3.dp, top = 6.dp, bottom = 6.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -86,10 +90,8 @@ fun StickerRail(
                 mine.withIndex().chunked(columns).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         row.forEach { (index, sticker) ->
-                            StickerButton(sticker, Palette.SlateHigh) {
-                                open = false
-                                onPick(index)
-                            }
+                            // Stays open: only the cross below closes it.
+                            StickerButton(sticker, Palette.SlateHigh) { onPick(index) }
                         }
                         if (row.size < columns) Spacer(Modifier.size(36.dp))
                     }
