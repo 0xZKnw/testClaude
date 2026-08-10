@@ -10,19 +10,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -106,7 +105,7 @@ fun StickerRail(
 @Composable
 private fun StickerButton(
     glyph: String,
-    background: androidx.compose.ui.graphics.Color,
+    background: Color,
     small: Boolean = false,
     onClick: () -> Unit
 ) {
@@ -190,10 +189,3 @@ private fun FlyingEmote(emote: Emote, origin: EmoteOrigin, box: IntSize) {
         }
     )
 }
-
-/**
- * The whole conversation, with the field riding on top of the keyboard.
- *
- * [Modifier.imePadding] on the panel is the entire point of this being a sheet rather
- * than an inline field: what you are typing has to stay in sight while you type it.
- */

@@ -181,7 +181,7 @@ private fun App(vm: AppViewModel = viewModel()) {
     }
 
 
-    BackHandler(enabled = state.screen != Screen.HOME && !state.social.open) {
+    BackHandler(enabled = state.screen != Screen.HOME) {
         when (state.screen) {
             Screen.RULES -> vm.closeRules()
             Screen.SETTINGS -> vm.closeSettings()
