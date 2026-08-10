@@ -73,12 +73,18 @@ import com.zknw.unoduo.ui.components.PlayerAvatar
 import com.zknw.unoduo.ui.components.GhostButton
 import com.zknw.unoduo.ui.components.Panel
 import com.zknw.unoduo.ui.components.PrimaryButton
+import androidx.compose.runtime.CompositionLocalProvider
+import com.zknw.unoduo.ui.components.AvatarFrame
+import com.zknw.unoduo.ui.components.LocalCardBack
+import com.zknw.unoduo.ui.components.LevelBadge
 import com.zknw.unoduo.ui.components.TableBackground
 import com.zknw.unoduo.ui.components.UnoCardBack
 import com.zknw.unoduo.ui.components.UnoCardFace
 import com.zknw.unoduo.ui.components.clickableNoRipple
 import com.zknw.unoduo.ui.theme.Palette
+import com.zknw.unoduo.vm.LevelPopup
 import com.zknw.unoduo.vm.Social
+import com.zknw.unoduo.vm.TableLook
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.min
@@ -87,6 +93,9 @@ import kotlin.math.min
 fun GameScreen(
     view: GameView,
     photos: Map<Seat, String>,
+    look: TableLook,
+    lastXp: Int,
+    levelUp: LevelPopup?,
     inputLocked: Boolean,
     social: Social,
     onPlay: (Int, CardColor?) -> Unit,
@@ -97,7 +106,8 @@ fun GameScreen(
     onSticker: (Int) -> Unit = {},
     onSendChat: (String) -> Unit = {},
     onOpenChat: () -> Unit = {},
-    onCloseChat: () -> Unit = {}
+    onCloseChat: () -> Unit = {},
+    onDismissLevelUp: () -> Unit = {}
 ) {
     var pendingWild by remember { mutableStateOf<Card?>(null) }
     var toast by remember { mutableStateOf("") }
@@ -124,10 +134,11 @@ fun GameScreen(
         }
     }
 
-    TableBackground {
+    CompositionLocalProvider(LocalCardBack provides look.back) {
+    TableBackground(look.felt) {
         Column(Modifier.fillMaxSize()) {
 
-            RivalsRow(view, photos, onQuit)
+            RivalsRow(view, photos, look, onQuit)
 
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 TableCenter(
@@ -146,7 +157,8 @@ fun GameScreen(
                     StickerRail(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(end = 6.dp, bottom = 38.dp)
+                            .padding(end = 6.dp, bottom = 38.dp),
+                        unlocked = look.stickers
                     ) { index ->
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onSticker(index)
@@ -230,8 +242,9 @@ fun GameScreen(
         penaltyHit?.let { PenaltyOverlay(it) }
 
         if (view.phase == Phase.GAME_OVER) {
-            GameOverOverlay(view, onRematch, onQuit)
+            GameOverOverlay(view, lastXp, levelUp, onRematch, onQuit, onDismissLevelUp)
         }
+    }
     }
 }
 
@@ -363,7 +376,12 @@ private fun colorLabel(color: CardColor): String = when (color) {
  * player on turn gets their cards drawn.
  */
 @Composable
-private fun RivalsRow(view: GameView, photos: Map<Seat, String>, onQuit: () -> Unit) {
+private fun RivalsRow(
+    view: GameView,
+    photos: Map<Seat, String>,
+    look: TableLook,
+    onQuit: () -> Unit
+) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -373,21 +391,35 @@ private fun RivalsRow(view: GameView, photos: Map<Seat, String>, onQuit: () -> U
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (single != null) {
                 val theirTurn = view.turn == single.seat && view.phase != Phase.GAME_OVER
-                PlayerAvatar(
-                    name = single.name,
-                    look = AvatarLook(single.avatar, photoData = photos[single.seat]),
-                    size = 44.dp,
-                    ring = if (theirTurn) 4.dp else 3.dp,
-                    ringColor = if (theirTurn) Palette.Gold else Palette.Outline
-                )
+                Box(contentAlignment = Alignment.BottomEnd) {
+                    AvatarFrame(frame = look.frameOf(single.seat), size = 44.dp) {
+                        PlayerAvatar(
+                            name = single.name,
+                            look = AvatarLook(single.avatar, photoData = photos[single.seat]),
+                            size = 44.dp,
+                            ring = if (theirTurn) 4.dp else 3.dp,
+                            ringColor = if (theirTurn) Palette.Gold else Palette.Outline
+                        )
+                    }
+                    LevelBadge(look.levels[single.seat] ?: 1, 18.dp)
+                }
                 Spacer(Modifier.width(10.dp))
                 Column {
                     Text(
                         single.name,
-                        color = Palette.Text,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
+                        style = nameStyle(look.nameColorOf(single.seat), 15.sp)
                     )
+                    val title = look.titleOf(single.seat)
+                    if (title.isNotEmpty()) {
+                        Text(
+                            title,
+                            color = Palette.TextDim,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     CardCountLine(single.cards)
                 }
                 Spacer(Modifier.weight(1f))
@@ -405,7 +437,8 @@ private fun RivalsRow(view: GameView, photos: Map<Seat, String>, onQuit: () -> U
                         RivalTile(
                             rival = rival,
                             onTurn = view.turn == rival.seat && view.phase != Phase.GAME_OVER,
-                            photo = photos[rival.seat]
+                            photo = photos[rival.seat],
+                            look = look
                         )
                     }
                 }
@@ -431,7 +464,7 @@ private fun RivalsRow(view: GameView, photos: Map<Seat, String>, onQuit: () -> U
 
 /** One rival squeezed into a column: face, name, card count. */
 @Composable
-private fun RivalTile(rival: Rival, onTurn: Boolean, photo: String?) {
+private fun RivalTile(rival: Rival, onTurn: Boolean, photo: String?, look: TableLook) {
     // Fixed width: a long pseudo must ellipsize rather than push the other players
     // off the row. Four of these plus the quit button have to fit on a small screen.
     Column(
@@ -439,13 +472,15 @@ private fun RivalTile(rival: Rival, onTurn: Boolean, photo: String?) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(contentAlignment = Alignment.BottomEnd) {
-            PlayerAvatar(
-                name = rival.name,
-                look = AvatarLook(rival.avatar, photoData = photo),
-                size = 40.dp,
-                ring = if (onTurn) 4.dp else 3.dp,
-                ringColor = if (onTurn) Palette.Gold else Palette.Outline
-            )
+            AvatarFrame(frame = look.frameOf(rival.seat), size = 40.dp) {
+                PlayerAvatar(
+                    name = rival.name,
+                    look = AvatarLook(rival.avatar, photoData = photo),
+                    size = 40.dp,
+                    ring = if (onTurn) 4.dp else 3.dp,
+                    ringColor = if (onTurn) Palette.Gold else Palette.Outline
+                )
+            }
             InkChip(
                 text = "${rival.cards}",
                 color = if (rival.cards == 1) Palette.Red else Palette.SlateHigh,
@@ -1029,7 +1064,14 @@ private fun ColorPicker(onPick: (CardColor) -> Unit, onCancel: () -> Unit) {
 }
 
 @Composable
-private fun GameOverOverlay(view: GameView, onRematch: () -> Unit, onQuit: () -> Unit) {
+private fun GameOverOverlay(
+    view: GameView,
+    lastXp: Int,
+    levelUp: LevelPopup?,
+    onRematch: () -> Unit,
+    onQuit: () -> Unit,
+    onDismissLevelUp: () -> Unit
+) {
     val appear = remember { Animatable(0f) }
     LaunchedEffect(Unit) { appear.animateTo(1f, spring(dampingRatio = Spring.DampingRatioLowBouncy)) }
 
@@ -1069,6 +1111,10 @@ private fun GameOverOverlay(view: GameView, onRematch: () -> Unit, onQuit: () ->
                 )
                 Spacer(Modifier.height(20.dp))
                 ScoreLine(view)
+                if (lastXp > 0) {
+                    Spacer(Modifier.height(14.dp))
+                    InkChip("+$lastXp XP", color = Palette.Gold, textColor = Palette.Outline)
+                }
                 Spacer(Modifier.height(24.dp))
                 PrimaryButton(
                     text = if (view.rematchYou) {
@@ -1095,6 +1141,101 @@ private fun GameOverOverlay(view: GameView, onRematch: () -> Unit, onQuit: () ->
                 }
                 Spacer(Modifier.height(10.dp))
                 GhostButton("Quitter", Modifier.fillMaxWidth()) { onQuit() }
+            }
+        }
+
+        // On top of the result, not instead of it: the score is what you came for, the
+        // level is the reward for having come at all.
+        if (levelUp != null) LevelUpOverlay(levelUp, onDismissLevelUp)
+    }
+}
+
+/**
+ * The moment a level lands. Deliberately loud and deliberately blocking: it is the one
+ * screen in the game that exists purely to say well done, and a toast that slides away
+ * while you are reading the score would be no reward at all.
+ */
+@Composable
+private fun LevelUpOverlay(popup: LevelPopup, onDismiss: () -> Unit) {
+    val appear = remember { Animatable(0f) }
+    LaunchedEffect(popup) {
+        appear.snapTo(0f)
+        appear.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 190f))
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Palette.Outline.copy(alpha = 0.92f))
+            .clickableNoRipple { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Panel(
+            Modifier
+                .padding(horizontal = 28.dp)
+                .graphicsLayer {
+                    val t = appear.value
+                    alpha = t.coerceIn(0f, 1f)
+                    scaleX = 0.72f + 0.28f * t
+                    scaleY = 0.72f + 0.28f * t
+                }
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "Niveau ${popup.to}",
+                    color = Palette.Gold,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Black
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (popup.to - popup.from > 1) {
+                        "${popup.to - popup.from} niveaux d'un coup."
+                    } else {
+                        "Un niveau de plus."
+                    },
+                    color = Palette.TextDim,
+                    fontSize = 13.sp
+                )
+                Spacer(Modifier.height(16.dp))
+                LevelBadge(popup.to, 72.dp)
+
+                if (popup.unlocked.isNotEmpty()) {
+                    Spacer(Modifier.height(18.dp))
+                    Text(
+                        if (popup.unlocked.size == 1) "Débloqué" else "${popup.unlocked.size} débloqués",
+                        color = Palette.Text,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    // Capped: a jump of several levels can hand over a fistful, and a
+                    // list taller than the screen is not a celebration.
+                    popup.unlocked.take(5).forEach { item ->
+                        Spacer(Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            InkChip(item.kind.label, color = Palette.Ink, fontSize = 10)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                item.name,
+                                color = Palette.Gold,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    }
+                    if (popup.unlocked.size > 5) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "et ${popup.unlocked.size - 5} de plus",
+                            color = Palette.TextDim,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(22.dp))
+                PrimaryButton("Continuer", Modifier.fillMaxWidth()) { onDismiss() }
             }
         }
     }

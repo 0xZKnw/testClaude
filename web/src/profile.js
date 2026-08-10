@@ -7,6 +7,10 @@
 // players, and a full-resolution camera shot would be megabytes for a circle drawn at
 // forty pixels.
 
+import { levelAt, xpFor, fullRun } from './levels.js';
+// Aliased: shrinkPhoto below takes a promise resolve of its own.
+import { resolve as resolveCosmetic, find, stickersAt, rewardsAt } from './cosmetics.js';
+
 const KEY = 'uno.profile';
 
 export const AVATAR_COLORS = [
@@ -69,7 +73,9 @@ export const closingRate = (s) =>
   (s.unoReached === 0 ? 0 : Math.min(100, Math.trunc((s.roundsWon * 100) / s.unoReached)));
 
 export function loadProfile() {
-  const fallback = { name: '', avatarColor: 0, photo: null, stats: emptyStats() };
+  const fallback = {
+    name: '', avatarColor: 0, photo: null, stats: emptyStats(), xp: 0, wearing: {},
+  };
   try {
     const stored = JSON.parse(localStorage.getItem(KEY) || '{}');
     return {
@@ -77,10 +83,50 @@ export function loadProfile() {
       avatarColor: Number.isInteger(stored.avatarColor) ? stored.avatarColor : 0,
       photo: typeof stored.photo === 'string' ? stored.photo : null,
       stats: { ...emptyStats(), ...(stored.stats || {}) },
+      xp: Number.isInteger(stored.xp) ? stored.xp : 0,
+      wearing: (stored.wearing && typeof stored.wearing === 'object') ? stored.wearing : {},
     };
   } catch {
     return fallback;
   }
+}
+
+/** The level this profile's experience buys. */
+export const levelOf = (profile) => levelAt(profile.xp || 0);
+
+/** Resolved through the catalogue, so a stale or unearned choice cannot show. */
+export const wornOf = (profile, kind) =>
+  resolveCosmetic((profile.wearing || {})[kind] || '', kind, levelOf(profile));
+
+/** The stickers this profile has earned, in rail order. */
+export const stickersOf = (profile) => stickersAt(levelOf(profile));
+
+/** Puts a cosmetic on. Unearned or unknown ids are simply not stored. */
+export function wear(id) {
+  const p = loadProfile();
+  const item = find(id);
+  if (!item || item.level > levelOf(p)) return p;
+  p.wearing = { ...(p.wearing || {}), [item.kind]: item.id };
+  return saveProfile(p);
+}
+
+/**
+ * Adds the experience a finished round is worth and hands back what it unlocked.
+ *
+ * Deliberately separate from recordRound: a game against the machine is not a result
+ * worth recording, but it is still a round played, and a progression that ignored solo
+ * would punish anybody without somebody to play against.
+ */
+export function addXp(won) {
+  const before = loadProfile();
+  const gained = xpFor(won);
+  const from = levelOf(before);
+  before.xp = Math.min((before.xp || 0) + gained, fullRun());
+  const profile = saveProfile(before);
+  const to = levelOf(profile);
+  const unlocked = [];
+  for (let level = from + 1; level <= to; level++) unlocked.push(...rewardsAt(level));
+  return { gained, from, to, unlocked, profile, levelledUp: to > from };
 }
 
 export function saveProfile(profile) {
@@ -130,6 +176,10 @@ export function recordRound(won, roundStats) {
   return saveProfile(p);
 }
 
+/**
+ * Wipes the tally only. Experience and the wardrobe survive on purpose: clearing a
+ * scoreboard is one thing, confiscating a hundred levels of unlocks is another.
+ */
 export function resetStats() {
   const p = loadProfile();
   p.stats = emptyStats();

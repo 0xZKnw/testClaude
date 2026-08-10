@@ -27,6 +27,9 @@ import com.zknw.unoduo.net.Talk
 import com.zknw.unoduo.profile.AvatarImage
 import com.zknw.unoduo.profile.Profile
 import com.zknw.unoduo.profile.ProfileStore
+import com.zknw.unoduo.progress.Cosmetic
+import com.zknw.unoduo.progress.CosmeticKind
+import com.zknw.unoduo.progress.Cosmetics
 import com.zknw.unoduo.update.Updater
 import com.zknw.unoduo.BuildConfig
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +43,7 @@ import kotlinx.coroutines.withContext
 import java.security.SecureRandom
 import kotlin.random.Random
 
-enum class Screen { HOME, RULES, PROFILE, SETTINGS, CREATE, SOLO, HOST, JOIN, LOBBY, GAME }
+enum class Screen { HOME, RULES, PROFILE, COSMETICS, SETTINGS, CREATE, SOLO, HOST, JOIN, LOBBY, GAME }
 
 /** Where the in-app updater is in its little state machine. */
 sealed interface UpdateState {
@@ -78,6 +81,29 @@ data class Social(
     val unread: Int = 0
 )
 
+/**
+ * Everything cosmetic the table needs, resolved once so no screen has to know the
+ * catalogue exists. The felt and the back are mine alone; the rest is what the other
+ * players announced about themselves.
+ */
+data class TableLook(
+    val felt: Cosmetic = Cosmetics.defaultOf(CosmeticKind.FELT),
+    val back: Cosmetic = Cosmetics.defaultOf(CosmeticKind.BACK),
+    val frames: Map<Seat, Cosmetic> = emptyMap(),
+    val titles: Map<Seat, Cosmetic> = emptyMap(),
+    val nameColors: Map<Seat, Cosmetic> = emptyMap(),
+    val levels: Map<Seat, Int> = emptyMap(),
+    /** How much of the sticker catalogue I have earned; the rail offers exactly that. */
+    val stickers: Int = Cosmetics.stickersAt(1).size
+) {
+    fun frameOf(seat: Seat): Cosmetic = frames[seat] ?: Cosmetics.defaultOf(CosmeticKind.FRAME)
+    fun titleOf(seat: Seat): String = titles[seat]?.worn.orEmpty()
+    fun nameColorOf(seat: Seat): Cosmetic = nameColors[seat] ?: Cosmetics.defaultOf(CosmeticKind.NAME)
+}
+
+/** Shown once when a round pushes the bar over a level. */
+data class LevelPopup(val from: Int, val to: Int, val unlocked: List<Cosmetic>)
+
 data class UiState(
     val screen: Screen = Screen.HOME,
     val isHost: Boolean = false,
@@ -103,7 +129,13 @@ data class UiState(
     /** The optional rules this room plays with. Empty for a standard game. */
     val mods: Set<GameMod> = emptySet(),
     /** Chat and stickers. Nothing here ever reaches the engine. */
-    val social: Social = Social()
+    val social: Social = Social(),
+    /** Frames, cloth, card back — resolved from the catalogue, never guessed at. */
+    val look: TableLook = TableLook(),
+    /** Experience the last finished round was worth, for the end-of-round panel. */
+    val lastXp: Int = 0,
+    /** Set only on the round that actually crossed a level. */
+    val levelUp: LevelPopup? = null
 ) {
     val playerName: String get() = profile.name
     val canStart: Boolean get() = isHost && players.size >= MIN_PLAYERS
@@ -158,9 +190,82 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(profile = profileStore.resetStats()) }
     }
 
+    /** Puts one cosmetic on and refreshes everything that draws it. */
+    fun wear(id: String) {
+        val worn = profileStore.wear(id)
+        _state.update { it.copy(profile = worn, look = lookFor(worn, it.players)) }
+        // The others need to know: a frame and a title are worn for them, not for you.
+        if (_state.value.players.isNotEmpty()) announceMyself()
+    }
+
     fun openProfile() = _state.update { it.copy(screen = Screen.PROFILE) }
 
     fun closeProfile() = _state.update { it.copy(screen = Screen.HOME) }
+
+    fun openCosmetics() = _state.update { it.copy(screen = Screen.COSMETICS) }
+
+    fun closeCosmetics() = _state.update { it.copy(screen = Screen.PROFILE) }
+
+    fun dismissLevelUp() = _state.update { it.copy(levelUp = null) }
+
+    /** Me, as the other phones should see me. */
+    private fun meAsPlayer(seat: Seat): LobbyPlayer {
+        val p = _state.value.profile
+        return LobbyPlayer(
+            seat = seat,
+            name = displayName(),
+            avatar = p.avatarColor,
+            frame = p.worn(CosmeticKind.FRAME).id,
+            title = p.worn(CosmeticKind.TITLE).id,
+            nameColor = p.worn(CosmeticKind.NAME).id,
+            level = p.level
+        )
+    }
+
+    /**
+     * Resolves what everybody is wearing into things the UI can draw. Anything a phone
+     * announced that this build does not know falls back rather than leaving a hole.
+     */
+    private fun lookFor(profile: Profile, players: List<LobbyPlayer>): TableLook = TableLook(
+        felt = profile.worn(CosmeticKind.FELT),
+        back = profile.worn(CosmeticKind.BACK),
+        frames = players.associate {
+            it.seat to Cosmetics.resolve(it.frame, CosmeticKind.FRAME, it.level)
+        },
+        titles = players.associate {
+            it.seat to Cosmetics.resolve(it.title, CosmeticKind.TITLE, it.level)
+        },
+        nameColors = players.associate {
+            it.seat to Cosmetics.resolve(it.nameColor, CosmeticKind.NAME, it.level)
+        },
+        levels = players.associate { it.seat to it.level },
+        stickers = profile.stickers.size
+    )
+
+    /** Re-sends who I am, after changing an outfit mid-lobby. */
+    private fun announceMyself() {
+        val state = _state.value
+        if (state.isHost) {
+            val me = meAsPlayer(HOST_SEAT)
+            _state.update { s ->
+                val players = (s.players.filterNot { it.seat == HOST_SEAT } + me).sortedBy { it.seat }
+                s.copy(players = players, look = lookFor(s.profile, players))
+            }
+            broadcastLobby()
+        } else {
+            guest?.send(
+                NetMsg.Hello(
+                    code = state.roomCode,
+                    name = displayName(),
+                    avatar = state.profile.avatarColor,
+                    frame = state.profile.worn(CosmeticKind.FRAME).id,
+                    title = state.profile.worn(CosmeticKind.TITLE).id,
+                    nameColor = state.profile.worn(CosmeticKind.NAME).id,
+                    level = state.profile.level
+                )
+            )
+        }
+    }
 
     fun goHome() {
         teardown()
@@ -273,7 +378,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 link = LinkStatus.IDLE,
                 statusText = "Démarrage du salon…",
                 view = null,
-                players = listOf(LobbyPlayer(HOST_SEAT, name, it.profile.avatarColor)),
+                players = listOf(meAsPlayer(HOST_SEAT)),
+                look = lookFor(it.profile, listOf(meAsPlayer(HOST_SEAT))),
                 photos = emptyMap(),
                 offline = emptySet(),
                 mods = mods,
@@ -437,10 +543,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         seatOfKey[key] = seat
         keyOfSeat[seat] = key
         _state.update { s ->
-            val players = (s.players.filterNot { it.seat == seat } +
-                LobbyPlayer(seat, name, hello.avatar)).sortedBy { it.seat }
+            val players = (s.players.filterNot { it.seat == seat } + LobbyPlayer(
+                seat = seat,
+                name = name,
+                avatar = hello.avatar,
+                frame = hello.frame,
+                title = hello.title,
+                nameColor = hello.nameColor,
+                level = hello.level
+            )).sortedBy { it.seat }
             s.copy(
                 players = players,
+                look = lookFor(s.profile, players),
                 offline = s.offline - seat,
                 link = LinkStatus.CONNECTED,
                 statusText = lobbyStatus(s.copy(players = players)),
@@ -505,17 +619,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         broadcast()
     }
 
-    /** Adds a finished round to this device's totals, exactly once. */
+    /**
+     * Closes out a finished round, exactly once.
+     *
+     * Two different things happen here, and they follow two different rules on purpose.
+     * The tally is a record against real people, so a game against the machine does not
+     * touch it — padding it would empty it of meaning. Experience is a record of time
+     * played, so every finished round counts: a progression that ignored solo would
+     * punish exactly the players with nobody to play against.
+     */
     private fun maybeRecordRound(view: GameView) {
         if (view.phase != Phase.GAME_OVER) return
-        // A round against the machine is still a game, but it is not a result: the
-        // profile is a record against real people, and padding it would empty it of
-        // meaning.
-        if (_state.value.solo != null) return
         if (view.roundId == lastRecordedRound) return
         lastRecordedRound = view.roundId
-        val updated = profileStore.recordRound(view.youWon, view.yourStats)
-        _state.update { it.copy(profile = updated) }
+
+        if (_state.value.solo == null) {
+            val updated = profileStore.recordRound(view.youWon, view.yourStats)
+            _state.update { it.copy(profile = updated) }
+        }
+
+        val gain = profileStore.addXp(view.youWon)
+        _state.update {
+            it.copy(
+                profile = gain.profile,
+                lastXp = gain.gained,
+                levelUp = if (gain.levelledUp) {
+                    LevelPopup(gain.from, gain.to, gain.unlocked)
+                } else {
+                    null
+                },
+                // A new level can hand over the very frame you are wearing by default,
+                // and the table has to pick it up without waiting for a reconnection.
+                look = lookFor(gain.profile, it.players)
+            )
+        }
+        // Nothing is announced here on purpose: levelling up unlocks things, it never
+        // changes what you are already wearing, so the other phones have nothing new to
+        // learn until you actually go and put something on.
     }
 
     private fun broadcast() {
@@ -554,9 +694,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun startSolo(difficulty: Difficulty, mods: Set<GameMod> = emptySet()) {
         teardown()
-        val me = LobbyPlayer(HOST_SEAT, displayName(), _state.value.profile.avatarColor)
+        val me = meAsPlayer(HOST_SEAT)
         // A colour of its own, so the bot is never your twin at the table.
         val botColor = if (me.avatar == BOT_AVATAR) BOT_AVATAR_ALT else BOT_AVATAR
+        val table = listOf(me, LobbyPlayer(1, difficulty.botName, botColor))
         _state.update {
             it.copy(
                 screen = Screen.GAME,
@@ -568,7 +709,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 roomCode = "",
                 joinLink = "",
                 view = null,
-                players = listOf(me, LobbyPlayer(1, difficulty.botName, botColor)),
+                players = table,
+                look = lookFor(it.profile, table),
                 photos = emptyMap(),
                 offline = emptySet(),
                 mods = mods,
@@ -661,7 +803,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 NetMsg.Hello(
                     code = _state.value.roomCode,
                     name = displayName(),
-                    avatar = _state.value.profile.avatarColor
+                    avatar = _state.value.profile.avatarColor,
+                    frame = _state.value.profile.worn(CosmeticKind.FRAME).id,
+                    title = _state.value.profile.worn(CosmeticKind.TITLE).id,
+                    nameColor = _state.value.profile.worn(CosmeticKind.NAME).id,
+                    level = _state.value.profile.level
                 )
             )
         }
@@ -700,8 +846,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             is NetMsg.Lobby -> _state.update {
+                val players = msg.players.sortedBy { p -> p.seat }
                 it.copy(
-                    players = msg.players.sortedBy { p -> p.seat },
+                    players = players,
+                    look = lookFor(it.profile, players),
                     mods = msg.mods.toSet(),
                     screen = if (it.view == null && it.link == LinkStatus.CONNECTED) {
                         Screen.LOBBY

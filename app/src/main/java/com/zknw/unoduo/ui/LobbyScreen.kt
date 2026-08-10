@@ -26,9 +26,11 @@ import com.zknw.unoduo.game.MAX_PLAYERS
 import com.zknw.unoduo.game.MIN_PLAYERS
 import com.zknw.unoduo.game.Seat
 import com.zknw.unoduo.net.LobbyPlayer
+import com.zknw.unoduo.ui.components.AvatarFrame
 import com.zknw.unoduo.ui.components.AvatarLook
 import com.zknw.unoduo.ui.components.GhostButton
 import com.zknw.unoduo.ui.components.InkChip
+import com.zknw.unoduo.ui.components.LevelBadge
 import com.zknw.unoduo.ui.components.MenuBackground
 import com.zknw.unoduo.ui.components.ModSummary
 import com.zknw.unoduo.ui.components.Panel
@@ -37,6 +39,7 @@ import com.zknw.unoduo.ui.components.ScreenHeader
 import com.zknw.unoduo.ui.components.SectionLabel
 import com.zknw.unoduo.ui.components.StatusRow
 import com.zknw.unoduo.ui.theme.Palette
+import com.zknw.unoduo.vm.TableLook
 
 /**
  * Who is in the room. Shared by the host, who sees it under its own QR code, and by
@@ -46,6 +49,7 @@ import com.zknw.unoduo.ui.theme.Palette
 fun PlayerRoster(
     players: List<LobbyPlayer>,
     photos: Map<Seat, String>,
+    look: TableLook,
     mySeat: Seat,
     modifier: Modifier = Modifier
 ) {
@@ -60,21 +64,36 @@ fun PlayerRoster(
                         .padding(vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    PlayerAvatar(
-                        name = player.name,
-                        look = AvatarLook(player.avatar, photoData = photos[player.seat]),
-                        size = 38.dp
-                    )
+                    Box(contentAlignment = Alignment.BottomEnd) {
+                        AvatarFrame(frame = look.frameOf(player.seat), size = 38.dp) {
+                            PlayerAvatar(
+                                name = player.name,
+                                look = AvatarLook(player.avatar, photoData = photos[player.seat]),
+                                size = 38.dp
+                            )
+                        }
+                        LevelBadge(player.level, 18.dp)
+                    }
                     Spacer(Modifier.width(12.dp))
-                    Text(
-                        player.name,
-                        color = Palette.Text,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            player.name,
+                            style = nameStyle(look.nameColorOf(player.seat), 15.sp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        val title = look.titleOf(player.seat)
+                        if (title.isNotEmpty()) {
+                            Text(
+                                title,
+                                color = Palette.TextDim,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                     if (player.seat == HOST_SEAT) {
                         InkChip("Hôte", color = Palette.Gold, fontSize = 11)
                         Spacer(Modifier.width(6.dp))
@@ -115,6 +134,7 @@ fun PlayerRoster(
 fun LobbyScreen(
     players: List<LobbyPlayer>,
     photos: Map<Seat, String>,
+    look: TableLook,
     mySeat: Seat,
     roomCode: String,
     mods: Set<GameMod>,
@@ -137,7 +157,7 @@ fun LobbyScreen(
                 onLeave
             )
             Spacer(Modifier.height(24.dp))
-            PlayerRoster(players, photos, mySeat)
+            PlayerRoster(players, photos, look, mySeat)
             Spacer(Modifier.height(16.dp))
             ModSummary(mods)
             Spacer(Modifier.height(22.dp))

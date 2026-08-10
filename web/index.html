@@ -105,6 +105,97 @@ textarea {
 }
 .avatar.turn { border-color: var(--gold); border-width: 4px; }
 
+/* ------------------------------------------------------------- avatar frames */
+/* One masked ring carries the whole catalogue: the mask punches the middle out of
+   whatever paints the disc, so a flat colour, a sweep, a dashed sweep and a turning
+   sweep are all the same drawing with a different background. */
+.frame { position: relative; border-radius: 50%; flex: none; display: grid; place-items: center; }
+.frame::before {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: 0;
+  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - var(--band)), #000 calc(100% - var(--band)));
+  mask: radial-gradient(closest-side, transparent calc(100% - var(--band)), #000 calc(100% - var(--band)));
+}
+.frame > * { position: relative; z-index: 1; }
+.frame.f-SOLID::before { background: var(--fa); }
+.frame.f-DUO::before { background: conic-gradient(var(--fa), var(--fb), var(--fa)); }
+.frame.f-DASH::before { background: repeating-conic-gradient(var(--fa) 0 9deg, transparent 9deg 18deg); }
+.frame.f-GLOW::before { background: var(--fa); }
+.frame.f-GLOW::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: 0;
+  box-shadow: 0 0 0 calc(var(--band) * .85) var(--fa);
+  animation: halo 1.7s ease-in-out infinite alternate;
+}
+@keyframes halo { from { opacity: .18 } to { opacity: .5 } }
+.frame.f-SPIN::before {
+  background: conic-gradient(var(--fa), var(--fb), var(--fc), var(--fa));
+  animation: ringspin 4.2s linear infinite;
+}
+@keyframes ringspin { to { transform: rotate(360deg) } }
+
+/* ------------------------------------------------------------- levels */
+.level-badge {
+  border-radius: 50%; flex: none; display: grid; place-items: center;
+  background: linear-gradient(var(--slate-high), var(--slate));
+  border: 3px solid var(--ink); color: var(--gold); font-weight: 900;
+}
+.level-badge.maxed { background: linear-gradient(var(--gold), #dc9200); color: var(--ink); }
+.level-row { display: flex; align-items: center; gap: 12px; }
+.level-row .grow { min-width: 0; }
+.level-head { display: flex; align-items: center; gap: 10px; }
+.level-head b { font-size: 14px; font-weight: 900; flex: 1; }
+.level-head span { font-size: 12px; color: var(--dim); font-weight: 700; }
+.xp-track {
+  margin-top: 6px; height: 14px; border-radius: 7px; background: var(--ink);
+  border: 2.5px solid var(--ink); box-shadow: inset 0 0 0 1px var(--ink); padding: 2.5px;
+}
+.xp-fill {
+  height: 100%; border-radius: 5px; min-width: 0;
+  background: linear-gradient(90deg, var(--gold), #ff8a1e);
+  transition: width .42s ease-out;
+}
+.level-foot { margin-top: 5px; font-size: 11px; color: var(--dim); font-weight: 700; }
+
+/* ------------------------------------------------------------- wardrobe */
+#kind-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+#kind-tabs button {
+  flex: none; font: inherit; font-size: 12.5px; font-weight: 900; cursor: pointer;
+  padding: 8px 13px; border-radius: 13px; border: 2.5px solid var(--ink);
+  background: var(--slate); color: var(--text);
+}
+#kind-tabs button.on { background: var(--gold); color: var(--ink); }
+#wardrobe { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cosmetic {
+  background: var(--slate); border: 3px solid var(--ink); border-radius: 18px;
+  padding: 10px; text-align: center; cursor: pointer;
+}
+.cosmetic.worn { border-color: var(--gold); border-width: 4px; }
+.cosmetic.locked { cursor: default; }
+.cosmetic .shot {
+  height: 76px; display: grid; place-items: center; overflow: hidden;
+}
+.cosmetic.locked .shot { opacity: .38; }
+.cosmetic .who { margin-top: 8px; font-size: 12.5px; font-weight: 900; }
+.cosmetic.locked .who { color: var(--dim); }
+.cosmetic .tag { margin-top: 6px; }
+.cosmetic .shot .card { width: 46px; }
+.felt-shot { width: 100%; aspect-ratio: 1.6; border-radius: 12px; border: 3px solid var(--ink); }
+.title-shot { font-size: 14px; font-weight: 900; color: var(--gold); }
+.sticker-shot { font-size: 40px; line-height: 1; }
+
+/* The pseudo, painted. A single colour is a flat fill; two are a gradient across the
+   text, the one place in the app a gradient carries meaning. */
+.pseudo { font-weight: 900; }
+.pseudo.grad {
+  background: linear-gradient(90deg, var(--na), var(--nb));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+/* ------------------------------------------------------------- level up */
+#levelup .panel { text-align: center; max-width: 360px; }
+#levelup .big { font-size: 32px; font-weight: 900; color: var(--gold); }
+#levelup .unlock { display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 6px; }
+#levelup .unlock b { color: var(--gold); font-size: 14px; font-weight: 900; }
+
 /* ----------------------------------------------------------------------- cards */
 .card { position: relative; flex: none; transition: transform .18s ease-out; }
 .card-svg { display: block; width: 100%; height: auto; filter: drop-shadow(0 3px 2px rgba(0,0,0,.45)); }
@@ -209,6 +300,10 @@ textarea {
   background: var(--slate-high); font-size: 19px; line-height: 1;
   cursor: pointer; padding: 0; color: inherit;
 }
+/* Past the original six the rail goes two abreast: a single column of fifteen would
+   run off the top of the screen. */
+#sticker-rail.wide { flex-direction: row; flex-wrap: wrap; width: 88px; justify-content: center; }
+#sticker-rail.wide button.shut { flex-basis: 100%; }
 #sticker-rail button.shut {
   width: 24px; height: 24px; align-self: center;
   background: #0b0e14; color: var(--dim); font-size: 11px;
@@ -398,11 +493,38 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
       <div id="color-picker" style="display:flex;gap:8px;flex-wrap:wrap"></div>
     </div>
     <div class="panel">
+      <div class="label" style="margin-bottom:14px">NIVEAU</div>
+      <div id="profile-level"></div>
+      <div id="profile-xp-note" style="margin-top:14px;color:var(--dim);font-size:12px;font-weight:700"></div>
+      <div id="profile-next"></div>
+      <button class="btn" id="go-wardrobe" style="margin:14px 0 0">Cosmétiques</button>
+    </div>
+    <div class="panel">
       <div class="label" style="margin-bottom:10px">STATISTIQUES</div>
       <div id="stats-list"></div>
       <button class="btn ghost" id="reset-stats" style="margin-top:12px">Remettre à zéro</button>
     </div>
     <button class="btn" id="save-profile">Enregistrer</button>
+  </div>
+</section>
+
+<!-- ------------------------------------------------------------------ cosmétiques -->
+<section class="screen" id="screen-wardrobe">
+  <div class="scroll">
+    <div class="head">
+      <button class="icon-btn" id="wardrobe-back">‹</button>
+      <div>
+        <h2>Cosmétiques</h2>
+        <p>Débloqués en montant de niveau.</p>
+      </div>
+    </div>
+    <div class="panel" id="wardrobe-level"></div>
+    <div id="kind-tabs"></div>
+    <div class="row-line" style="padding:12px 0 10px">
+      <span class="grow" id="kind-blurb" style="color:var(--dim);font-size:12px;font-weight:700"></span>
+      <span class="chip" id="kind-count"></span>
+    </div>
+    <div id="wardrobe"></div>
   </div>
 </section>
 
@@ -601,6 +723,16 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
              autocomplete="off" enterkeyhint="send">
       <button type="button" id="chat-send" aria-label="Envoyer">&#10148;</button>
     </div>
+  </div>
+</div>
+
+<div class="overlay" id="levelup">
+  <div class="panel">
+    <div class="big" id="levelup-title"></div>
+    <p class="lead" id="levelup-sub" style="margin:4px 0 16px"></p>
+    <div id="levelup-badge" style="display:flex;justify-content:center;margin-bottom:16px"></div>
+    <div id="levelup-list" style="margin-bottom:18px"></div>
+    <button class="btn" id="levelup-ok">Continuer</button>
   </div>
 </div>
 

@@ -172,8 +172,14 @@ private fun FlashBubble(line: ChatLine) {
  * tap opens it, picking one closes it again.
  */
 @Composable
-fun StickerRail(modifier: Modifier = Modifier, onPick: (Int) -> Unit) {
+fun StickerRail(
+    modifier: Modifier = Modifier,
+    /** How many of the catalogue this player has earned. */
+    unlocked: Int = 6,
+    onPick: (Int) -> Unit
+) {
     var open by remember { mutableStateOf(false) }
+    val mine = Talk.STICKERS.take(unlocked.coerceAtLeast(1))
 
     InkSurface(
         modifier = modifier,
@@ -187,15 +193,23 @@ fun StickerRail(modifier: Modifier = Modifier, onPick: (Int) -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (open) {
-                Talk.STICKERS.forEachIndexed { index, sticker ->
-                    StickerButton(sticker, Palette.SlateHigh) {
-                        open = false
-                        onPick(index)
+                // Two abreast past the original six: a single column of fifteen would
+                // run off the top of the screen.
+                val columns = if (mine.size > 6) 2 else 1
+                mine.withIndex().chunked(columns).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        row.forEach { (index, sticker) ->
+                            StickerButton(sticker, Palette.SlateHigh) {
+                                open = false
+                                onPick(index)
+                            }
+                        }
+                        if (row.size < columns) Spacer(Modifier.size(36.dp))
                     }
                 }
                 StickerButton("✕", Palette.Ink, small = true) { open = false }
             } else {
-                StickerButton(Talk.STICKERS.first(), Palette.SlateHigh) { open = true }
+                StickerButton(mine.first(), Palette.SlateHigh) { open = true }
             }
         }
     }

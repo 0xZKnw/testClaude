@@ -16,7 +16,10 @@ import { RULES } from './rules.js';
 import {
   loadProfile, saveProfile, recordRound, resetStats, AVATAR_COLORS, shrinkPhoto,
   winRate, perRound, drawRate, aggression, averageLoss, closingRate,
+  levelOf, wornOf, stickersOf, wear, addXp,
 } from './profile.js';
+import * as Cosm from './cosmetics.js';
+import * as Lv from './levels.js';
 import { STICKERS, cleanLine, MAX_CHARS } from './talk.js';
 
 const $ = (id) => document.getElementById(id);
@@ -44,6 +47,8 @@ const state = {
   botTimer: null,
   pendingWild: null,
   lastRecordedRound: -1,
+  lastXp: 0,
+  levelUp: null,
   toastTimer: null,
   // Chat and stickers. None of it touches the rules, so none of it is in a snapshot.
   social: { enabled: false, chat: [], flash: [], open: false, unread: 0 },
@@ -52,7 +57,7 @@ const state = {
 
 // --------------------------------------------------------------------- screens
 
-const SCREENS = ['home', 'profile', 'create', 'solo', 'rules', 'host', 'join', 'lobby', 'game'];
+const SCREENS = ['home', 'profile', 'wardrobe', 'create', 'solo', 'rules', 'host', 'join', 'lobby', 'game'];
 let previous = 'home';
 
 function show(name) {
@@ -92,6 +97,60 @@ function avatarHtml(name, colorIndex, photo, size, extraClass = '') {
   return `<div class="avatar ${extraClass}" style="${style}">${photo ? '' : esc(initial)}</div>`;
 }
 
+const clamp = (value, low, high) => Math.min(Math.max(value, low), high);
+
+/**
+ * An avatar inside its unlocked ring. The ring is drawn outside the face, so putting a
+ * frame on never shrinks the picture.
+ */
+function framedHtml(frame, size, inner) {
+  const band = clamp(size * 0.09, 2.5, 7);
+  const gap = clamp(size * 0.05, 1.5, 4);
+  const outer = size + (band + gap) * 2;
+  const vars = `--band:${band}px;--fa:${frame.a};--fb:${frame.b || frame.a};`
+    + `--fc:${frame.c || frame.b || frame.a}`;
+  return `<div class="frame f-${frame.style}" style="width:${outer}px;height:${outer}px;${vars}">`
+    + `${inner}</div>`;
+}
+
+function framedAvatarHtml(name, colorIndex, photo, size, frame, extraClass = '') {
+  return framedHtml(frame, size, avatarHtml(name, colorIndex, photo, size, extraClass));
+}
+
+/** A pseudo painted in its unlocked colour: flat for one, a gradient for two. */
+function pseudoHtml(name, item, size) {
+  const style = item.b
+    ? `--na:${item.a};--nb:${item.b};font-size:${size}px`
+    : `color:${item.a};font-size:${size}px`;
+  return `<span class="pseudo${item.b ? ' grad' : ''}" style="${style}">${esc(name)}</span>`;
+}
+
+function levelBadgeHtml(level, size) {
+  const maxed = level >= Lv.MAX_LEVEL;
+  // Three digits have to fit the same disc two do, so the type shrinks rather than the
+  // number spilling over the keyline.
+  const scale = String(level).length >= 3 ? 0.3 : 0.42;
+  return `<div class="level-badge${maxed ? ' maxed' : ''}" style="width:${size}px;height:${size}px;`
+    + `font-size:${Math.round(size * scale)}px;border-width:${clamp(size * 0.09, 2, 4)}px">${level}</div>`;
+}
+
+/** Level, bar, and what is still owed — the same three lines the phone shows. */
+function levelBarHtml(xp, badge = 46) {
+  const level = Lv.levelAt(xp);
+  const maxed = level >= Lv.MAX_LEVEL;
+  return `<div class="level-row">
+    ${levelBadgeHtml(level, badge)}
+    <div class="grow">
+      <div class="level-head">
+        <b>${maxed ? 'Niveau maximum' : `Niveau ${level}`}</b>
+        <span>${maxed ? `${xp} XP` : `${Lv.into(xp)} / ${Lv.span(xp)} XP`}</span>
+      </div>
+      <div class="xp-track"><div class="xp-fill" style="width:${Lv.percent(xp)}%"></div></div>
+      ${maxed ? '' : `<div class="level-foot">Encore ${Lv.toNext(xp)} XP avant le niveau ${level + 1}</div>`}
+    </div>
+  </div>`;
+}
+
 function renderHome() {
   const p = state.profile;
   $('home-avatar').style.cssText =
@@ -119,10 +178,17 @@ function renderProfile() {
   const p = state.profile;
   $('name-input').value = p.name;
   const refresh = () => {
-    $('profile-avatar').style.cssText =
-      `width:96px;height:96px;font-size:42px;` + avatarStyle(p.photo, p.avatarColor);
-    $('profile-avatar').textContent = p.photo ? '' :
-      (($('name-input').value || '?').trim().charAt(0).toUpperCase() || '?');
+    const shown = ($('name-input').value || '?').trim();
+    const title = Cosm.worn(wornOf(p, 'TITLE'));
+    // Framed and badged, exactly as the other players see you.
+    $('profile-avatar').outerHTML = `<div id="profile-avatar" style="display:flex;
+      flex-direction:column;align-items:center;gap:8px">
+      <div style="position:relative;display:flex">
+        ${framedAvatarHtml(shown, p.avatarColor, p.photo, 96, wornOf(p, 'FRAME'))}
+        <div style="position:absolute;right:0;bottom:0">${levelBadgeHtml(levelOf(p), 34)}</div>
+      </div>
+      ${title ? `<span class="chip">${esc(title)}</span>` : ''}
+    </div>`;
   };
   refresh();
   $('name-input').oninput = refresh;
@@ -134,8 +200,94 @@ function renderProfile() {
     node.onclick = () => { p.avatarColor = Number(node.dataset.color); renderProfile(); };
   });
 
+  const level = levelOf(p);
+  $('profile-level').innerHTML = levelBarHtml(p.xp || 0);
+  $('profile-xp-note').textContent =
+    `Manche gagnée : +${Lv.XP_WIN} XP   ·   perdue : +${Lv.XP_LOSS} XP`;
+  $('profile-next').innerHTML = level >= Lv.MAX_LEVEL ? '' : `
+    <div class="label" style="margin:14px 0 4px">À venir</div>
+    ${Cosm.upcoming(level, 4).map((item) => `
+      <div class="row-line" style="padding:4px 0">
+        <span class="chip">Niv. ${item.level}</span>
+        <span class="grow ellipsis" style="font-size:13px;font-weight:700">${esc(item.name)}</span>
+        <span style="color:var(--dim);font-size:11px;font-weight:700">${Cosm.KINDS[item.kind].label}</span>
+      </div>`).join('')}`;
+
   renderStats(p.stats);
 }
+
+// -------------------------------------------------------------------- wardrobe
+
+let wardrobeTab = 'FRAME';
+
+/**
+ * Every item on show, earned or not — a locked tile that names the level it costs is
+ * the whole reason to keep playing, and hiding it would leave the screen looking empty
+ * for the first fifty levels.
+ */
+function renderWardrobe() {
+  const p = state.profile;
+  const level = levelOf(p);
+
+  $('wardrobe-level').innerHTML = levelBarHtml(p.xp || 0);
+
+  $('kind-tabs').innerHTML = Cosm.KIND_ORDER.map((kind) => `
+    <button type="button" data-kind="${kind}" class="${kind === wardrobeTab ? 'on' : ''}">
+      ${Cosm.KINDS[kind].label}</button>`).join('');
+  $('kind-tabs').querySelectorAll('[data-kind]').forEach((node) => {
+    node.onclick = () => { wardrobeTab = node.dataset.kind; renderWardrobe(); };
+  });
+
+  const items = Cosm.ofKind(wardrobeTab);
+  $('kind-blurb').textContent = Cosm.KINDS[wardrobeTab].blurb;
+  $('kind-count').textContent = `${items.filter((i) => i.level <= level).length} / ${items.length}`;
+
+  $('wardrobe').innerHTML = items.map((item) => {
+    const locked = item.level > level;
+    const worn = wornOf(p, item.kind).id === item.id;
+    const tag = worn
+      ? '<span class="chip gold">Porté</span>'
+      : (locked
+        ? `<span class="chip" style="background:#0b0e14">Niveau ${item.level}</span>`
+        : '<span class="chip">Débloqué</span>');
+    return `<div class="cosmetic${worn ? ' worn' : ''}${locked ? ' locked' : ''}"
+      ${locked ? '' : `data-wear="${item.id}"`}>
+      <div class="shot">${previewHtml(item, p)}</div>
+      <div class="who ellipsis">${esc(item.name)}</div>
+      <div class="tag">${tag}</div>
+    </div>`;
+  }).join('');
+
+  $('wardrobe').querySelectorAll('[data-wear]').forEach((node) => {
+    node.onclick = () => {
+      state.profile = wear(node.dataset.wear);
+      renderWardrobe();
+      // A frame or a title is worn for the others, not for you: tell the room.
+      announceMyself();
+    };
+  });
+}
+
+function previewHtml(item, p) {
+  switch (item.kind) {
+    case 'FRAME':
+      return framedAvatarHtml(p.name, p.avatarColor, p.photo, 46, item);
+    case 'BACK':
+      return `<div class="card">${cardBack(item)}</div>`;
+    case 'FELT':
+      return `<div class="felt-shot" style="background:radial-gradient(circle at 50% 38%,
+        ${item.a}, ${item.b} 45%, ${item.c})"></div>`;
+    case 'TITLE':
+      return `<div class="title-shot">${esc(Cosm.worn(item) || '—')}</div>`;
+    case 'NAME':
+      return pseudoHtml(p.name || 'Joueur', item, 17);
+    default:
+      return `<div class="sticker-shot">${item.text}</div>`;
+  }
+}
+
+$('go-wardrobe').onclick = () => { show('wardrobe'); renderWardrobe(); };
+$('wardrobe-back').onclick = () => { show('profile'); renderProfile(); };
 
 /**
  * The same six panels the Android profile shows, in the same order and with the same
@@ -282,6 +434,42 @@ function teardown() {
   stopCamera();
 }
 
+/**
+ * Me, as the other browsers should see me. The frame, the title and the pseudo colour
+ * travel because they are worn *for* other people; the card back and the cloth stay
+ * home, because those are my view of my own table.
+ */
+function meAsPlayer(seat) {
+  const p = state.profile;
+  return {
+    s: seat,
+    n: myName(),
+    a: p.avatarColor,
+    fr: wornOf(p, 'FRAME').id,
+    ti: wornOf(p, 'TITLE').id,
+    nm: wornOf(p, 'NAME').id,
+    lv: levelOf(p),
+  };
+}
+
+/** Resolves what one seat announced, falling back rather than leaving a hole. */
+const frameOf = (player) => Cosm.resolve(player?.fr || '', 'FRAME', player?.lv || 1);
+const titleOf = (player) => Cosm.worn(Cosm.resolve(player?.ti || '', 'TITLE', player?.lv || 1));
+const nameColorOf = (player) => Cosm.resolve(player?.nm || '', 'NAME', player?.lv || 1);
+const playerAt = (seat) => state.players.find((p) => p.s === seat);
+
+/** Re-sends who I am after changing an outfit. */
+function announceMyself() {
+  if (!state.role || state.role === 'solo') return;
+  if (state.role === 'host') {
+    state.players = [...state.players.filter((p) => p.s !== HOST_SEAT), meAsPlayer(HOST_SEAT)]
+      .sort((a, b) => a.s - b.s);
+    broadcastLobby();
+  } else {
+    state.net?.send({ ...meAsPlayer(state.mySeat), t: 'hello', c: '' });
+  }
+}
+
 function myName() {
   return state.profile.name.trim() || 'Joueur';
 }
@@ -300,7 +488,7 @@ function startSolo(difficulty, mods = []) {
   state.mySeat = HOST_SEAT;
   const botColor = state.profile.avatarColor === BOT_AVATAR ? BOT_AVATAR_ALT : BOT_AVATAR;
   state.players = [
-    { s: HOST_SEAT, n: myName(), a: state.profile.avatarColor },
+    meAsPlayer(HOST_SEAT),
     { s: 1, n: DIFFICULTY_INFO[difficulty].botName, a: botColor },
   ];
   state.photos = state.profile.photo ? { [HOST_SEAT]: state.profile.photo } : {};
@@ -361,14 +549,52 @@ function scheduleBot() {
   }, BOT_THINK_MS);
 }
 
+/**
+ * Closes out a finished round, exactly once.
+ *
+ * The tally and the experience follow two different rules on purpose. The tally is a
+ * record against real people, so a game against the machine does not touch it.
+ * Experience is a record of time played, so every finished round counts — a progression
+ * that ignored solo would punish exactly the players with nobody to play against.
+ */
 function recordIfFinished(v) {
   if (!v || v.ph !== Phase.GAME_OVER) return;
   if (v.rd === state.lastRecordedRound) return;
   state.lastRecordedRound = v.rd;
-  // A round against the machine is still a game, but it is not a result.
-  if (state.solo) return;
-  state.profile = recordRound(V.youWon(v), v.st);
+  const won = V.youWon(v);
+  if (!state.solo) state.profile = recordRound(won, v.st);
+
+  const gain = addXp(won);
+  state.profile = gain.profile;
+  state.lastXp = gain.gained;
+  state.levelUp = gain.levelledUp ? gain : null;
 }
+
+/** The moment a level lands: loud, and on top of the result rather than instead of it. */
+function showLevelUp() {
+  const gain = state.levelUp;
+  if (!gain) return;
+  state.levelUp = null;
+  $('levelup-title').textContent = `Niveau ${gain.to}`;
+  $('levelup-sub').textContent = gain.to - gain.from > 1
+    ? `${gain.to - gain.from} niveaux d'un coup.`
+    : 'Un niveau de plus.';
+  $('levelup-badge').innerHTML = levelBadgeHtml(gain.to, 72);
+  // Capped: a jump of several levels can hand over a fistful, and a list taller than
+  // the screen is not a celebration.
+  const shown = gain.unlocked.slice(0, 5);
+  $('levelup-list').innerHTML = gain.unlocked.length === 0 ? '' : `
+    <div style="font-size:12px;font-weight:900;margin-bottom:6px">
+      ${gain.unlocked.length === 1 ? 'Débloqué' : `${gain.unlocked.length} débloqués`}</div>
+    ${shown.map((item) => `<div class="unlock">
+      <span class="chip" style="background:#0b0e14">${Cosm.KINDS[item.kind].label}</span>
+      <b>${esc(item.name)}</b></div>`).join('')}
+    ${gain.unlocked.length > 5
+      ? `<div style="color:var(--dim);font-size:12px;margin-top:6px">et ${gain.unlocked.length - 5} de plus</div>`
+      : ''}`;
+  $('levelup').classList.add('on');
+}
+$('levelup-ok').onclick = () => $('levelup').classList.remove('on');
 
 // -------------------------------------------------------------- host and guest
 
@@ -425,8 +651,15 @@ function onGuestMessage(key, msg) {
       }
       state.seatOfKey.set(key, seat);
       state.keyOfSeat.set(seat, key);
-      state.players = [...state.players.filter((p) => p.s !== seat),
-        { s: seat, n: msg.n || 'Joueur', a: msg.a ?? 0 }].sort((a, b) => a.s - b.s);
+      state.players = [...state.players.filter((p) => p.s !== seat), {
+        s: seat,
+        n: msg.n || 'Joueur',
+        a: msg.a ?? 0,
+        fr: msg.fr || '',
+        ti: msg.ti || '',
+        nm: msg.nm || '',
+        lv: msg.lv || 1,
+      }].sort((a, b) => a.s - b.s);
       state.net.send(key, { t: 'welcome', ok: true, s: seat });
       broadcastLobby();
       for (const [photoSeat, data] of Object.entries(state.photos)) {
@@ -629,7 +862,7 @@ async function openRoom(mods) {
   state.mods = orderedMods(mods);
   state.social.enabled = true;
   state.mySeat = HOST_SEAT;
-  state.players = [{ s: HOST_SEAT, n: myName(), a: state.profile.avatarColor }];
+  state.players = [meAsPlayer(HOST_SEAT)];
   state.photos = state.profile.photo ? { [HOST_SEAT]: state.profile.photo } : {};
   state.net = new WebRtcHost(hostHandlers());
   show('host');
@@ -684,13 +917,22 @@ $('host-start').onclick = () => {
 };
 
 function rosterHtml(target) {
-  const rows = state.players.map((p) => `
+  const rows = state.players.map((p) => {
+    const title = titleOf(p);
+    return `
     <div class="row-line">
-      ${avatarHtml(p.n, p.a, state.photos[p.s], 38)}
-      <div class="grow ellipsis" style="font-weight:700">${esc(p.n)}</div>
+      <div style="position:relative;display:flex">
+        ${framedAvatarHtml(p.n, p.a, state.photos[p.s], 38, frameOf(p))}
+        <div style="position:absolute;right:-2px;bottom:-2px">${levelBadgeHtml(p.lv || 1, 18)}</div>
+      </div>
+      <div class="grow" style="min-width:0">
+        <div class="ellipsis">${pseudoHtml(p.n, nameColorOf(p), 15)}</div>
+        ${title ? `<div class="ellipsis" style="color:var(--dim);font-size:11px;font-weight:700">${esc(title)}</div>` : ''}
+      </div>
       ${p.s === HOST_SEAT ? '<span class="chip gold">Hôte</span>' : ''}
       ${p.s === state.mySeat ? '<span class="chip">Toi</span>' : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
   const missing = Math.max(0, MIN_PLAYERS - state.players.length);
   const waiting = Array.from({ length: missing }, () => `
     <div class="row-line"><div style="width:38px;text-align:center;color:var(--dim)">…</div>
@@ -773,7 +1015,7 @@ async function joinWith(raw) {
   state.net = new WebRtcGuest({
     onReady: () => {
       state.net.send({
-        t: 'hello', c: '', n: myName(), a: state.profile.avatarColor,
+        ...meAsPlayer(state.mySeat), t: 'hello', c: '',
       });
     },
     onMessage: onHostMessage,
@@ -928,10 +1170,14 @@ let railOpen = false;
 
 function renderRail() {
   const rail = $('sticker-rail');
+  // Only what has been earned is offered, but the index is into the whole catalogue —
+  // otherwise two players at different levels would disagree about what index 7 means.
+  const mine = stickersOf(state.profile);
+  rail.classList.toggle('wide', railOpen && mine.length > 6);
   rail.innerHTML = railOpen
-    ? STICKERS.map((s, i) => `<button type="button" data-sticker="${i}">${s}</button>`).join('')
+    ? mine.map((item, i) => `<button type="button" data-sticker="${i}">${item.text}</button>`).join('')
       + '<button type="button" class="shut" data-rail="0">&#10005;</button>'
-    : `<button type="button" data-rail="1">${STICKERS[0]}</button>`;
+    : `<button type="button" data-rail="1">${mine[0].text}</button>`;
   rail.querySelectorAll('[data-sticker]').forEach((node) => {
     node.onclick = () => {
       railOpen = false;
@@ -1013,14 +1259,26 @@ function renderGame() {
   if (!v) return;
   renderSocial();
 
+  // ---- my own table: the cloth and the deck I chose, nobody else's
+  const felt = wornOf(state.profile, 'FELT');
+  $('screen-game').style.background =
+    `radial-gradient(circle at 50% 38%, ${felt.a}, ${felt.b} 45%, ${felt.c})`;
+  const back = wornOf(state.profile, 'BACK');
+
   // ---- rivals
   const single = v.ri.length === 1 ? v.ri[0] : null;
   if (single) {
     const theirTurn = v.ts === single.s && v.ph !== Phase.GAME_OVER;
+    const seat = playerAt(single.s);
+    const title = titleOf(seat);
     $('rivals').innerHTML = `
-      ${avatarHtml(single.n, single.a, state.photos[single.s], 44, theirTurn ? 'turn' : '')}
+      <div style="position:relative;display:flex">
+        ${framedAvatarHtml(single.n, single.a, state.photos[single.s], 44, frameOf(seat), theirTurn ? 'turn' : '')}
+        <div style="position:absolute;right:-2px;bottom:-2px">${levelBadgeHtml(seat?.lv || 1, 18)}</div>
+      </div>
       <div class="grow">
-        <div style="font-weight:700;font-size:15px" class="ellipsis">${esc(single.n)}</div>
+        <div class="ellipsis">${pseudoHtml(single.n, nameColorOf(seat), 15)}</div>
+        ${title ? `<div class="ellipsis" style="color:var(--dim);font-size:10px;font-weight:700">${esc(title)}</div>` : ''}
         <div style="font-size:12px;color:${single.c === 1 ? 'var(--red)' : 'var(--dim)'};
           font-weight:${single.c === 1 ? 900 : 400}">
           ${single.c} carte${single.c > 1 ? 's' : ''}${single.c === 1 ? ' · UNO !' : ''}
@@ -1034,7 +1292,7 @@ function renderGame() {
         ${v.ri.map((r) => {
           const turn = v.ts === r.s && v.ph !== Phase.GAME_OVER;
           return `<div class="rival ${turn ? 'turn' : ''}">
-            ${avatarHtml(r.n, r.a, state.photos[r.s], 40, turn ? 'turn' : '')}
+            ${framedAvatarHtml(r.n, r.a, state.photos[r.s], 40, frameOf(playerAt(r.s)), turn ? 'turn' : '')}
             <span class="chip count ${r.c === 1 ? 'red' : ''}">${r.c}</span>
             <div class="name">${esc(r.n)}</div>
             ${revealedStrip(r.rv)}
@@ -1054,13 +1312,13 @@ function renderGame() {
   const faceUp = (shown?.rv ?? []).slice(0, total);
   const backs = total - faceUp.length;
   $('rival-fan').innerHTML =
-    Array.from({ length: backs }, () => `<div class="card">${cardBack()}</div>`).join('')
+    Array.from({ length: backs }, () => `<div class="card">${cardBack(back)}</div>`).join('')
     + faceUp.map((c) => `<div class="card">${cardFace(c)}</div>`).join('');
 
   // ---- deck and discard
   const mustDraw = V.mustDraw(v);
   $('deck').className = mustDraw ? 'urgent' : '';
-  $('deck').innerHTML = cardBack() + (mustDraw ? '<div class="ring"></div>' : '');
+  $('deck').innerHTML = cardBack(back) + (mustDraw ? '<div class="ring"></div>' : '');
   $('deck').onclick = () => tapDeck();
   $('deck-label').textContent = mustDraw ? 'Pioche' : String(v.dk);
   $('discard').innerHTML =
@@ -1167,10 +1425,15 @@ function showGameOver(v) {
   $('over-sub').textContent = V.youWon(v)
     ? "Personne n'a rien vu venir."
     : `${V.nameOf(v, v.w)} a posé sa dernière carte.`;
-  $('over-scores').innerHTML = v.ri.length === 1
+  $('over-scores').innerHTML = (v.ri.length === 1
     ? `<div style="font-size:26px;font-weight:900">${v.ys} — ${v.ri[0].p}</div>`
     : `<span class="chip gold">Toi ${v.ys}</span> ` +
-      v.ri.map((r) => `<span class="chip">${esc(r.n)} ${r.p}</span>`).join(' ');
+      v.ri.map((r) => `<span class="chip">${esc(r.n)} ${r.p}</span>`).join(' '))
+    + (state.lastXp > 0
+      ? `<div style="margin-top:12px"><span class="chip gold">+${state.lastXp} XP</span></div>`
+      : '');
+  // On top of the result, not instead of it: the score is what you came for.
+  showLevelUp();
   const waiting = v.ri.filter((r) => r.r).length;
   $('rematch-btn').disabled = v.ry;
   $('rematch-btn').textContent = v.ry

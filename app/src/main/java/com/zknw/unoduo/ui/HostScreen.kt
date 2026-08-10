@@ -44,6 +44,7 @@ import com.zknw.unoduo.ui.components.QrCode
 import com.zknw.unoduo.ui.components.ScreenHeader
 import com.zknw.unoduo.ui.components.StatusRow
 import com.zknw.unoduo.ui.theme.Palette
+import com.zknw.unoduo.vm.TableLook
 import com.zknw.unoduo.vm.LinkStatus
 
 @Composable
@@ -54,6 +55,7 @@ fun HostScreen(
     link: LinkStatus,
     players: List<LobbyPlayer>,
     photos: Map<Seat, String>,
+    look: TableLook,
     mods: Set<GameMod>,
     canStart: Boolean,
     onStart: () -> Unit,
@@ -121,7 +123,7 @@ fun HostScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            PlayerRoster(players, photos, mySeat = HOST_SEAT)
+            PlayerRoster(players, photos, look, mySeat = HOST_SEAT)
 
             Spacer(Modifier.height(16.dp))
             ModSummary(mods)

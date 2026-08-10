@@ -1,6 +1,7 @@
 package com.zknw.unoduo.net
 
 import com.zknw.unoduo.game.Card
+import com.zknw.unoduo.game.GameMod
 import com.zknw.unoduo.game.CardColor
 import com.zknw.unoduo.game.CardKind
 import com.zknw.unoduo.game.Penalty
@@ -247,5 +248,48 @@ class ProtocolTest {
         val payload = "A".repeat(4_400)
         val frames = Framing.split(Wire.encode(NetMsg.Photo(2, payload)), 247)
         assertTrue("trames=${frames.size}", frames.size <= 32)
+    }
+
+    @Test
+    fun `what a player is wearing survives the trip, and its absence is harmless`() {
+        val dressed = NetMsg.Lobby(
+            players = listOf(
+                LobbyPlayer(0, "Zak", 3, "fr.or", "ti.titan", "nm.neon", 77),
+                // A phone on an older build announces none of it.
+                LobbyPlayer(1, "Bob", 1)
+            ),
+            started = false,
+            mods = listOf(GameMod.SPY)
+        )
+        val back = Wire.decode(Wire.encode(dressed)) as NetMsg.Lobby
+        assertEquals(dressed, back)
+        assertEquals("fr.or", back.players[0].frame)
+        assertEquals(77, back.players[0].level)
+        // Defaults, not nulls: the roster still draws.
+        assertEquals("", back.players[1].frame)
+        assertEquals(1, back.players[1].level)
+    }
+
+    @Test
+    fun `an old hello without cosmetics still decodes`() {
+        // Exactly what a build from before the levels existed puts on the wire.
+        val legacy = """{"t":"hello","c":"ABC123","n":"Zak","a":2}"""
+        val back = Wire.decode(legacy.toByteArray()) as NetMsg.Hello
+        assertEquals("ABC123", back.code)
+        assertEquals("", back.title)
+        assertEquals(1, back.level)
+    }
+
+    @Test
+    fun `dressing everybody up does not blow the lobby frame budget`() {
+        val loud = NetMsg.Lobby(
+            players = (0 until 5).map {
+                LobbyPlayer(it, "Joueur numero $it", it, "fr.sangdencre", "ti.compteur", "nm.centieme", 100)
+            },
+            started = true,
+            mods = GameMod.entries.toList()
+        )
+        val frames = Framing.split(Wire.encode(loud), 247)
+        assertTrue("trames=${frames.size}", frames.size <= 8)
     }
 }

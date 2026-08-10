@@ -36,9 +36,14 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zknw.unoduo.profile.Profile
+import com.zknw.unoduo.progress.CosmeticKind
+import com.zknw.unoduo.progress.Levels
+import com.zknw.unoduo.ui.components.AvatarFrame
 import com.zknw.unoduo.ui.components.AvatarLook
 import com.zknw.unoduo.ui.components.GhostButton
 import com.zknw.unoduo.ui.components.InkChip
+import com.zknw.unoduo.ui.components.LevelBadge
+import com.zknw.unoduo.ui.components.LevelBar
 import com.zknw.unoduo.ui.components.MenuBackground
 import com.zknw.unoduo.ui.components.Panel
 import com.zknw.unoduo.ui.components.PlayerAvatar
@@ -54,6 +59,7 @@ fun ProfileScreen(
     onSave: (String, Int, String?) -> Unit,
     onPickPhoto: () -> Unit,
     onResetStats: () -> Unit,
+    onCosmetics: () -> Unit,
     onBack: () -> Unit
 ) {
     var name by remember(profile.name) { mutableStateOf(profile.name) }
@@ -73,12 +79,22 @@ fun ProfileScreen(
 
             Panel(Modifier.fillMaxWidth()) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    PlayerAvatar(
-                        name = name,
-                        look = AvatarLook(color, profile.photoUri),
-                        size = 104.dp,
-                        ring = 4.dp
-                    )
+                    Box(contentAlignment = Alignment.BottomEnd) {
+                        AvatarFrame(frame = profile.worn(CosmeticKind.FRAME), size = 104.dp) {
+                            PlayerAvatar(
+                                name = name,
+                                look = AvatarLook(color, profile.photoUri),
+                                size = 104.dp,
+                                ring = 4.dp
+                            )
+                        }
+                        LevelBadge(profile.level, 34.dp)
+                    }
+                    val worn = profile.worn(CosmeticKind.TITLE).worn
+                    if (worn.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        InkChip(worn, color = Palette.SlateHigh)
+                    }
                     Spacer(Modifier.height(14.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         GhostButton("Choisir une photo", Modifier.weight(1f)) { onPickPhoto() }
@@ -119,6 +135,31 @@ fun ProfileScreen(
                     PrimaryButton("Enregistrer", Modifier.fillMaxWidth()) {
                         onSave(name, color, profile.photoUri)
                     }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Panel(Modifier.fillMaxWidth()) {
+                Column {
+                    SectionLabel("NIVEAU")
+                    Spacer(Modifier.height(14.dp))
+                    LevelBar(profile.xp, Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = "Manche gagnée : +${Levels.XP_WIN} XP   ·   perdue : +${Levels.XP_LOSS} XP",
+                        color = Palette.TextDim,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (profile.level < Levels.MAX) {
+                        Spacer(Modifier.height(12.dp))
+                        SectionLabel("À VENIR")
+                        Spacer(Modifier.height(4.dp))
+                        NextRewards(profile.level, Modifier.fillMaxWidth())
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    PrimaryButton("Cosmétiques", Modifier.fillMaxWidth(), onClick = onCosmetics)
                 }
             }
 

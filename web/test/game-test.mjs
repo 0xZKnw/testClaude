@@ -230,6 +230,27 @@ try {
   console.log(`  les deux ecrans sont d'accord sur le vainqueur : ${agree ? 'oui' : 'NON'}`);
   if (!agree) problems.push(`desaccord sur le vainqueur : ${hostWinner} / ${guestWinner}`);
 
+  // ------------------------------------------------------------- experience
+  // Every finished round is worth something, win or lose, and it is shown on the
+  // result panel.
+  const xpChip = await host.textContent('#over-scores .chip.gold').catch(() => null);
+  console.log(`  xp annonce a l'hote : ${xpChip}`);
+  if (!xpChip || !/^\+\d+ XP$/.test(xpChip.trim())) problems.push("l'xp n'est pas annoncee en fin de manche");
+
+  // A win is 25 XP and the first level costs 20, so the winner levels up on the spot
+  // and the loser does not. Either way the overlay must not be left blocking the table.
+  for (const [page, who] of [[host, "l'hote"], [guest, "l'invite"]]) {
+    const won = (await page.textContent('#over-title')) === 'Gagné !';
+    const up = await page.evaluate(() => document.getElementById('levelup').classList.contains('on'));
+    console.log(`  ${who} : ${won ? 'gagne' : 'perd'}, montee de niveau ${up ? 'oui' : 'non'}`);
+    if (won !== up) problems.push(`la montee de niveau de ${who} ne suit pas le resultat`);
+    if (up) {
+      const title = await page.textContent('#levelup-title');
+      if (title.trim() !== 'Niveau 2') problems.push(`niveau annonce faux : ${title}`);
+      await page.click('#levelup-ok');
+    }
+  }
+
   // ---------------------------------------------------------------------- stats
   // The round that just ended has been folded in, so the profile has real numbers to
   // render — and every derived figure gets exercised on the way.
@@ -248,6 +269,64 @@ try {
   });
   console.log(`  cartes posees comptees : ${played}`);
   if (!played || Number(played) <= 0) problems.push("la manche jouee n'est pas comptee dans les stats");
+
+  // ------------------------------------------------------------------ wardrobe
+  // Seeded rather than played to: reaching level 51 honestly would take a thousand
+  // rounds, and what is being checked here is that the catalogue gates on the level,
+  // not that the arithmetic adds up — the conformance dump already covers that.
+  // 7125 XP is exactly the start of level 51, which is where the gold frame lands.
+  await host.evaluate(() => {
+    const p = JSON.parse(localStorage.getItem('uno.profile'));
+    p.xp = 7125;
+    localStorage.setItem('uno.profile', JSON.stringify(p));
+  });
+  await host.reload();
+  await host.click('#profile-bar');
+  const level = (await host.textContent('#profile-level .level-head b')).trim();
+  console.log(`  niveau affiche : ${level}`);
+  if (level !== 'Niveau 51') problems.push(`niveau affiche faux : ${level}`);
+
+  await host.click('#go-wardrobe');
+  await host.waitForSelector('#screen-wardrobe.on');
+  const tabs = await host.$$eval('#kind-tabs button', (n) => n.map((x) => x.textContent.trim()));
+  console.log(`  familles de cosmetiques : ${tabs.length}`);
+  if (tabs.length !== 6) problems.push(`il manque des familles de cosmetiques : ${tabs.join(', ')}`);
+
+  const frames = await host.$$eval('#wardrobe .cosmetic', (n) => n.length);
+  const wearable = await host.$$eval('#wardrobe [data-wear]', (n) => n.length);
+  const locked = await host.$$eval('#wardrobe .cosmetic.locked', (n) => n.length);
+  console.log(`  cadres : ${frames} au total, ${wearable} debloques, ${locked} verrouilles`);
+  if (frames < 25) problems.push(`trop peu de cadres : ${frames}`);
+  // Eighteen frames land at or before level 51; the rest must still be shut.
+  if (wearable !== 18) problems.push(`cadres portables : ${wearable} au lieu de 18`);
+  if (locked !== frames - wearable) problems.push('les cadres verrouilles ne sont pas marques comme tels');
+
+  // The gold frame is exactly the level-51 reward: it must be reachable, and putting it
+  // on must stick.
+  await host.click('[data-wear="fr.or"]');
+  const wornFrame = await host.evaluate(() => JSON.parse(localStorage.getItem('uno.profile')).wearing.FRAME);
+  console.log(`  cadre porte : ${wornFrame}`);
+  if (wornFrame !== 'fr.or') problems.push("le cadre choisi n'est pas enregistre");
+  if (await host.$$eval('#wardrobe .cosmetic.worn', (n) => n.length) !== 1) {
+    problems.push("le cadre porte n'est pas marque dans la grille");
+  }
+
+  // Something a level 51 has not earned must stay untouchable.
+  if (await host.$$eval('[data-wear="fr.centieme"]', (n) => n.length) !== 0) {
+    problems.push('un cadre du niveau 100 est portable au niveau 51');
+  }
+
+  await host.click('#kind-tabs button:nth-child(4)');
+  const titleTiles = await host.$$eval('#wardrobe [data-wear]', (n) => n.map((x) => x.dataset.wear));
+  console.log(`  titres portables au niveau 51 : ${titleTiles.length}`);
+  if (!titleTiles.includes('ti.sanspitie')) problems.push("le titre du niveau 49 n'est pas portable");
+  if (titleTiles.includes('ti.briscard')) problems.push('un titre du niveau 53 est deja portable');
+
+  // The rail grows with the level: six at the start, ten by level 51.
+  await host.click('#kind-tabs button:nth-child(6)');
+  const stickers = await host.$$eval('#wardrobe [data-wear]', (n) => n.length);
+  console.log(`  stickers debloques au niveau 51 : ${stickers}`);
+  if (stickers !== 11) problems.push(`stickers debloques : ${stickers} au lieu de 11`);
 } finally {
   await browser.close();
   server.kill();

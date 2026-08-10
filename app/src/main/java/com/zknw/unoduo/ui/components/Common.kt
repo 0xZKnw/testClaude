@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +40,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.zknw.unoduo.progress.Cosmetic
+import com.zknw.unoduo.progress.CosmeticKind
+import com.zknw.unoduo.progress.Cosmetics
 import com.zknw.unoduo.ui.theme.Palette
 
 /**
@@ -51,13 +55,25 @@ private val BUTTON_SHAPE = RoundedCornerShape(18.dp)
 private val PANEL_SHAPE = RoundedCornerShape(22.dp)
 private const val INK_DEPTH = 5
 
+/**
+ * The table. [felt] is the unlocked cloth the player picked; left out, it is the one
+ * everybody starts on.
+ */
 @Composable
-fun TableBackground(content: @Composable () -> Unit) {
+fun TableBackground(
+    felt: Cosmetic = Cosmetics.defaultOf(CosmeticKind.FELT),
+    content: @Composable () -> Unit
+) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Palette.Felt)
-            .background(Palette.feltBrush())
+            .background(Color(felt.b))
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(Color(felt.a), Color(felt.b), Color(felt.c)),
+                    radius = 1500f
+                )
+            )
     ) {
         Box(Modifier.safeArea()) { content() }
     }

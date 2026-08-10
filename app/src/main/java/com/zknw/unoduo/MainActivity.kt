@@ -36,6 +36,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.location.LocationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.zknw.unoduo.ui.CosmeticsScreen
 import com.zknw.unoduo.ui.CreateScreen
 import com.zknw.unoduo.ui.GameScreen
 import com.zknw.unoduo.ui.HomeScreen
@@ -187,6 +188,7 @@ private fun App(vm: AppViewModel = viewModel()) {
             Screen.RULES -> vm.closeRules()
             Screen.SETTINGS -> vm.closeSettings()
             Screen.PROFILE -> vm.closeProfile()
+            Screen.COSMETICS -> vm.closeCosmetics()
             Screen.CREATE -> vm.closeCreate()
             Screen.SOLO -> vm.closeSolo()
             Screen.GAME -> vm.leaveGame()
@@ -216,7 +218,14 @@ private fun App(vm: AppViewModel = viewModel()) {
                 )
             },
             onResetStats = vm::resetStats,
+            onCosmetics = vm::openCosmetics,
             onBack = vm::closeProfile
+        )
+
+        Screen.COSMETICS -> CosmeticsScreen(
+            profile = state.profile,
+            onWear = vm::wear,
+            onBack = vm::closeCosmetics
         )
 
         Screen.CREATE -> CreateScreen(
@@ -254,6 +263,7 @@ private fun App(vm: AppViewModel = viewModel()) {
             link = state.link,
             players = state.players,
             photos = state.photos,
+            look = state.look,
             mods = state.mods,
             canStart = state.canStart,
             onStart = vm::startGame,
@@ -263,6 +273,7 @@ private fun App(vm: AppViewModel = viewModel()) {
         Screen.LOBBY -> LobbyScreen(
             players = state.players,
             photos = state.photos,
+            look = state.look,
             mySeat = state.mySeat,
             roomCode = state.roomCode,
             mods = state.mods,
@@ -293,6 +304,9 @@ private fun App(vm: AppViewModel = viewModel()) {
                 GameScreen(
                     view = view,
                     photos = state.photos,
+                    look = state.look,
+                    lastXp = state.lastXp,
+                    levelUp = state.levelUp,
                     inputLocked = state.inputLocked,
                     social = state.social,
                     onPlay = vm::playCard,
@@ -303,7 +317,8 @@ private fun App(vm: AppViewModel = viewModel()) {
                     onSticker = vm::sendSticker,
                     onSendChat = vm::sendChat,
                     onOpenChat = vm::openChat,
-                    onCloseChat = vm::closeChat
+                    onCloseChat = vm::closeChat,
+                    onDismissLevelUp = vm::dismissLevelUp
                 )
             }
         }

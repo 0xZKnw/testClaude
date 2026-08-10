@@ -2,14 +2,41 @@ package com.zknw.unoduo.profile
 
 import android.content.SharedPreferences
 import com.zknw.unoduo.game.RoundStats
+import com.zknw.unoduo.progress.Cosmetic
+import com.zknw.unoduo.progress.CosmeticKind
+import com.zknw.unoduo.progress.Cosmetics
+import com.zknw.unoduo.progress.Levels
 
-/** Everything the player owns locally: identity plus a lifetime tally. */
+/** Everything the player owns locally: identity, a lifetime tally, and a wardrobe. */
 data class Profile(
     val name: String = "",
     val avatarColor: Int = 0,
     val photoUri: String? = null,
-    val stats: LifetimeStats = LifetimeStats()
-)
+    val stats: LifetimeStats = LifetimeStats(),
+    val xp: Int = 0,
+    /** What is being worn, by family. Anything missing falls back to the default. */
+    val wearing: Map<CosmeticKind, String> = emptyMap()
+) {
+    val level: Int get() = Levels.levelAt(xp)
+
+    /** Resolved through the catalogue, so a stale or unearned choice cannot show. */
+    fun worn(kind: CosmeticKind): Cosmetic =
+        Cosmetics.resolve(wearing[kind].orEmpty(), kind, level)
+
+    /** The stickers this profile has earned, in rail order. */
+    val stickers: List<Cosmetic> get() = Cosmetics.stickersAt(level)
+}
+
+/** What a finished round did to the level. [unlocked] is empty on most rounds. */
+data class LevelGain(
+    val gained: Int,
+    val from: Int,
+    val to: Int,
+    val unlocked: List<Cosmetic>,
+    val profile: Profile
+) {
+    val levelledUp: Boolean get() = to > from
+}
 
 data class LifetimeStats(
     val roundsPlayed: Int = 0,
@@ -82,6 +109,10 @@ class ProfileStore(private val prefs: SharedPreferences) {
         name = prefs.getString(KEY_NAME, "") ?: "",
         avatarColor = prefs.getInt(KEY_AVATAR, 0),
         photoUri = prefs.getString(KEY_PHOTO, null)?.takeIf { it.isNotBlank() },
+        xp = prefs.getInt(KEY_XP, 0),
+        wearing = CosmeticKind.entries.associateWith {
+            prefs.getString(wearKey(it), "") ?: ""
+        }.filterValues { it.isNotBlank() },
         stats = LifetimeStats(
             roundsPlayed = prefs.getInt(KEY_PLAYED, 0),
             roundsWon = prefs.getInt(KEY_WON, 0),
@@ -119,6 +150,37 @@ class ProfileStore(private val prefs: SharedPreferences) {
             .putInt(KEY_AVATAR, avatarColor)
             .putString(KEY_PHOTO, photoUri ?: "")
             .apply()
+    }
+
+    /** Puts a cosmetic on. Unearned or unknown ids are simply not stored. */
+    fun wear(id: String): Profile {
+        val item = Cosmetics.find(id)
+        val current = load()
+        if (item == null || item.level > current.level) return current
+        prefs.edit().putString(wearKey(item.kind), item.id).apply()
+        return load()
+    }
+
+    /**
+     * Adds the experience a finished round is worth and hands back what it unlocked.
+     *
+     * Levelling is deliberately separate from [recordRound]: a round against the machine
+     * is not a result worth recording, but it is still a round played, and a progression
+     * that ignores it would punish anybody without somebody to play against.
+     */
+    fun addXp(won: Boolean): LevelGain {
+        val before = load()
+        val gained = Levels.xpFor(won)
+        val after = (before.xp + gained).coerceAtMost(Levels.fullRun)
+        prefs.edit().putInt(KEY_XP, after).apply()
+        val reached = Levels.levelAt(after)
+        return LevelGain(
+            gained = gained,
+            from = before.level,
+            to = reached,
+            unlocked = ((before.level + 1)..reached).flatMap { Cosmetics.rewardsAt(it) },
+            profile = load()
+        )
     }
 
     /** Folds one finished round into the lifetime tally. */
@@ -163,6 +225,10 @@ class ProfileStore(private val prefs: SharedPreferences) {
         return load()
     }
 
+    /**
+     * Wipes the tally only. Experience and the wardrobe survive on purpose: clearing a
+     * scoreboard is one thing, confiscating a hundred levels of unlocks is another.
+     */
     fun resetStats(): Profile {
         prefs.edit()
             .remove(KEY_PLAYED).remove(KEY_WON)
@@ -180,6 +246,9 @@ class ProfileStore(private val prefs: SharedPreferences) {
     }
 
     private companion object {
+        fun wearKey(kind: CosmeticKind) = "wear_${kind.code}"
+
+        const val KEY_XP = "statXp"
         const val KEY_NAME = "name"
         const val KEY_AVATAR = "avatarColor"
         const val KEY_PHOTO = "avatarPhoto"

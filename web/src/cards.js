@@ -7,6 +7,11 @@
 
 import { Color, Kind } from './engine.js';
 
+import { defaultOf } from './cosmetics.js';
+
+/** What a table with no wardrobe behind it draws. */
+const DEFAULT_BACK = defaultOf('BACK');
+
 export const PALETTE = {
   outline: '#14161d',
   stock: '#fdfbf4',
@@ -238,17 +243,26 @@ export function cardFace(card, { dimmed = false } = {}) {
 }
 
 /** The back of a card: the opponent's hand and the draw pile. */
-export function cardBack() {
+/**
+ * The back of a card. `skin` is the unlocked back the player picked: only the inner
+ * panel and the oval change, because the paper, the ink keyline and the tilted UNO are
+ * what make every one of them read as the same deck.
+ *
+ * The gradient id carries the skin, so the wardrobe can show eighteen different backs
+ * on one page without them all borrowing the first one's colours.
+ */
+export function cardBack(skin = DEFAULT_BACK) {
+  const gid = `gback-${skin.id.replace(/[^a-z0-9]/gi, '')}`;
   return `<svg class="card-svg" viewBox="0 0 ${CARD_W} ${CARD_H}" xmlns="http://www.w3.org/2000/svg">
-    <defs><linearGradient id="gback" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2b3242"/><stop offset="1" stop-color="#161a24"/>
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${skin.a}"/><stop offset="1" stop-color="${skin.b}"/>
     </linearGradient></defs>
     <rect width="${CARD_W}" height="${CARD_H}" rx="13" fill="${PALETTE.outline}"/>
     <rect x="3.5" y="3.5" width="${CARD_W - 7}" height="${CARD_H - 7}" rx="11" fill="${PALETTE.stock}"/>
-    <rect x="9.7" y="9.7" width="${CARD_W - 19.4}" height="${CARD_H - 19.4}" rx="8.5" fill="url(#gback)"/>
+    <rect x="9.7" y="9.7" width="${CARD_W - 19.4}" height="${CARD_H - 19.4}" rx="8.5" fill="url(#${gid})"/>
     <g transform="rotate(-28 ${CARD_W / 2} ${CARD_H / 2})">
       <ellipse cx="${CARD_W / 2}" cy="${CARD_H / 2}" rx="47" ry="30" fill="${PALETTE.outline}"/>
-      <ellipse cx="${CARD_W / 2}" cy="${CARD_H / 2}" rx="43" ry="26" fill="${PALETTE.R}"/>
+      <ellipse cx="${CARD_W / 2}" cy="${CARD_H / 2}" rx="43" ry="26" fill="${skin.c}"/>
       <text x="${CARD_W / 2}" y="${CARD_H / 2}" text-anchor="middle" dominant-baseline="central"
         font-size="25" font-weight="900" font-family="system-ui, sans-serif"
         fill="${PALETTE.stock}" stroke="${PALETTE.outline}" stroke-width="2.2"

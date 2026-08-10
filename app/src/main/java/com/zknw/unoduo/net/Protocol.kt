@@ -26,12 +26,26 @@ object Ble {
     const val QR_SCHEME = "unoduo"
 }
 
-/** One player as the lobby knows them, before any cards are dealt. */
+/**
+ * One player as the lobby knows them, before any cards are dealt.
+ *
+ * The cosmetics carried here are the ones other people are meant to see: the frame
+ * round the avatar, the title under the pseudo, the colour of the pseudo, and the level
+ * that earned them. A card back and a table cloth are deliberately absent — those are
+ * your own view of your own table, and imposing them on everybody else would mean the
+ * five players at a table could never agree on what the deck looks like.
+ *
+ * All four default, so a phone on an older build still joins and simply shows plain.
+ */
 @Serializable
 data class LobbyPlayer(
     @SerialName("s") val seat: Seat,
     @SerialName("n") val name: String,
-    @SerialName("a") val avatar: Int = 0
+    @SerialName("a") val avatar: Int = 0,
+    @SerialName("fr") val frame: String = "",
+    @SerialName("ti") val title: String = "",
+    @SerialName("nm") val nameColor: String = "",
+    @SerialName("lv") val level: Int = 1
 )
 
 @Serializable
@@ -43,7 +57,11 @@ sealed class NetMsg {
     data class Hello(
         @SerialName("c") val code: String,
         @SerialName("n") val name: String,
-        @SerialName("a") val avatar: Int = 0
+        @SerialName("a") val avatar: Int = 0,
+        @SerialName("fr") val frame: String = "",
+        @SerialName("ti") val title: String = "",
+        @SerialName("nm") val nameColor: String = "",
+        @SerialName("lv") val level: Int = 1
     ) : NetMsg()
 
     /** Host accepts or rejects the guest, and tells it which seat it got. */

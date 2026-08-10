@@ -59,6 +59,16 @@ export const RULES = [
     ],
   },
   {
+    title: 'Niveaux et cosmétiques',
+    lines: [
+      "Chaque manche terminée rapporte de l'expérience : 25 XP gagnée, 10 XP perdue. On monte donc même quand ça se passe mal, et une partie contre le bot compte aussi.",
+      'Chaque niveau coûte un peu plus que le précédent, toujours du même écart : 20 XP pour le premier, 5 de plus à chaque fois. Le niveau 100 est le dernier.',
+      "Chaque niveau, du 2 au 100, débloque au moins un cosmétique : cadres d'avatar, dos de carte, tapis, titres, couleurs de pseudo et stickers.",
+      'Le cadre, le titre et la couleur du pseudo sont vus par les autres joueurs. Le dos de carte et le tapis ne changent que ton écran à toi.',
+      "Remettre les statistiques à zéro n'efface ni l'expérience ni les cosmétiques.",
+    ],
+  },
+  {
     title: 'Parties personnalisées',
     lines: [
       'En créant un salon tu choisis entre une partie normale et une partie personnalisée. Une partie personnalisée ajoute les mods que tu coches — autant que tu veux, ils se cumulent.',

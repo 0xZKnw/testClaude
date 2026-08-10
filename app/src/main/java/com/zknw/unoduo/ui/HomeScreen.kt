@@ -30,7 +30,10 @@ import com.zknw.unoduo.game.Card
 import com.zknw.unoduo.game.CardColor
 import com.zknw.unoduo.game.CardKind
 import com.zknw.unoduo.profile.Profile
+import com.zknw.unoduo.progress.CosmeticKind
+import com.zknw.unoduo.ui.components.AvatarFrame
 import com.zknw.unoduo.ui.components.AvatarLook
+import com.zknw.unoduo.ui.components.LevelBadge
 import com.zknw.unoduo.ui.components.GhostButton
 import com.zknw.unoduo.ui.components.InkChip
 import com.zknw.unoduo.ui.components.MenuBackground
@@ -153,11 +156,16 @@ private fun ProfileBar(profile: Profile, onProfile: () -> Unit) {
         padding = androidx.compose.foundation.layout.PaddingValues(14.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            PlayerAvatar(
-                name = profile.name,
-                look = AvatarLook(profile.avatarColor, profile.photoUri),
-                size = 52.dp
-            )
+            Box(contentAlignment = Alignment.BottomEnd) {
+                AvatarFrame(frame = profile.worn(CosmeticKind.FRAME), size = 52.dp) {
+                    PlayerAvatar(
+                        name = profile.name,
+                        look = AvatarLook(profile.avatarColor, profile.photoUri),
+                        size = 52.dp
+                    )
+                }
+                LevelBadge(profile.level, 22.dp)
+            }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -166,6 +174,16 @@ private fun ProfileBar(profile: Profile, onProfile: () -> Unit) {
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Black
                 )
+                val title = profile.worn(CosmeticKind.TITLE).worn
+                if (title.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        title,
+                        color = Palette.Gold,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     if (profile.stats.roundsPlayed == 0) {

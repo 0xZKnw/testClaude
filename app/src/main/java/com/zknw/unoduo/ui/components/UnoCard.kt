@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +34,9 @@ import androidx.compose.ui.unit.dp
 import com.zknw.unoduo.game.Card
 import com.zknw.unoduo.game.CardColor
 import com.zknw.unoduo.game.CardKind
+import com.zknw.unoduo.progress.Cosmetic
+import com.zknw.unoduo.progress.CosmeticKind
+import com.zknw.unoduo.progress.Cosmetics
 import com.zknw.unoduo.ui.theme.Palette
 
 const val CARD_ASPECT = 1.52f
@@ -316,9 +320,27 @@ fun OutlinedGlyphText(
     }
 }
 
-/** The back of a card: what the opponent's hand and the draw pile show. */
+/**
+ * The back everybody on this screen draws. A card back is one setting for a whole
+ * table, so it is provided once rather than threaded through the deck, the draw pile,
+ * every opponent fan and the penalty slam.
+ */
+val LocalCardBack = staticCompositionLocalOf { Cosmetics.defaultOf(CosmeticKind.BACK) }
+
+/**
+ * The back of a card: what the opponent's hand and the draw pile show.
+ *
+ * [skin] is the unlocked back the player picked. Only the inner panel and the oval
+ * change — the paper, the ink keyline and the tilted UNO stay put, because that is what
+ * makes every one of them read as the same deck.
+ */
 @Composable
-fun UnoCardBack(width: Dp, modifier: Modifier = Modifier, elevation: Dp = 6.dp) {
+fun UnoCardBack(
+    width: Dp,
+    modifier: Modifier = Modifier,
+    elevation: Dp = 6.dp,
+    skin: Cosmetic = LocalCardBack.current
+) {
     val height = width * CARD_ASPECT
     val outer = RoundedCornerShape(width * 0.13f)
     val stock = RoundedCornerShape(width * 0.11f)
@@ -345,11 +367,11 @@ fun UnoCardBack(width: Dp, modifier: Modifier = Modifier, elevation: Dp = 6.dp) 
                     .padding(width * 0.062f)
                     .clip(inner)
                     .background(
-                        Brush.verticalGradient(listOf(Color(0xFF2B3242), Color(0xFF161A24)))
+                        Brush.verticalGradient(listOf(Color(skin.a), Color(skin.b)))
                     )
             ) {
                 Canvas(Modifier.fillMaxSize()) {
-                    drawFaceOval(Palette.Red, Palette.Outline, tilt = -28f)
+                    drawFaceOval(Color(skin.c), Palette.Outline, tilt = -28f)
                 }
                 OutlinedGlyphText(
                     text = "UNO",
