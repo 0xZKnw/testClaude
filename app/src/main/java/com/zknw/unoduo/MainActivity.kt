@@ -306,6 +306,7 @@ private fun App(vm: AppViewModel = viewModel()) {
                     photos = state.photos,
                     look = state.look,
                     lastXp = state.lastXp,
+                    xpBefore = state.xpBefore,
                     levelUp = state.levelUp,
                     inputLocked = state.inputLocked,
                     social = state.social,

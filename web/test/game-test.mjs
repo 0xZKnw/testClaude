@@ -99,7 +99,20 @@ try {
   // ------------------------------------------------------- two browsers, WebRTC
   console.log('\n=== Partie a deux, appairage WebRTC ===\n');
   const host = await browser.newPage();
-  const guest = await (await browser.newContext()).newPage();
+  const guestContext = await browser.newContext();
+  // Seeded through an init script rather than by visiting first: the invite is the same
+  // page with a fragment on the end, so a plain second goto would be a fragment jump the
+  // browser never reloads for, and the offer would never be read.
+  //
+  // One point short of level 5, so whatever the round does — a win is 25 XP, a loss 10 —
+  // the guest is guaranteed to cross a level during it. That is what the host's copy of
+  // its badge has to notice.
+  await guestContext.addInitScript(() => {
+    localStorage.setItem('uno.profile', JSON.stringify({
+      name: 'Bob', avatarColor: 4, photo: null, stats: {}, xp: 109, wearing: {},
+    }));
+  });
+  const guest = await guestContext.newPage();
   guard(host, 'hote');
   guard(guest, 'invite');
 
@@ -155,6 +168,10 @@ try {
   await host.waitForSelector('#screen-game.on');
   await guest.waitForSelector('#screen-game.on', { timeout: 15000 });
   console.log('  les deux ecrans sont sur la table');
+
+  const badgeBefore = await host.textContent('#rivals .level-badge');
+  console.log(`  niveau de l'invite vu par l'hote : ${badgeBefore}`);
+  if (badgeBefore !== '4') problems.push(`l'hote voit l'invite au niveau ${badgeBefore} au lieu de 4`);
 
   // ------------------------------------------------------------ chat and stickers
   await guest.click('#chat-bar');
@@ -231,22 +248,57 @@ try {
   if (!agree) problems.push(`desaccord sur le vainqueur : ${hostWinner} / ${guestWinner}`);
 
   // ------------------------------------------------------------- experience
-  // Every finished round is worth something, win or lose, and it is shown on the
-  // result panel.
-  const xpChip = await host.textContent('#over-scores .chip.gold').catch(() => null);
-  console.log(`  xp annonce a l'hote : ${xpChip}`);
-  if (!xpChip || !/^\+\d+ XP$/.test(xpChip.trim())) problems.push("l'xp n'est pas annoncee en fin de manche");
+  // Every finished round is worth something, win or lose, and the panel does not just
+  // state it — the bar counts up to it.
+  const prize = (await host.textContent('#over-xp .level-head span')).trim();
+  console.log(`  xp annonce a l'hote : ${prize}`);
+  if (!/^\+\d+ XP$/.test(prize)) problems.push("l'xp n'est pas annoncee en fin de manche");
 
-  // A win is 25 XP and the first level costs 20, so the winner levels up on the spot
-  // and the loser does not. Either way the overlay must not be left blocking the table.
-  for (const [page, who] of [[host, "l'hote"], [guest, "l'invite"]]) {
+  const readFill = (page) => page.$eval('#over-xp .xp-fill', (n) => parseFloat(n.style.width) || 0);
+  const early = await readFill(host);
+  await host.waitForTimeout(700);
+  const mid = await readFill(host);
+  await host.waitForTimeout(900);
+  const settled = await readFill(host);
+  console.log(`  barre d'xp : ${early}% -> ${mid}% -> ${settled}%`);
+  if (mid <= early) problems.push("la barre d'xp ne se remplit pas");
+  // Deliberately not "it only ever goes up": crossing a level fills the bar, drops it to
+  // nothing and carries on, which is the whole point of the animation. What must hold is
+  // that it lands exactly where the profile says it should.
+  const wanted = await host.evaluate(async () => {
+    const Lv = await import('./src/levels.js');
+    return Lv.percent(JSON.parse(localStorage.getItem('uno.profile')).xp);
+  });
+  console.log(`  barre attendue a l'arrivee : ${wanted}%`);
+  if (Math.abs(settled - wanted) > 1.5) {
+    problems.push(`la barre d'xp s'arrete a ${settled}% au lieu de ${wanted}%`);
+  }
+
+  // The bug this replaces: a level crossed between two rounds used to stay invisible to
+  // everybody else for the rest of the evening.
+  const badgeAfter = await host.textContent('#rivals .level-badge');
+  console.log(`  niveau de l'invite apres la manche : ${badgeAfter}`);
+  if (Number(badgeAfter) < 5) {
+    problems.push(`l'hote voit toujours l'invite au niveau ${badgeAfter} apres sa montee`);
+  }
+
+  // Whether a round crosses a level depends on where it started, not on who won — the
+  // guest was seeded one point short of level 5 and gets there either way. So the check
+  // is against the arithmetic, not against the result. Either way the overlay must not
+  // be left blocking the table.
+  for (const [page, who, startXp] of [[host, "l'hote", 0], [guest, "l'invite", 109]]) {
     const won = (await page.textContent('#over-title')) === 'Gagné !';
+    const level = await page.evaluate(async () => {
+      const Lv = await import('./src/levels.js');
+      return Lv.levelAt(JSON.parse(localStorage.getItem('uno.profile')).xp);
+    });
+    const expected = level > (startXp === 0 ? 1 : 4);
     const up = await page.evaluate(() => document.getElementById('levelup').classList.contains('on'));
-    console.log(`  ${who} : ${won ? 'gagne' : 'perd'}, montee de niveau ${up ? 'oui' : 'non'}`);
-    if (won !== up) problems.push(`la montee de niveau de ${who} ne suit pas le resultat`);
+    console.log(`  ${who} : ${won ? 'gagne' : 'perd'}, niveau ${level}, montee ${up ? 'oui' : 'non'}`);
+    if (expected !== up) problems.push(`la montee de niveau de ${who} ne suit pas l'experience`);
     if (up) {
-      const title = await page.textContent('#levelup-title');
-      if (title.trim() !== 'Niveau 2') problems.push(`niveau annonce faux : ${title}`);
+      const title = (await page.textContent('#levelup-title')).trim();
+      if (title !== `Niveau ${level}`) problems.push(`niveau annonce faux : ${title} au lieu de ${level}`);
       await page.click('#levelup-ok');
     }
   }

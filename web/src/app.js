@@ -48,6 +48,7 @@ const state = {
   pendingWild: null,
   lastRecordedRound: -1,
   lastXp: 0,
+  xpBefore: 0,
   levelUp: null,
   toastTimer: null,
   // Chat and stickers. None of it touches the rules, so none of it is in a snapshot.
@@ -104,10 +105,10 @@ const clamp = (value, low, high) => Math.min(Math.max(value, low), high);
  * frame on never shrinks the picture.
  */
 function framedHtml(frame, size, inner) {
-  const band = clamp(size * 0.09, 2.5, 7);
-  const gap = clamp(size * 0.05, 1.5, 4);
-  const outer = size + (band + gap) * 2;
-  const vars = `--band:${band}px;--fa:${frame.a};--fb:${frame.b || frame.a};`
+  const band = clamp(size * 0.115, 3.5, 10);
+  const ink = clamp(size * 0.045, 1.5, 3.5);
+  const outer = size + (band + ink) * 2;
+  const vars = `--band:${band}px;--ink-w:${ink}px;--fa:${frame.a};--fb:${frame.b || frame.a};`
     + `--fc:${frame.c || frame.b || frame.a}`;
   return `<div class="frame f-${frame.style}" style="width:${outer}px;height:${outer}px;${vars}">`
     + `${inner}</div>`;
@@ -117,12 +118,17 @@ function framedAvatarHtml(name, colorIndex, photo, size, frame, extraClass = '')
   return framedHtml(frame, size, avatarHtml(name, colorIndex, photo, size, extraClass));
 }
 
-/** A pseudo painted in its unlocked colour: flat for one, a gradient for two. */
+/**
+ * A pseudo painted in its unlocked colour, with an ink outline: flat for one colour, a
+ * gradient across the word for two or three.
+ */
 function pseudoHtml(name, item, size) {
-  const style = item.b
-    ? `--na:${item.a};--nb:${item.b};font-size:${size}px`
-    : `color:${item.a};font-size:${size}px`;
-  return `<span class="pseudo${item.b ? ' grad' : ''}" style="${style}">${esc(name)}</span>`;
+  const stops = [item.a, item.b, item.c].filter(Boolean);
+  const style = stops.length >= 2
+    // A two-stop gradient repeats its last colour, so the CSS can always name three.
+    ? `--na:${stops[0]};--nb:${stops[1]};--nc:${stops[2] || stops[1]};font-size:${size}px`
+    : `color:${stops[0] || '#f3f6fb'};font-size:${size}px`;
+  return `<span class="pseudo${stops.length >= 2 ? ' grad' : ''}" style="${style}">${esc(name)}</span>`;
 }
 
 function levelBadgeHtml(level, size) {
@@ -135,10 +141,10 @@ function levelBadgeHtml(level, size) {
 }
 
 /** Level, bar, and what is still owed — the same three lines the phone shows. */
-function levelBarHtml(xp, badge = 46) {
+function levelBarHtml(xp, badge = 46, id = '') {
   const level = Lv.levelAt(xp);
   const maxed = level >= Lv.MAX_LEVEL;
-  return `<div class="level-row">
+  return `<div class="level-row"${id ? ` id="${id}"` : ''}>
     ${levelBadgeHtml(level, badge)}
     <div class="grow">
       <div class="level-head">
@@ -149,6 +155,58 @@ function levelBarHtml(xp, badge = 46) {
       ${maxed ? '' : `<div class="level-foot">Encore ${Lv.toNext(xp)} XP avant le niveau ${level + 1}</div>`}
     </div>
   </div>`;
+}
+
+let xpAnimation = null;
+
+/**
+ * The bar counting up after a round.
+ *
+ * It starts where the round found you and runs to where it left you, so what is being
+ * rewarded is the movement rather than a number. Crossing a level needs no special case:
+ * the fraction is computed from the experience being animated, so the bar simply reaches
+ * the end, drops to nothing and carries on — which is what levelling up looks like.
+ */
+function runXpBar(target, before, gained) {
+  cancelAnimationFrame(xpAnimation);
+  const node = $(target);
+  if (!node) return;
+  node.innerHTML = levelBarHtml(before, 40);
+  const badge = node.querySelector('.level-badge');
+  const head = node.querySelector('.level-head b');
+  const prize = node.querySelector('.level-head span');
+  const fill = node.querySelector('.xp-fill');
+  const foot = node.querySelector('.level-foot');
+  // The prize, in the same gold as the bar it is filling.
+  prize.textContent = `+${gained} XP`;
+  prize.style.color = 'var(--gold)';
+  prize.style.fontWeight = '900';
+  // No CSS transition: the width is driven frame by frame, and a transition would fight
+  // it — especially across a level, where the bar has to snap back to nothing.
+  fill.style.transition = 'none';
+
+  const DELAY = 380;
+  const RUN = 1150;
+  const start = performance.now();
+  const step = (now) => {
+    const t = Math.min(Math.max(now - start - DELAY, 0) / RUN, 1);
+    // Same ease as the phone: quick off the mark, gentle into the finish.
+    const eased = t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
+    const xp = before + gained * eased;
+    const level = Lv.levelAt(Math.trunc(xp));
+    const floor = Lv.totalTo(level);
+    const width = Lv.costOf(level);
+    // Straight off the float rather than off Lv.percent: a level worth twenty points
+    // would otherwise crawl up in twenty visible steps.
+    const part = width <= 0 ? 1 : Math.min(Math.max((xp - floor) / width, 0), 1);
+    fill.style.width = `${part * 100}%`;
+    badge.textContent = String(level);
+    badge.classList.toggle('maxed', level >= Lv.MAX_LEVEL);
+    head.textContent = level >= Lv.MAX_LEVEL ? 'Niveau maximum' : `Niveau ${level}`;
+    if (foot) foot.textContent = `${Math.trunc(xp) - floor} / ${width} XP`;
+    if (t < 1) xpAnimation = requestAnimationFrame(step);
+  };
+  xpAnimation = requestAnimationFrame(step);
 }
 
 function renderHome() {
@@ -250,10 +308,13 @@ function renderWardrobe() {
       : (locked
         ? `<span class="chip" style="background:#0b0e14">Niveau ${item.level}</span>`
         : '<span class="chip">Débloqué</span>');
+    // A title's preview *is* its name, so printing it again underneath would just be
+    // the same words twice.
+    const named = item.kind === 'TITLE' ? '' : `<div class="who">${esc(item.name)}</div>`;
     return `<div class="cosmetic${worn ? ' worn' : ''}${locked ? ' locked' : ''}"
       ${locked ? '' : `data-wear="${item.id}"`}>
       <div class="shot">${previewHtml(item, p)}</div>
-      <div class="who ellipsis">${esc(item.name)}</div>
+      ${named}
       <div class="tag">${tag}</div>
     </div>`;
   }).join('');
@@ -458,15 +519,21 @@ const titleOf = (player) => Cosm.worn(Cosm.resolve(player?.ti || '', 'TITLE', pl
 const nameColorOf = (player) => Cosm.resolve(player?.nm || '', 'NAME', player?.lv || 1);
 const playerAt = (seat) => state.players.find((p) => p.s === seat);
 
-/** Re-sends who I am after changing an outfit. */
+/**
+ * Tells the room what I look like now — after changing an outfit, and after a round that
+ * pushed me up a level. Its own message rather than a second hello: a hello mid-game is
+ * a rejoin, with a seat handed out and a welcome sent back. This says only "here is what
+ * I look like now", which is the whole of what the other screens need.
+ */
 function announceMyself() {
-  if (!state.role || state.role === 'solo') return;
+  if (!state.role || state.role === 'solo' || !state.players.length) return;
   if (state.role === 'host') {
     state.players = [...state.players.filter((p) => p.s !== HOST_SEAT), meAsPlayer(HOST_SEAT)]
       .sort((a, b) => a.s - b.s);
     broadcastLobby();
+    if (state.myView) renderGame(); else renderHostLobby();
   } else {
-    state.net?.send({ ...meAsPlayer(state.mySeat), t: 'hello', c: '' });
+    state.net?.send({ ...meAsPlayer(state.mySeat), t: 'wearing' });
   }
 }
 
@@ -567,7 +634,12 @@ function recordIfFinished(v) {
   const gain = addXp(won);
   state.profile = gain.profile;
   state.lastXp = gain.gained;
+  state.xpBefore = gain.before;
   state.levelUp = gain.levelledUp ? gain : null;
+  // The badge next to my avatar is on everybody's screen, so a level crossed between two
+  // rounds has to travel — otherwise a whole evening of rematches shows me at the level
+  // I opened the room with.
+  if (gain.levelledUp) announceMyself();
 }
 
 /** The moment a level lands: loud, and on top of the result rather than instead of it. */
@@ -636,6 +708,18 @@ function broadcastLobby() {
 function onGuestMessage(key, msg) {
   const e = state.engine;
   switch (msg.t) {
+    case 'wearing': {
+      // The seat the host knows, never the one the guest claimed.
+      const seat = state.seatOfKey.get(key);
+      if (seat === undefined) return;
+      state.players = state.players.map((p) => (p.s !== seat ? p : {
+        ...p, fr: msg.fr || '', ti: msg.ti || '', nm: msg.nm || '', lv: msg.lv || 1,
+      }));
+      broadcastLobby();
+      if (state.myView) renderGame(); else renderHostLobby();
+      return;
+    }
+
     case 'hello': {
       let seat = state.seatOfKey.get(key);
       if (seat === undefined) {
@@ -756,6 +840,8 @@ function onHostMessage(msg) {
       state.players = (msg.p || []).slice().sort((a, b) => a.s - b.s);
       state.mods = orderedMods(msg.md || []);
       renderGuestLobby();
+      // Levels and outfits change mid-evening, and the table is what shows them.
+      if (state.myView) renderGame();
       break;
     case 'photo':
       state.photos[msg.s] = msg.d;
@@ -1425,13 +1511,12 @@ function showGameOver(v) {
   $('over-sub').textContent = V.youWon(v)
     ? "Personne n'a rien vu venir."
     : `${V.nameOf(v, v.w)} a posé sa dernière carte.`;
-  $('over-scores').innerHTML = (v.ri.length === 1
+  $('over-scores').innerHTML = v.ri.length === 1
     ? `<div style="font-size:26px;font-weight:900">${v.ys} — ${v.ri[0].p}</div>`
     : `<span class="chip gold">Toi ${v.ys}</span> ` +
-      v.ri.map((r) => `<span class="chip">${esc(r.n)} ${r.p}</span>`).join(' '))
-    + (state.lastXp > 0
-      ? `<div style="margin-top:12px"><span class="chip gold">+${state.lastXp} XP</span></div>`
-      : '');
+      v.ri.map((r) => `<span class="chip">${esc(r.n)} ${r.p}</span>`).join(' ');
+  $('over-xp').classList.toggle('hidden', state.lastXp <= 0);
+  if (state.lastXp > 0) runXpBar('over-xp', state.xpBefore, state.lastXp);
   // On top of the result, not instead of it: the score is what you came for.
   showLevelUp();
   const waiting = v.ri.filter((r) => r.r).length;

@@ -134,6 +134,8 @@ data class UiState(
     val look: TableLook = TableLook(),
     /** Experience the last finished round was worth, for the end-of-round panel. */
     val lastXp: Int = 0,
+    /** Where the bar stood before that round, so the panel can count up from it. */
+    val xpBefore: Int = 0,
     /** Set only on the round that actually crossed a level. */
     val levelUp: LevelPopup? = null
 ) {
@@ -195,7 +197,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val worn = profileStore.wear(id)
         _state.update { it.copy(profile = worn, look = lookFor(worn, it.players)) }
         // The others need to know: a frame and a title are worn for them, not for you.
-        if (_state.value.players.isNotEmpty()) announceMyself()
+        announceMyself()
     }
 
     fun openProfile() = _state.update { it.copy(screen = Screen.PROFILE) }
@@ -242,9 +244,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         stickers = profile.stickers.size
     )
 
-    /** Re-sends who I am, after changing an outfit mid-lobby. */
+    /**
+     * Tells the room what I look like now — after changing an outfit, and after a round
+     * that pushed me up a level. Without the second case a badge would sit frozen at
+     * whatever it was when the room opened, all evening.
+     */
     private fun announceMyself() {
         val state = _state.value
+        if (state.players.isEmpty() || state.solo != null) return
         if (state.isHost) {
             val me = meAsPlayer(HOST_SEAT)
             _state.update { s ->
@@ -253,15 +260,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             broadcastLobby()
         } else {
+            val p = state.profile
             guest?.send(
-                NetMsg.Hello(
-                    code = state.roomCode,
-                    name = displayName(),
-                    avatar = state.profile.avatarColor,
-                    frame = state.profile.worn(CosmeticKind.FRAME).id,
-                    title = state.profile.worn(CosmeticKind.TITLE).id,
-                    nameColor = state.profile.worn(CosmeticKind.NAME).id,
-                    level = state.profile.level
+                NetMsg.Wearing(
+                    seat = state.mySeat,
+                    frame = p.worn(CosmeticKind.FRAME).id,
+                    title = p.worn(CosmeticKind.TITLE).id,
+                    nameColor = p.worn(CosmeticKind.NAME).id,
+                    level = p.level
                 )
             )
         }
@@ -499,6 +505,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 addEmote(seat, msg.index)
             }
 
+            is NetMsg.Wearing -> {
+                // The seat the host knows, never the one the guest claimed.
+                val seat = seatOfKey[key] ?: return
+                _state.update { s ->
+                    val players = s.players.map { player ->
+                        if (player.seat != seat) player else player.copy(
+                            frame = msg.frame,
+                            title = msg.title,
+                            nameColor = msg.nameColor,
+                            level = msg.level
+                        )
+                    }
+                    s.copy(players = players, look = lookFor(s.profile, players))
+                }
+                broadcastLobby()
+            }
+
             NetMsg.Bye -> handleGuestBye(key)
 
             // The host is the one who decides when to deal, and never receives these.
@@ -643,6 +666,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 profile = gain.profile,
                 lastXp = gain.gained,
+                xpBefore = gain.before,
                 levelUp = if (gain.levelledUp) {
                     LevelPopup(gain.from, gain.to, gain.unlocked)
                 } else {
@@ -653,9 +677,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 look = lookFor(gain.profile, it.players)
             )
         }
-        // Nothing is announced here on purpose: levelling up unlocks things, it never
-        // changes what you are already wearing, so the other phones have nothing new to
-        // learn until you actually go and put something on.
+        // The badge next to my avatar is on everybody's screen, so a level crossed
+        // between two rounds has to travel — otherwise a whole evening of rematches
+        // shows me at the level I opened the room with.
+        if (gain.levelledUp) announceMyself()
     }
 
     private fun broadcast() {
@@ -886,8 +911,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 it.copy(link = LinkStatus.LOST, error = "L'hôte a quitté la partie.")
             }
 
-            is NetMsg.Hello, is NetMsg.Play, NetMsg.Draw, NetMsg.Pass, NetMsg.Rematch,
-            NetMsg.Start -> Unit
+            // The guest learns outfits from the lobby broadcast the host sends next,
+            // so its own copy of this message is nothing to act on.
+            is NetMsg.Wearing, is NetMsg.Hello, is NetMsg.Play, NetMsg.Draw, NetMsg.Pass,
+            NetMsg.Rematch, NetMsg.Start -> Unit
         }
     }
 

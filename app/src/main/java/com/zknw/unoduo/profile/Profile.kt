@@ -30,6 +30,8 @@ data class Profile(
 /** What a finished round did to the level. [unlocked] is empty on most rounds. */
 data class LevelGain(
     val gained: Int,
+    /** Where the bar stood before the round, so the panel can count up from it. */
+    val before: Int,
     val from: Int,
     val to: Int,
     val unlocked: List<Cosmetic>,
@@ -176,6 +178,7 @@ class ProfileStore(private val prefs: SharedPreferences) {
         val reached = Levels.levelAt(after)
         return LevelGain(
             gained = gained,
+            before = before.xp,
             from = before.level,
             to = reached,
             unlocked = ((before.level + 1)..reached).flatMap { Cosmetics.rewardsAt(it) },

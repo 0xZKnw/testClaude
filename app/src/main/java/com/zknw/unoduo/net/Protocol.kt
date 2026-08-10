@@ -73,6 +73,25 @@ sealed class NetMsg {
         @SerialName("r") val reason: String = ""
     ) : NetMsg()
 
+    /**
+     * One player's outfit changed, or their level did.
+     *
+     * Its own message rather than a second Hello: a Hello mid-game is a rejoin, with a
+     * seat handed out and a Welcome sent back. This says only "here is what I look like
+     * now", which is the whole of what the other screens need — and it is what keeps a
+     * level badge honest across a long evening of rematches instead of freezing it at
+     * whatever it was when the room opened.
+     */
+    @Serializable
+    @SerialName("wear")
+    data class Wearing(
+        @SerialName("s") val seat: Seat = -1,
+        @SerialName("fr") val frame: String = "",
+        @SerialName("ti") val title: String = "",
+        @SerialName("nm") val nameColor: String = "",
+        @SerialName("lv") val level: Int = 1
+    ) : NetMsg()
+
     /** Host broadcasts who is in the room, on every arrival and departure. */
     @Serializable
     @SerialName("lobby")

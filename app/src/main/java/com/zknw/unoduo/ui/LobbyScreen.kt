@@ -76,12 +76,7 @@ fun PlayerRoster(
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(
-                            player.name,
-                            style = nameStyle(look.nameColorOf(player.seat), 15.sp),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        PseudoText(player.name, look.nameColorOf(player.seat), 15.sp)
                         val title = look.titleOf(player.seat)
                         if (title.isNotEmpty()) {
                             Text(

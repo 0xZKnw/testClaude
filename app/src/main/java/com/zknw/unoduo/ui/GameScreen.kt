@@ -78,6 +78,7 @@ import com.zknw.unoduo.ui.components.AvatarFrame
 import com.zknw.unoduo.ui.components.LocalCardBack
 import com.zknw.unoduo.ui.components.LevelBadge
 import com.zknw.unoduo.ui.components.TableBackground
+import com.zknw.unoduo.ui.components.XpGainBar
 import com.zknw.unoduo.ui.components.UnoCardBack
 import com.zknw.unoduo.ui.components.UnoCardFace
 import com.zknw.unoduo.ui.components.clickableNoRipple
@@ -95,6 +96,7 @@ fun GameScreen(
     photos: Map<Seat, String>,
     look: TableLook,
     lastXp: Int,
+    xpBefore: Int,
     levelUp: LevelPopup?,
     inputLocked: Boolean,
     social: Social,
@@ -242,7 +244,7 @@ fun GameScreen(
         penaltyHit?.let { PenaltyOverlay(it) }
 
         if (view.phase == Phase.GAME_OVER) {
-            GameOverOverlay(view, lastXp, levelUp, onRematch, onQuit, onDismissLevelUp)
+            GameOverOverlay(view, lastXp, xpBefore, levelUp, onRematch, onQuit, onDismissLevelUp)
         }
     }
     }
@@ -405,10 +407,7 @@ private fun RivalsRow(
                 }
                 Spacer(Modifier.width(10.dp))
                 Column {
-                    Text(
-                        single.name,
-                        style = nameStyle(look.nameColorOf(single.seat), 15.sp)
-                    )
+                    PseudoText(single.name, look.nameColorOf(single.seat), 15.sp)
                     val title = look.titleOf(single.seat)
                     if (title.isNotEmpty()) {
                         Text(
@@ -1067,6 +1066,7 @@ private fun ColorPicker(onPick: (CardColor) -> Unit, onCancel: () -> Unit) {
 private fun GameOverOverlay(
     view: GameView,
     lastXp: Int,
+    xpBefore: Int,
     levelUp: LevelPopup?,
     onRematch: () -> Unit,
     onQuit: () -> Unit,
@@ -1112,8 +1112,15 @@ private fun GameOverOverlay(
                 Spacer(Modifier.height(20.dp))
                 ScoreLine(view)
                 if (lastXp > 0) {
-                    Spacer(Modifier.height(14.dp))
-                    InkChip("+$lastXp XP", color = Palette.Gold, textColor = Palette.Outline)
+                    Spacer(Modifier.height(18.dp))
+                    // The bar counts up from where the round found you: what is being
+                    // rewarded is the movement, not the number.
+                    XpGainBar(
+                        before = xpBefore,
+                        gained = lastXp,
+                        modifier = Modifier.fillMaxWidth(),
+                        badge = 40.dp
+                    )
                 }
                 Spacer(Modifier.height(24.dp))
                 PrimaryButton(

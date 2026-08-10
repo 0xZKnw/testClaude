@@ -118,15 +118,18 @@ export function wear(id) {
  * would punish anybody without somebody to play against.
  */
 export function addXp(won) {
-  const before = loadProfile();
+  const stored = loadProfile();
+  // Captured before the mutation: at the very top the addition is clamped, so working
+  // backwards from the new total would lie about where the bar started.
+  const start = stored.xp || 0;
   const gained = xpFor(won);
-  const from = levelOf(before);
-  before.xp = Math.min((before.xp || 0) + gained, fullRun());
-  const profile = saveProfile(before);
+  const from = levelOf(stored);
+  stored.xp = Math.min(start + gained, fullRun());
+  const profile = saveProfile(stored);
   const to = levelOf(profile);
   const unlocked = [];
   for (let level = from + 1; level <= to; level++) unlocked.push(...rewardsAt(level));
-  return { gained, from, to, unlocked, profile, levelledUp: to > from };
+  return { gained, before: start, from, to, unlocked, profile, levelledUp: to > from };
 }
 
 export function saveProfile(profile) {

@@ -10,8 +10,11 @@ enum class CosmeticKind(val code: String, val label: String, val blurb: String) 
     STICKER("st", "Stickers", "Ce que tu peux balancer en partie.")
 }
 
-/** How a frame is drawn. Five primitives are enough for thirty distinct rings. */
-enum class FrameStyle { SOLID, DUO, DASH, GLOW, SPIN }
+/**
+ * How a frame is drawn. Nine primitives are enough for every ring in the catalogue,
+ * which is also why they all look like they came from the same set.
+ */
+enum class FrameStyle { SOLID, DUO, DUAL, DASH, BEADS, NOTCH, GLOW, SHINE, SPIN }
 
 /**
  * One unlockable. A single flat record on purpose: the catalogue is a table, it is read
@@ -54,7 +57,7 @@ object Cosmetics {
     // ------------------------------------------------------------------- cadres
 
     val frames: List<Cosmetic> = listOf(
-        frame("encre", "Encre", 1, FrameStyle.SOLID, 0xFF14161D),
+        frame("encre", "Encre", 1, FrameStyle.SOLID, 0xFF3B475D),
         frame("braise", "Braise", 3, FrameStyle.SOLID, 0xFFF23B2E),
         frame("menthe", "Menthe", 6, FrameStyle.SOLID, 0xFF41C258),
         frame("azur", "Azur", 9, FrameStyle.SOLID, 0xFF2E9CF2),
@@ -64,25 +67,25 @@ object Cosmetics {
         frame("lagon", "Lagon", 21, FrameStyle.DUO, 0xFF19B79B, 0xFF2E9CF2),
         frame("pointilles", "Pointillés", 24, FrameStyle.DASH, 0xFFF3F6FB),
         frame("barbapapa", "Barbe à papa", 27, FrameStyle.DUO, 0xFFF25DA8, 0xFF7A5CF0),
-        frame("neon", "Néon", 30, FrameStyle.GLOW, 0xFF2EF2C4),
-        frame("cuivre", "Cuivre", 33, FrameStyle.SOLID, 0xFFC87137),
-        frame("argent", "Argent", 36, FrameStyle.DUO, 0xFFD8E0EC, 0xFF8C97A8),
+        frame("perles", "Perles", 30, FrameStyle.BEADS, 0xFF2EF2C4),
+        frame("cuivre", "Cuivre", 33, FrameStyle.DUAL, 0xFFC87137, 0xFFF0A862),
+        frame("argent", "Argent", 36, FrameStyle.SHINE, 0xFFA8B4C6, 0xFFFDFBF4),
         frame("feuillage", "Feuillage", 39, FrameStyle.DUO, 0xFF41C258, 0xFF19B79B),
-        frame("orage", "Orage", 42, FrameStyle.DUO, 0xFF3B475D, 0xFF2E9CF2),
+        frame("orage", "Orage", 42, FrameStyle.NOTCH, 0xFF2E9CF2, 0xFF3B475D),
         frame("lave", "Lave", 45, FrameStyle.GLOW, 0xFFFF5A1E),
         frame("givre", "Givre", 48, FrameStyle.GLOW, 0xFF9FE8FF),
-        frame("or", "Or", 51, FrameStyle.DUO, 0xFFFFC531, 0xFFDC9200),
+        frame("or", "Or", 51, FrameStyle.SHINE, 0xFFFFC531, 0xFFFFF3C4),
         frame("prisme", "Prisme", 55, FrameStyle.SPIN, 0xFFF23B2E, 0xFFFFC21A, 0xFF2E9CF2),
-        frame("bitume", "Bitume", 58, FrameStyle.DASH, 0xFF9DAABF),
-        frame("sangdencre", "Sang d'encre", 62, FrameStyle.DUO, 0xFFC01C12, 0xFF14161D),
+        frame("bitume", "Bitume", 58, FrameStyle.NOTCH, 0xFF9DAABF, 0xFF4A5568),
+        frame("sangdencre", "Sang d'encre", 62, FrameStyle.DUAL, 0xFFC01C12, 0xFFF23B2E),
         frame("aurore", "Aurore", 66, FrameStyle.SPIN, 0xFF2EF2C4, 0xFF7A5CF0, 0xFF2E9CF2),
-        frame("rubis", "Rubis", 70, FrameStyle.GLOW, 0xFFF23B2E),
-        frame("emeraude", "Émeraude", 74, FrameStyle.GLOW, 0xFF259A3C),
-        frame("saphir", "Saphir", 78, FrameStyle.GLOW, 0xFF1668C4),
-        frame("onyx", "Onyx", 82, FrameStyle.DUO, 0xFF2B3242, 0xFF0B0E14),
-        frame("platine", "Platine", 86, FrameStyle.SPIN, 0xFFF3F6FB, 0xFF8C97A8, 0xFFD8E0EC),
-        frame("cendre", "Cendre ardente", 90, FrameStyle.SPIN, 0xFFFF8A1E, 0xFFC01C12, 0xFF14161D),
-        frame("couronne", "Couronne", 95, FrameStyle.SPIN, 0xFFFFC531, 0xFFFDFBF4, 0xFFDC9200),
+        frame("rubis", "Rubis", 70, FrameStyle.GLOW, 0xFFFF2D55),
+        frame("emeraude", "Émeraude", 74, FrameStyle.GLOW, 0xFF2EE06A),
+        frame("saphir", "Saphir", 78, FrameStyle.GLOW, 0xFF3D7DFF),
+        frame("onyx", "Onyx", 82, FrameStyle.DUAL, 0xFF2B3242, 0xFF6B7688),
+        frame("platine", "Platine", 86, FrameStyle.SHINE, 0xFFD8E0EC, 0xFFFDFBF4),
+        frame("cendre", "Cendre ardente", 90, FrameStyle.SPIN, 0xFFFF8A1E, 0xFFC01C12, 0xFF2B1A12),
+        frame("couronne", "Couronne", 95, FrameStyle.DUAL, 0xFFFFC531, 0xFFFDFBF4),
         frame("centieme", "Centième", 100, FrameStyle.SPIN, 0xFFFFC531, 0xFFF23B2E, 0xFF2E9CF2)
     )
 
@@ -135,31 +138,31 @@ object Cosmetics {
     val titles: List<Cosmetic> = listOf(
         // Wearing none is a choice, so it is an entry rather than a special case.
         title("aucun", "Aucun", 1),
-        title("debutant", "Débutant", 2),
-        title("habitue", "Habitué", 7),
+        title("chair", "Chair à pioche", 2),
+        title("douze", "Toujours 12 cartes", 7),
         title("piochetout", "Pioche-tout", 13),
-        title("roidudeux", "Roi du +2", 19),
-        title("empileur", "Empileur", 25),
-        title("contre", "Contre-attaque", 31),
+        title("distributeur", "Distributeur de +2", 19),
+        title("empileur", "Empileur compulsif", 25),
+        title("toxique", "Ami toxique", 31),
         title("mainlegere", "Main légère", 37),
-        title("compteur", "Compteur de cartes", 43),
+        title("compteur", "Compte les cartes (mal)", 43),
         title("sanspitie", "Sans pitié", 49),
         title("briscard", "Vieux briscard", 53),
         title("chasseur", "Chasseur de +4", 56),
-        title("bourreau", "Bourreau", 59),
-        title("stratege", "Stratège", 61),
-        title("finjoueur", "Fin joueur", 64),
+        title("briseur", "Briseur d'amitiés", 59),
+        title("stratege", "Stratège du dimanche", 61),
+        title("passecasse", "Ça passe ou ça casse", 64),
         title("espionchef", "Espion en chef", 69),
         title("coeurdepierre", "Cœur de pierre", 71),
-        title("tempete", "Tempête", 76),
+        title("tempete", "Tempête de +4", 76),
         title("intouchable", "Intouchable", 79),
         title("requin", "Requin de table", 81),
         title("maitrecumul", "Maître du cumul", 83),
         title("legende", "Légende du salon", 87),
-        title("dernierecarte", "Dernière carte", 89),
+        title("javaisunquatre", "J'avais un +4", 89),
         title("mangeur", "Mangeur de pioche", 91),
-        title("veteran", "Vétéran", 94),
-        title("titan", "Titan", 96),
+        title("increvable", "Increvable", 94),
+        title("cauchemar", "Cauchemar récurrent", 96),
         title("centurion", "Centurion", 100)
     )
 
@@ -167,19 +170,19 @@ object Cosmetics {
 
     val names: List<Cosmetic> = listOf(
         name("blanc", "Blanc", 1, 0xFFF3F6FB),
-        name("rouge", "Rouge", 8, 0xFFF23B2E),
-        name("vert", "Vert", 14, 0xFF41C258),
-        name("bleu", "Bleu", 20, 0xFF2E9CF2),
-        name("jaune", "Jaune", 26, 0xFFFFC21A),
-        name("rose", "Rose", 32, 0xFFF25DA8),
-        name("turquoise", "Turquoise", 38, 0xFF19B79B),
-        name("violet", "Violet", 44, 0xFF7A5CF0),
-        name("or", "Or", 50, 0xFFFFC531, 0xFFDC9200),
-        name("braise", "Braise", 65, 0xFFFF8A1E, 0xFFF23B2E),
-        name("glacier", "Glacier", 72, 0xFF9FE8FF, 0xFF2E9CF2),
-        name("neon", "Néon", 77, 0xFF2EF2C4, 0xFF41C258),
-        name("prisme", "Prisme", 88, 0xFFF25DA8, 0xFF7A5CF0),
-        name("centieme", "Centième", 97, 0xFFFFC531, 0xFFFDFBF4)
+        name("rouge", "Rouge", 8, 0xFFFF4A3D),
+        name("vert", "Vert", 14, 0xFF4EDE6A),
+        name("bleu", "Bleu", 20, 0xFF3FB0FF),
+        name("jaune", "Jaune", 26, 0xFFFFD23F),
+        name("rose", "Rose", 32, 0xFFFF6FB8),
+        name("turquoise", "Turquoise", 38, 0xFF2FD9BD),
+        name("violet", "Violet", 44, 0xFF9B7BFF),
+        name("or", "Or", 50, 0xFFFFE27A, 0xFFFFB200),
+        name("braise", "Braise", 65, 0xFFFFD23F, 0xFFFF8A1E, 0xFFF23B2E),
+        name("glacier", "Glacier", 72, 0xFFD8F6FF, 0xFF6FD4FF, 0xFF2E6CF2),
+        name("neon", "Néon", 77, 0xFFB6FF3F, 0xFF2EF2C4),
+        name("prisme", "Prisme", 88, 0xFFFF5DA8, 0xFF9B7BFF, 0xFF3FB0FF),
+        name("centieme", "Centième", 97, 0xFFFFF3C4, 0xFFFFC531, 0xFFFF8A1E)
     )
 
     // ---------------------------------------------------------------- stickers
@@ -259,8 +262,8 @@ object Cosmetics {
     private fun title(id: String, name: String, level: Int) =
         Cosmetic("ti.$id", CosmeticKind.TITLE, name, level)
 
-    private fun name(id: String, name: String, level: Int, a: Long, b: Long = 0L) =
-        Cosmetic("nm.$id", CosmeticKind.NAME, name, level, a, b)
+    private fun name(id: String, name: String, level: Int, a: Long, b: Long = 0L, c: Long = 0L) =
+        Cosmetic("nm.$id", CosmeticKind.NAME, name, level, a, b, c)
 
     private fun sticker(id: String, name: String, level: Int, emoji: String) =
         Cosmetic("st.$id", CosmeticKind.STICKER, name, level, text = emoji)

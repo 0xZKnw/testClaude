@@ -15,10 +15,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -33,12 +33,14 @@ import com.zknw.unoduo.ui.theme.Palette
 /**
  * The ring that goes round an avatar.
  *
- * Five primitives carry the whole catalogue: a flat ring, a two-colour sweep, a dashed
- * ring, a ring with a soft halo behind it, and a sweep that turns. Thirty frames out of
- * five drawings, rather than thirty drawings — which is also why they all look like they
- * belong to the same game.
+ * Drawn the way every card in the game is drawn: an ink disc first, then the colour on
+ * top of it, with the avatar's own ink ring closing the inside. That ink keyline is the
+ * whole difference between a frame that belongs to this game and a coloured circle —
+ * the first version had none, and looked like a progress spinner.
  *
- * The ring is drawn *outside* the avatar, so putting one on never shrinks the face.
+ * Nine primitives carry thirty-odd frames, which is also why they all look like they
+ * came from the same set. The ring sits *outside* the avatar, so wearing one never
+ * shrinks the face.
  */
 @Composable
 fun AvatarFrame(
@@ -47,128 +49,132 @@ fun AvatarFrame(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    val band = (size.value * 0.09f).coerceIn(2.5f, 7f).dp
-    val gap = (size.value * 0.05f).coerceIn(1.5f, 4f).dp
-    // Room for the widest thing any style draws — the halo, at 2.6 bands centred on the
-    // ring — so nothing is ever clipped by the layout box.
-    val room = band * 1.3f + gap
-    val outer = size + room * 2
+    val band = (size.value * 0.115f).coerceIn(3.5f, 10f).dp
+    val ink = (size.value * 0.045f).coerceIn(1.5f, 3.5f).dp
+    val outer = size + (band + ink) * 2
 
     // Only the moving styles ask for a clock; a still frame costs nothing to draw.
-    val moving = frame.style == FrameStyle.SPIN || frame.style == FrameStyle.GLOW
+    val moving = frame.style == FrameStyle.SPIN ||
+        frame.style == FrameStyle.GLOW ||
+        frame.style == FrameStyle.SHINE
     val phase = if (moving) rememberPhase(frame.style) else 0f
 
     Box(modifier.size(outer), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
-            drawFrame(frame, band.toPx(), band.toPx() * 1.3f, phase)
+            drawFrame(frame, band.toPx(), ink.toPx(), phase)
         }
         content()
     }
 }
 
-/** One clock per style, so a pulse and a rotation do not have to share a period. */
+/** One clock per style, so a pulse, a sheen and a rotation keep their own periods. */
 @Composable
 private fun rememberPhase(style: FrameStyle): Float {
     val clock = rememberInfiniteTransition(label = "frame")
-    val duration = if (style == FrameStyle.SPIN) 4200 else 1700
+    val duration = when (style) {
+        FrameStyle.SPIN -> 4200
+        FrameStyle.SHINE -> 2400
+        else -> 1700
+    }
     val value by clock.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(duration, easing = LinearEasing),
-            repeatMode = if (style == FrameStyle.SPIN) RepeatMode.Restart else RepeatMode.Reverse
+            repeatMode = if (style == FrameStyle.GLOW) RepeatMode.Reverse else RepeatMode.Restart
         ),
         label = "phase"
     )
     return value
 }
 
-private fun DrawScope.drawFrame(frame: Cosmetic, band: Float, inset: Float, phase: Float) {
-    val rect = Size(size.width - inset * 2, size.height - inset * 2)
-    val corner = Offset(inset, inset)
+private fun DrawScope.drawFrame(frame: Cosmetic, band: Float, ink: Float, phase: Float) {
+    val middle = Offset(size.width / 2f, size.height / 2f)
+    val outer = size.minDimension / 2f
     val a = Color(frame.a)
     val b = if (frame.b != 0L) Color(frame.b) else a
     val c = if (frame.c != 0L) Color(frame.c) else b
 
-    when (frame.style) {
-        FrameStyle.SOLID -> drawArc(
-            color = a,
-            startAngle = 0f,
-            sweepAngle = 360f,
-            useCenter = false,
-            topLeft = corner,
-            size = rect,
-            style = Stroke(width = band)
-        )
+    // The ink disc every style is painted on top of. The avatar covers the middle, so a
+    // filled circle is both simpler and sharper than a stroke.
+    drawCircle(Palette.Outline, radius = outer, center = middle)
+    val paint = outer - ink
 
-        FrameStyle.DUO -> drawArc(
-            brush = Brush.sweepGradient(
-                // Repeated at both ends so the sweep closes on itself instead of
-                // showing a seam where 360° meets 0°.
-                listOf(a, b, a),
-                center = Offset(size.width / 2f, size.height / 2f)
-            ),
-            startAngle = 0f,
-            sweepAngle = 360f,
-            useCenter = false,
-            topLeft = corner,
-            size = rect,
-            style = Stroke(width = band)
-        )
+    /** A band of colour that stops where the avatar's own ink ring begins. */
+    fun disc(brush: Brush) = drawCircle(brush, radius = paint, center = middle)
+    fun flat(color: Color) = drawCircle(color, radius = paint, center = middle)
 
-        FrameStyle.DASH -> drawArc(
-            color = a,
-            startAngle = 0f,
-            sweepAngle = 360f,
-            useCenter = false,
-            topLeft = corner,
-            size = rect,
+    /** A stroke down the middle of the band, so the ink shows through the gaps. */
+    fun dashes(color: Color, on: Float, off: Float, cap: StrokeCap = StrokeCap.Butt) =
+        drawCircle(
+            color = color,
+            radius = paint - band / 2f,
+            center = middle,
             style = Stroke(
                 width = band,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(band * 1.6f, band * 1.2f))
+                cap = cap,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(on, off))
             )
         )
 
+    when (frame.style) {
+        FrameStyle.SOLID -> flat(a)
+
+        // Repeated at both ends so the sweep closes on itself instead of showing a seam
+        // where 360° meets 0°.
+        FrameStyle.DUO -> disc(Brush.sweepGradient(listOf(a, b, a), center = middle))
+
+        FrameStyle.DASH -> dashes(a, band * 1.5f, band * 1.1f)
+
+        // Round caps and a wider gap: reads as beads threaded on a ring rather than as a
+        // dashed line.
+        FrameStyle.BEADS -> dashes(a, band * 0.05f, band * 1.25f, cap = StrokeCap.Round)
+
+        // Chunky teeth, cut deep enough to read at forty pixels.
+        FrameStyle.NOTCH -> {
+            flat(b)
+            dashes(a, band * 2.4f, band * 1.6f)
+        }
+
+        // Two colours, one inside the other. The outer band is the wider of the two.
+        FrameStyle.DUAL -> {
+            flat(a)
+            drawCircle(b, radius = paint - band * 0.55f, center = middle)
+        }
+
         FrameStyle.GLOW -> {
-            // The halo breathes; the ring underneath does not, so the shape stays read-
-            // able even at the dim end of the pulse. Same circle, wider stroke: it
-            // spreads both ways and cannot escape the box.
-            val halo = 0.20f + 0.30f * phase
-            drawArc(
-                color = a.copy(alpha = halo),
-                startAngle = 0f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = corner,
-                size = rect,
-                style = Stroke(width = band * 2.6f)
+            // The halo breathes; the ring underneath does not, so the shape stays
+            // readable even at the dim end of the pulse.
+            drawCircle(
+                color = a.copy(alpha = 0.18f + 0.34f * phase),
+                radius = outer,
+                center = middle,
+                style = Stroke(width = band * 1.6f)
             )
-            drawArc(
-                color = a,
-                startAngle = 0f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = corner,
-                size = rect,
-                style = Stroke(width = band)
+            flat(a)
+        }
+
+        // A narrow bright stripe sweeping round a flat band: a sheen, not a rainbow.
+        FrameStyle.SHINE -> rotate(phase * 360f, pivot = middle) {
+            drawCircle(
+                brush = Brush.sweepGradient(
+                    0.00f to a,
+                    0.38f to a,
+                    0.47f to b,
+                    0.53f to b,
+                    0.62f to a,
+                    1.00f to a,
+                    center = middle
+                ),
+                radius = paint,
+                center = middle
             )
         }
 
         // A sweep gradient is anchored to the centre, not to the start angle, so the
         // whole drawing has to turn — moving startAngle alone would look perfectly still.
-        FrameStyle.SPIN -> rotate(phase * 360f) {
-            drawArc(
-                brush = Brush.sweepGradient(
-                    listOf(a, b, c, a),
-                    center = Offset(size.width / 2f, size.height / 2f)
-                ),
-                startAngle = 0f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = corner,
-                size = rect,
-                style = Stroke(width = band)
-            )
+        FrameStyle.SPIN -> rotate(phase * 360f, pivot = middle) {
+            disc(Brush.sweepGradient(listOf(a, b, c, a), center = middle))
         }
     }
 }

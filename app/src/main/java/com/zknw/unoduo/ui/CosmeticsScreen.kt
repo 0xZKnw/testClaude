@@ -26,8 +26,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -198,16 +201,20 @@ private fun CosmeticTile(
                 Preview(item, profile)
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = item.name,
-            color = if (locked) Palette.TextDim else Palette.Text,
-            fontSize = 12.5.sp,
-            fontWeight = FontWeight.Black,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center
-        )
+        // A title's preview *is* its name, so printing it again underneath would just
+        // be the same words twice.
+        if (item.kind != CosmeticKind.TITLE) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = item.name,
+                color = if (locked) Palette.TextDim else Palette.Text,
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Black,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
         Spacer(Modifier.height(6.dp))
         when {
             worn -> InkChip("Porté", color = Palette.Gold, textColor = Palette.Outline)
@@ -254,32 +261,62 @@ private fun Preview(item: Cosmetic, profile: Profile) {
             overflow = TextOverflow.Ellipsis
         )
 
-        CosmeticKind.NAME -> Text(
-            text = profile.name.ifBlank { "Joueur" },
-            style = nameStyle(item, 17.sp),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        CosmeticKind.NAME -> PseudoText(profile.name.ifBlank { "Joueur" }, item, 18.sp)
 
         CosmeticKind.STICKER -> Text(item.text, fontSize = 40.sp)
     }
 }
 
 /**
- * How a pseudo is painted. A single colour is a flat fill; two are a gradient across the
- * text, which is the only place in the app a gradient is allowed to carry meaning.
+ * A pseudo, painted.
+ *
+ * Drawn twice: an ink outline underneath, the colour on top. That is how every glyph on
+ * every card in this game is drawn, and it is what a flat coloured word was missing —
+ * a plain tint reads as a label, an outlined one reads as part of the deck. Two colours
+ * make a gradient, three make a proper sweep across the word.
  */
 @Composable
-fun nameStyle(item: Cosmetic, size: TextUnit): TextStyle =
-    if (item.b != 0L) {
-        TextStyle(
-            brush = Brush.horizontalGradient(listOf(Color(item.a), Color(item.b))),
+fun PseudoText(
+    name: String,
+    item: Cosmetic,
+    size: TextUnit,
+    modifier: Modifier = Modifier
+) {
+    val stroke = with(LocalDensity.current) { size.toPx() * 0.17f }
+    val stops = listOfNotNull(
+        item.a.takeIf { it != 0L },
+        item.b.takeIf { it != 0L },
+        item.c.takeIf { it != 0L }
+    ).map { Color(it) }
+
+    val fill = when {
+        stops.size >= 2 -> TextStyle(
+            brush = Brush.horizontalGradient(stops),
             fontSize = size,
             fontWeight = FontWeight.Black
         )
-    } else {
-        TextStyle(color = Color(item.a), fontSize = size, fontWeight = FontWeight.Black)
+        else -> TextStyle(
+            color = stops.firstOrNull() ?: Palette.Text,
+            fontSize = size,
+            fontWeight = FontWeight.Black
+        )
     }
+
+    Box(modifier) {
+        Text(
+            text = name,
+            style = TextStyle(
+                color = Palette.Outline,
+                fontSize = size,
+                fontWeight = FontWeight.Black,
+                drawStyle = Stroke(width = stroke, join = StrokeJoin.Round)
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(text = name, style = fill, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
 
 /** Everything the next levels hand over, newest first. Used by the profile screen. */
 @Composable

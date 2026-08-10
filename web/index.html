@@ -106,31 +106,72 @@ textarea {
 .avatar.turn { border-color: var(--gold); border-width: 4px; }
 
 /* ------------------------------------------------------------- avatar frames */
-/* One masked ring carries the whole catalogue: the mask punches the middle out of
-   whatever paints the disc, so a flat colour, a sweep, a dashed sweep and a turning
-   sweep are all the same drawing with a different background. */
-.frame { position: relative; border-radius: 50%; flex: none; display: grid; place-items: center; }
+/* Drawn the way every card in the game is drawn: an ink disc first, the colour on top
+   of it, and the avatar's own ink ring closing the inside. That keyline is the whole
+   difference between a frame that belongs to this game and a coloured circle. */
+.frame {
+  position: relative; border-radius: 50%; flex: none;
+  display: grid; place-items: center; background: var(--ink);
+}
 .frame::before {
-  content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: 0;
-  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - var(--band)), #000 calc(100% - var(--band)));
-  mask: radial-gradient(closest-side, transparent calc(100% - var(--band)), #000 calc(100% - var(--band)));
+  content: ''; position: absolute; inset: var(--ink-w); border-radius: 50%; z-index: 0;
 }
 .frame > * { position: relative; z-index: 1; }
+
 .frame.f-SOLID::before { background: var(--fa); }
 .frame.f-DUO::before { background: conic-gradient(var(--fa), var(--fb), var(--fa)); }
-.frame.f-DASH::before { background: repeating-conic-gradient(var(--fa) 0 9deg, transparent 9deg 18deg); }
+/* Two colours, one inside the other; the outer band is the wider of the two. */
+.frame.f-DUAL::before {
+  background: radial-gradient(closest-side,
+    var(--fb) 0 calc(100% - var(--band) * .55), var(--fa) calc(100% - var(--band) * .55));
+}
+/* The gaps fall through to the ink disc underneath, so these read as coloured teeth on
+   an ink ring rather than as a dashed outline. */
+.frame.f-DASH::before {
+  background: repeating-conic-gradient(var(--fa) 0 11deg, transparent 11deg 21deg);
+}
+.frame.f-BEADS::before {
+  background: repeating-conic-gradient(var(--fa) 0 5deg, transparent 5deg 20deg);
+}
+.frame.f-NOTCH::before {
+  background: repeating-conic-gradient(var(--fa) 0 22deg, var(--fb) 22deg 37deg);
+}
 .frame.f-GLOW::before { background: var(--fa); }
 .frame.f-GLOW::after {
   content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: 0;
-  box-shadow: 0 0 0 calc(var(--band) * .85) var(--fa);
+  box-shadow: 0 0 0 calc(var(--band) * .8) var(--fa);
   animation: halo 1.7s ease-in-out infinite alternate;
 }
-@keyframes halo { from { opacity: .18 } to { opacity: .5 } }
+@keyframes halo { from { opacity: .18 } to { opacity: .52 } }
+/* A narrow bright stripe sweeping round a flat band: a sheen, not a rainbow. */
+.frame.f-SHINE::before {
+  background: conic-gradient(var(--fa) 0 38%, var(--fb) 47% 53%, var(--fa) 62% 100%);
+  animation: ringspin 2.4s linear infinite;
+}
 .frame.f-SPIN::before {
   background: conic-gradient(var(--fa), var(--fb), var(--fc), var(--fa));
   animation: ringspin 4.2s linear infinite;
 }
 @keyframes ringspin { to { transform: rotate(360deg) } }
+
+/* A pseudo, painted: an ink outline underneath, the colour on top — the same way every
+   glyph on every card is drawn. A plain tint reads as a label; an outlined one reads as
+   part of the deck. */
+.pseudo {
+  font-weight: 900; display: inline-block;
+  -webkit-text-stroke: .17em var(--ink);
+  paint-order: stroke fill;
+}
+.pseudo.grad {
+  background: linear-gradient(90deg, var(--na), var(--nb), var(--nc));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  /* background-clip:text and text-stroke cannot both paint, so the outline moves to a
+     shadow ring that survives the clip. */
+  -webkit-text-stroke: 0;
+  filter:
+    drop-shadow(1.5px 0 0 var(--ink)) drop-shadow(-1.5px 0 0 var(--ink))
+    drop-shadow(0 1.5px 0 var(--ink)) drop-shadow(0 -1.5px 0 var(--ink));
+}
 
 /* ------------------------------------------------------------- levels */
 .level-badge {
@@ -164,6 +205,9 @@ textarea {
 }
 #kind-tabs button.on { background: var(--gold); color: var(--ink); }
 #wardrobe { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* min-width:0 on the tiles: without it a long title sets the column's minimum and the
+   whole grid pushes off the side of the screen. */
+#wardrobe > * { min-width: 0; }
 .cosmetic {
   background: var(--slate); border: 3px solid var(--ink); border-radius: 18px;
   padding: 10px; text-align: center; cursor: pointer;
@@ -174,21 +218,13 @@ textarea {
   height: 76px; display: grid; place-items: center; overflow: hidden;
 }
 .cosmetic.locked .shot { opacity: .38; }
-.cosmetic .who { margin-top: 8px; font-size: 12.5px; font-weight: 900; }
+.cosmetic .who { margin-top: 8px; font-size: 12.5px; font-weight: 900; overflow-wrap: anywhere; }
 .cosmetic.locked .who { color: var(--dim); }
 .cosmetic .tag { margin-top: 6px; }
 .cosmetic .shot .card { width: 46px; }
 .felt-shot { width: 100%; aspect-ratio: 1.6; border-radius: 12px; border: 3px solid var(--ink); }
-.title-shot { font-size: 14px; font-weight: 900; color: var(--gold); }
+.title-shot { font-size: 14px; font-weight: 900; color: var(--gold); overflow-wrap: anywhere; }
 .sticker-shot { font-size: 40px; line-height: 1; }
-
-/* The pseudo, painted. A single colour is a flat fill; two are a gradient across the
-   text, the one place in the app a gradient carries meaning. */
-.pseudo { font-weight: 900; }
-.pseudo.grad {
-  background: linear-gradient(90deg, var(--na), var(--nb));
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-}
 
 /* ------------------------------------------------------------- level up */
 #levelup .panel { text-align: center; max-width: 360px; }
@@ -703,7 +739,8 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
   <div class="panel" style="text-align:center">
     <div style="font-size:34px;font-weight:900" id="over-title"></div>
     <p class="lead" id="over-sub" style="margin:8px 0 16px"></p>
-    <div id="over-scores" style="margin-bottom:18px"></div>
+    <div id="over-scores" style="margin-bottom:14px"></div>
+    <div id="over-xp" class="hidden" style="margin-bottom:18px"></div>
     <button class="btn" id="rematch-btn">Revanche</button>
     <button class="btn ghost" id="quit-btn">Quitter</button>
   </div>
