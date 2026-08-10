@@ -45,6 +45,8 @@ data class LobbyPlayer(
     @SerialName("fr") val frame: String = "",
     @SerialName("ti") val title: String = "",
     @SerialName("nm") val nameColor: String = "",
+    @SerialName("bk") val back: String = "",
+    @SerialName("ft") val felt: String = "",
     @SerialName("lv") val level: Int = 1
 )
 
@@ -61,6 +63,8 @@ sealed class NetMsg {
         @SerialName("fr") val frame: String = "",
         @SerialName("ti") val title: String = "",
         @SerialName("nm") val nameColor: String = "",
+        @SerialName("bk") val back: String = "",
+        @SerialName("ft") val felt: String = "",
         @SerialName("lv") val level: Int = 1
     ) : NetMsg()
 
@@ -89,6 +93,8 @@ sealed class NetMsg {
         @SerialName("fr") val frame: String = "",
         @SerialName("ti") val title: String = "",
         @SerialName("nm") val nameColor: String = "",
+        @SerialName("bk") val back: String = "",
+        @SerialName("ft") val felt: String = "",
         @SerialName("lv") val level: Int = 1
     ) : NetMsg()
 

@@ -83,15 +83,18 @@ data class Social(
 
 /**
  * Everything cosmetic the table needs, resolved once so no screen has to know the
- * catalogue exists. The felt and the back are mine alone; the rest is what the other
- * players announced about themselves.
+ * catalogue exists — one entry per seat, from what each player announced.
+ *
+ * The deck and the cloth are looked up by *whose turn it is* rather than by whose phone
+ * this is: the table belongs to the player it is waiting on. Nobody has to agree on one
+ * look, and everybody's unlocks actually get seen.
  */
 data class TableLook(
-    val felt: Cosmetic = Cosmetics.defaultOf(CosmeticKind.FELT),
-    val back: Cosmetic = Cosmetics.defaultOf(CosmeticKind.BACK),
     val frames: Map<Seat, Cosmetic> = emptyMap(),
     val titles: Map<Seat, Cosmetic> = emptyMap(),
     val nameColors: Map<Seat, Cosmetic> = emptyMap(),
+    val backs: Map<Seat, Cosmetic> = emptyMap(),
+    val felts: Map<Seat, Cosmetic> = emptyMap(),
     val levels: Map<Seat, Int> = emptyMap(),
     /** How much of the sticker catalogue I have earned; the rail offers exactly that. */
     val stickers: Int = Cosmetics.stickersAt(1).size
@@ -99,6 +102,10 @@ data class TableLook(
     fun frameOf(seat: Seat): Cosmetic = frames[seat] ?: Cosmetics.defaultOf(CosmeticKind.FRAME)
     fun titleOf(seat: Seat): String = titles[seat]?.worn.orEmpty()
     fun nameColorOf(seat: Seat): Cosmetic = nameColors[seat] ?: Cosmetics.defaultOf(CosmeticKind.NAME)
+
+    /** The deck a seat deals from, and the cloth it plays on. */
+    fun backOf(seat: Seat): Cosmetic = backs[seat] ?: Cosmetics.defaultOf(CosmeticKind.BACK)
+    fun feltOf(seat: Seat): Cosmetic = felts[seat] ?: Cosmetics.defaultOf(CosmeticKind.FELT)
 }
 
 /** Shown once when a round pushes the bar over a level. */
@@ -220,6 +227,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             frame = p.worn(CosmeticKind.FRAME).id,
             title = p.worn(CosmeticKind.TITLE).id,
             nameColor = p.worn(CosmeticKind.NAME).id,
+            back = p.worn(CosmeticKind.BACK).id,
+            felt = p.worn(CosmeticKind.FELT).id,
             level = p.level
         )
     }
@@ -229,8 +238,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * announced that this build does not know falls back rather than leaving a hole.
      */
     private fun lookFor(profile: Profile, players: List<LobbyPlayer>): TableLook = TableLook(
-        felt = profile.worn(CosmeticKind.FELT),
-        back = profile.worn(CosmeticKind.BACK),
         frames = players.associate {
             it.seat to Cosmetics.resolve(it.frame, CosmeticKind.FRAME, it.level)
         },
@@ -239,6 +246,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         },
         nameColors = players.associate {
             it.seat to Cosmetics.resolve(it.nameColor, CosmeticKind.NAME, it.level)
+        },
+        backs = players.associate {
+            it.seat to Cosmetics.resolve(it.back, CosmeticKind.BACK, it.level)
+        },
+        felts = players.associate {
+            it.seat to Cosmetics.resolve(it.felt, CosmeticKind.FELT, it.level)
         },
         levels = players.associate { it.seat to it.level },
         stickers = profile.stickers.size
@@ -267,6 +280,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     frame = p.worn(CosmeticKind.FRAME).id,
                     title = p.worn(CosmeticKind.TITLE).id,
                     nameColor = p.worn(CosmeticKind.NAME).id,
+                    back = p.worn(CosmeticKind.BACK).id,
+                    felt = p.worn(CosmeticKind.FELT).id,
                     level = p.level
                 )
             )
@@ -514,6 +529,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             frame = msg.frame,
                             title = msg.title,
                             nameColor = msg.nameColor,
+                            back = msg.back,
+                            felt = msg.felt,
                             level = msg.level
                         )
                     }
@@ -573,6 +590,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 frame = hello.frame,
                 title = hello.title,
                 nameColor = hello.nameColor,
+                back = hello.back,
+                felt = hello.felt,
                 level = hello.level
             )).sortedBy { it.seat }
             s.copy(
@@ -832,6 +851,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     frame = _state.value.profile.worn(CosmeticKind.FRAME).id,
                     title = _state.value.profile.worn(CosmeticKind.TITLE).id,
                     nameColor = _state.value.profile.worn(CosmeticKind.NAME).id,
+                    back = _state.value.profile.worn(CosmeticKind.BACK).id,
+                    felt = _state.value.profile.worn(CosmeticKind.FELT).id,
                     level = _state.value.profile.level
                 )
             )

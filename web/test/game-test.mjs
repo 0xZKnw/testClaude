@@ -104,12 +104,14 @@ try {
   // page with a fragment on the end, so a plain second goto would be a fragment jump the
   // browser never reloads for, and the offer would never be read.
   //
-  // One point short of level 5, so whatever the round does — a win is 25 XP, a loss 10 —
-  // the guest is guaranteed to cross a level during it. That is what the host's copy of
-  // its badge has to notice.
+  // 424 XP is one point short of level 11, so whatever the round does — a win is 25 XP,
+  // a loss 10 — the guest is guaranteed to cross a level during it. That is what the
+  // host's copy of its badge has to notice. Level 10 also owns the green cloth, which is
+  // a cloth the host has never unlocked: the two tables are then visibly different.
   await guestContext.addInitScript(() => {
     localStorage.setItem('uno.profile', JSON.stringify({
-      name: 'Bob', avatarColor: 4, photo: null, stats: {}, xp: 109, wearing: {},
+      name: 'Bob', avatarColor: 4, photo: null, stats: {}, xp: 424,
+      wearing: { FELT: 'ft.feutre' },
     }));
   });
   const guest = await guestContext.newPage();
@@ -171,7 +173,48 @@ try {
 
   const badgeBefore = await host.textContent('#rivals .level-badge');
   console.log(`  niveau de l'invite vu par l'hote : ${badgeBefore}`);
-  if (badgeBefore !== '4') problems.push(`l'hote voit l'invite au niveau ${badgeBefore} au lieu de 4`);
+  if (badgeBefore !== '10') problems.push(`l'hote voit l'invite au niveau ${badgeBefore} au lieu de 10`);
+
+  // ------------------------------------------------------------ the cloth changes hands
+  // The guest arrived wearing the green cloth, which the host has never unlocked. Both
+  // screens must show the same one at any moment: the cloth of whoever the table is
+  // waiting on.
+  // There is always exactly one cloth switched on: the hand-over turns the new layer on
+  // in the same tick it is added, so there is no frame with a bare table.
+  const clothOf = (page) => page.$eval('#felt-layers .felt.on', (n) => n.style.background);
+  const GREEN = '39, 80, 58';          // #27503a, the guest's cloth, as the browser reports it
+  for (const [page, who] of [[host, "l'hote"], [guest, "l'invite"]]) {
+    const mine = await page.evaluate(yourTurn);
+    const green = (await clothOf(page)).includes(GREEN);
+    // Only the guest wears green, so green is up exactly when the guest is on turn.
+    const guestOnTurn = who === "l'invite" ? mine : !mine;
+    console.log(`  tapis chez ${who} : ${green ? 'vert' : 'defaut'}, invite au trait : ${guestOnTurn}`);
+    if (green !== guestOnTurn) problems.push(`le tapis de ${who} ne suit pas le joueur au trait`);
+  }
+
+  // And it must actually change hands when the turn does. Six turns at most: with seven
+  // cards each the round cannot end inside that, so this cannot wander into the
+  // end-of-round overlays and leave them blocking the checks that follow.
+  const clothBefore = await clothOf(host);
+  for (let i = 0; i < 6; i++) {
+    for (const page of [host, guest]) {
+      if (await page.evaluate(yourTurn)) await takeTurn(page);
+    }
+    await host.waitForTimeout(140);
+    if ((await clothOf(host)) !== clothBefore) break;
+  }
+  const clothAfter = await clothOf(host);
+  console.log(`  le tapis a change de main : ${clothAfter !== clothBefore ? 'oui' : 'NON'}`);
+  if (clothAfter === clothBefore) problems.push('le tapis ne change jamais de main');
+
+  // A colour picker left open would block every click below it.
+  for (const page of [host, guest]) {
+    await page.evaluate(() => {
+      const picker = document.getElementById('picker');
+      if (picker.classList.contains('on')) picker.querySelector('[data-pick]').click();
+    });
+  }
+  await host.waitForTimeout(200);
 
   // ------------------------------------------------------------ chat and stickers
   await guest.click('#chat-bar');
@@ -278,7 +321,7 @@ try {
   // everybody else for the rest of the evening.
   const badgeAfter = await host.textContent('#rivals .level-badge');
   console.log(`  niveau de l'invite apres la manche : ${badgeAfter}`);
-  if (Number(badgeAfter) < 5) {
+  if (Number(badgeAfter) < 11) {
     problems.push(`l'hote voit toujours l'invite au niveau ${badgeAfter} apres sa montee`);
   }
 
@@ -286,13 +329,13 @@ try {
   // guest was seeded one point short of level 5 and gets there either way. So the check
   // is against the arithmetic, not against the result. Either way the overlay must not
   // be left blocking the table.
-  for (const [page, who, startXp] of [[host, "l'hote", 0], [guest, "l'invite", 109]]) {
+  for (const [page, who, startLevel] of [[host, "l'hote", 1], [guest, "l'invite", 10]]) {
     const won = (await page.textContent('#over-title')) === 'Gagné !';
     const level = await page.evaluate(async () => {
       const Lv = await import('./src/levels.js');
       return Lv.levelAt(JSON.parse(localStorage.getItem('uno.profile')).xp);
     });
-    const expected = level > (startXp === 0 ? 1 : 4);
+    const expected = level > startLevel;
     const up = await page.evaluate(() => document.getElementById('levelup').classList.contains('on'));
     console.log(`  ${who} : ${won ? 'gagne' : 'perd'}, niveau ${level}, montee ${up ? 'oui' : 'non'}`);
     if (expected !== up) problems.push(`la montee de niveau de ${who} ne suit pas l'experience`);

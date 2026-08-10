@@ -173,6 +173,40 @@ textarea {
     drop-shadow(0 1.5px 0 var(--ink)) drop-shadow(0 -1.5px 0 var(--ink));
 }
 
+/* ------------------------------------------------- animated backs and cloths */
+/* Slow and rare on purpose: the cloth sits behind the cards and a back is drawn a dozen
+   times at once, so anything lively here would fight the game rather than decorate it.
+   Every one of these is a transform or an opacity — never a repainted gradient. */
+.card .m-SHEEN, .card .m-DRIFT { position: absolute; inset: 0; pointer-events: none; }
+.card .m-SHEEN {
+  background: linear-gradient(90deg, transparent, rgba(253,251,244,.16), transparent);
+  animation: backsheen 3.4s linear infinite;
+}
+@keyframes backsheen { from { transform: translateX(-130%) } to { transform: translateX(130%) } }
+.card .m-DRIFT { animation: backdrift 4.6s ease-in-out infinite alternate; }
+@keyframes backdrift { from { transform: translateY(-14%) } to { transform: translateY(14%) } }
+.card .m-PULSE { animation: backpulse 2.2s ease-in-out infinite alternate; transform-origin: center; }
+@keyframes backpulse { from { transform: scale(.96) } to { transform: scale(1.04) } }
+
+/* The cloth. Two layers live at once during a hand-over: the outgoing one fades out and
+   is dropped, so a swap costs one paint rather than a re-layout of the table. */
+#felt-layers { position: absolute; inset: 0; overflow: hidden; z-index: 0; }
+#screen-game > *:not(#felt-layers) { position: relative; z-index: 1; }
+.felt {
+  position: absolute; inset: -12%;
+  opacity: 0; transition: opacity .22s linear;
+}
+.felt.on { opacity: 1; }
+.felt.m-PULSE { animation: feltpulse 5.2s ease-in-out infinite alternate; }
+@keyframes feltpulse { from { transform: scale(1) } to { transform: scale(1.1) } }
+.felt.m-DRIFT { animation: feltdrift 9s ease-in-out infinite alternate; }
+@keyframes feltdrift { from { transform: translate(-8%, -5%) } to { transform: translate(8%, 5%) } }
+.felt .gleam {
+  position: absolute; inset: 0;
+  animation: feltsheen 7s linear infinite;
+}
+@keyframes feltsheen { from { transform: translateX(-120%) } to { transform: translateX(120%) } }
+
 /* ------------------------------------------------------------- levels */
 .level-badge {
   border-radius: 50%; flex: none; display: grid; place-items: center;
@@ -696,6 +730,7 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
 
 <!-- --------------------------------------------------------------------- table -->
 <section class="screen" id="screen-game">
+  <div id="felt-layers"></div>
   <div class="rivals" id="rivals"></div>
   <div class="fan" id="rival-fan"></div>
   <div class="middle">

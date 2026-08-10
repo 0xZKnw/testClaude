@@ -17,6 +17,15 @@ enum class CosmeticKind(val code: String, val label: String, val blurb: String) 
 enum class FrameStyle { SOLID, DUO, DUAL, DASH, BEADS, NOTCH, GLOW, SHINE, SPIN }
 
 /**
+ * What a card back or a table cloth does while you look at it.
+ *
+ * Deliberately slow and deliberately rare: the cloth sits behind the cards and a back is
+ * drawn a dozen times at once, so anything lively here would fight the game rather than
+ * decorate it. Movement is also a reward — the plain ones are the early unlocks.
+ */
+enum class Motion { NONE, SHEEN, PULSE, DRIFT }
+
+/**
  * One unlockable. A single flat record on purpose: the catalogue is a table, it is read
  * far more often than it is edited, and the browser build mirrors it line for line.
  *
@@ -33,6 +42,8 @@ data class Cosmetic(
     val b: Long = 0L,
     val c: Long = 0L,
     val style: FrameStyle = FrameStyle.SOLID,
+    /** Backs and cloths only; everything else stands still. */
+    val motion: Motion = Motion.NONE,
     /** The emoji, for a sticker. Empty for everything else. */
     val text: String = ""
 ) {
@@ -100,16 +111,16 @@ object Cosmetics {
         back("violine", "Violine", 28, 0xFF382357, 0xFF190F28, 0xFF7A5CF0),
         back("reglisse", "Réglisse", 34, 0xFF1A1A1E, 0xFF07070A, 0xFFF3F6FB),
         back("sable", "Sable", 40, 0xFF5C4B2E, 0xFF2A2113, 0xFFFFC21A),
-        back("menthe", "Menthe glaciale", 46, 0xFF17423C, 0xFF091E1B, 0xFF2EF2C4),
-        back("cerise", "Cerise noire", 52, 0xFF3E0E1E, 0xFF1B040C, 0xFFF25DA8),
-        back("cuivre", "Cuivre chaud", 57, 0xFF52341A, 0xFF24160A, 0xFFC87137),
-        back("nuit", "Bleu de nuit", 63, 0xFF17203D, 0xFF070B1A, 0xFF6E8CFF),
-        back("poudre", "Rose poudré", 68, 0xFF54293D, 0xFF25101B, 0xFFF25DA8),
-        back("vertdegris", "Vert-de-gris", 73, 0xFF2A423B, 0xFF121D1A, 0xFF19B79B),
-        back("pourpre", "Pourpre royal", 80, 0xFF421338, 0xFF1D0718, 0xFFFFC531),
-        back("orblanc", "Or blanc", 85, 0xFF3B3F49, 0xFF171A20, 0xFFD8E0EC),
-        back("retro", "Néon rétro", 92, 0xFF201242, 0xFF0B0620, 0xFF2EF2C4),
-        back("centfaces", "Cent faces", 98, 0xFF4A3A12, 0xFF14161D, 0xFFFFC531)
+        back("menthe", "Menthe glaciale", 46, 0xFF17423C, 0xFF091E1B, 0xFF2EF2C4, Motion.SHEEN),
+        back("cerise", "Cerise noire", 52, 0xFF3E0E1E, 0xFF1B040C, 0xFFF25DA8, Motion.PULSE),
+        back("cuivre", "Cuivre chaud", 57, 0xFF52341A, 0xFF24160A, 0xFFC87137, Motion.SHEEN),
+        back("nuit", "Bleu de nuit", 63, 0xFF17203D, 0xFF070B1A, 0xFF6E8CFF, Motion.DRIFT),
+        back("poudre", "Rose poudré", 68, 0xFF54293D, 0xFF25101B, 0xFFF25DA8, Motion.PULSE),
+        back("vertdegris", "Vert-de-gris", 73, 0xFF2A423B, 0xFF121D1A, 0xFF19B79B, Motion.DRIFT),
+        back("pourpre", "Pourpre royal", 80, 0xFF421338, 0xFF1D0718, 0xFFFFC531, Motion.SHEEN),
+        back("orblanc", "Or blanc", 85, 0xFF3B3F49, 0xFF171A20, 0xFFD8E0EC, Motion.SHEEN),
+        back("retro", "Néon rétro", 92, 0xFF201242, 0xFF0B0620, 0xFF2EF2C4, Motion.DRIFT),
+        back("centfaces", "Cent faces", 98, 0xFF4A3A12, 0xFF14161D, 0xFFFFC531, Motion.SHEEN)
     )
 
     // -------------------------------------------------------------------- tapis
@@ -124,13 +135,13 @@ object Cosmetics {
         felt("profonde", "Forêt profonde", 35, 0xFF1E4231, 0xFF0F2519, 0xFF040D08),
         felt("sable", "Sable chaud", 41, 0xFF54452C, 0xFF2E2617, 0xFF120E07),
         felt("cuivre", "Cuivre", 47, 0xFF5A3A22, 0xFF301D11, 0xFF130A05),
-        felt("abysse", "Abysse", 54, 0xFF16323A, 0xFF0A1B21, 0xFF02080B),
-        felt("braise", "Braise", 60, 0xFF5E2E18, 0xFF33170B, 0xFF140803),
-        felt("jade", "Jade", 67, 0xFF1D4A45, 0xFF0F2926, 0xFF040F0E),
-        felt("nebuleuse", "Nébuleuse", 75, 0xFF3A2660, 0xFF1C1236, 0xFF070414),
-        felt("crepuscule", "Crépuscule", 84, 0xFF5A3352, 0xFF2E1A2C, 0xFF120810),
-        felt("obsidienne", "Obsidienne", 93, 0xFF262A33, 0xFF12141A, 0xFF030406),
-        felt("cercle", "Cercle des cent", 99, 0xFF4C3E18, 0xFF231C0B, 0xFF0A0803)
+        felt("abysse", "Abysse", 54, 0xFF16323A, 0xFF0A1B21, 0xFF02080B, Motion.DRIFT),
+        felt("braise", "Braise", 60, 0xFF5E2E18, 0xFF33170B, 0xFF140803, Motion.PULSE),
+        felt("jade", "Jade", 67, 0xFF1D4A45, 0xFF0F2926, 0xFF040F0E, Motion.SHEEN),
+        felt("nebuleuse", "Nébuleuse", 75, 0xFF3A2660, 0xFF1C1236, 0xFF070414, Motion.DRIFT),
+        felt("crepuscule", "Crépuscule", 84, 0xFF5A3352, 0xFF2E1A2C, 0xFF120810, Motion.PULSE),
+        felt("obsidienne", "Obsidienne", 93, 0xFF262A33, 0xFF12141A, 0xFF030406, Motion.SHEEN),
+        felt("cercle", "Cercle des cent", 99, 0xFF4C3E18, 0xFF231C0B, 0xFF0A0803, Motion.DRIFT)
     )
 
     // ------------------------------------------------------------------- titres
@@ -253,11 +264,25 @@ object Cosmetics {
         c: Long = 0L
     ) = Cosmetic("fr.$id", CosmeticKind.FRAME, name, level, a, b, c, style)
 
-    private fun back(id: String, name: String, level: Int, top: Long, bottom: Long, oval: Long) =
-        Cosmetic("bk.$id", CosmeticKind.BACK, name, level, top, bottom, oval)
+    private fun back(
+        id: String,
+        name: String,
+        level: Int,
+        top: Long,
+        bottom: Long,
+        oval: Long,
+        motion: Motion = Motion.NONE
+    ) = Cosmetic("bk.$id", CosmeticKind.BACK, name, level, top, bottom, oval, motion = motion)
 
-    private fun felt(id: String, name: String, level: Int, light: Long, mid: Long, dark: Long) =
-        Cosmetic("ft.$id", CosmeticKind.FELT, name, level, light, mid, dark)
+    private fun felt(
+        id: String,
+        name: String,
+        level: Int,
+        light: Long,
+        mid: Long,
+        dark: Long,
+        motion: Motion = Motion.NONE
+    ) = Cosmetic("ft.$id", CosmeticKind.FELT, name, level, light, mid, dark, motion = motion)
 
     private fun title(id: String, name: String, level: Int) =
         Cosmetic("ti.$id", CosmeticKind.TITLE, name, level)

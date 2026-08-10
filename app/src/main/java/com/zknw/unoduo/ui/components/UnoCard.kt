@@ -10,7 +10,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +44,7 @@ import com.zknw.unoduo.game.CardKind
 import com.zknw.unoduo.progress.Cosmetic
 import com.zknw.unoduo.progress.CosmeticKind
 import com.zknw.unoduo.progress.Cosmetics
+import com.zknw.unoduo.progress.Motion
 import com.zknw.unoduo.ui.theme.Palette
 
 const val CARD_ASPECT = 1.52f
@@ -321,6 +329,34 @@ fun OutlinedGlyphText(
 }
 
 /**
+ * One slow clock per kind of movement, shared by every card drawn with it.
+ *
+ * Slow on purpose: the back is decoration on the least important thing on the table, and
+ * anything lively here would pull the eye off the cards that matter. Returns a flat zero
+ * for a still back, so a plain deck starts no animation at all.
+ */
+@Composable
+private fun cardMotion(motion: Motion): Float {
+    if (motion == Motion.NONE) return 0f
+    val clock = rememberInfiniteTransition(label = "back")
+    val duration = when (motion) {
+        Motion.SHEEN -> 3400
+        Motion.PULSE -> 2200
+        else -> 4600
+    }
+    val value by clock.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(duration, easing = LinearEasing),
+            repeatMode = if (motion == Motion.SHEEN) RepeatMode.Restart else RepeatMode.Reverse
+        ),
+        label = "beat"
+    )
+    return value
+}
+
+/**
  * The back everybody on this screen draws. A card back is one setting for a whole
  * table, so it is provided once rather than threaded through the deck, the draw pile,
  * every opponent fan and the penalty slam.
@@ -370,7 +406,52 @@ fun UnoCardBack(
                         Brush.verticalGradient(listOf(Color(skin.a), Color(skin.b)))
                     )
             ) {
-                Canvas(Modifier.fillMaxSize()) {
+                // A dozen backs can be on screen at once, so the movement is a single
+                // cheap transform on one extra layer rather than a redrawn gradient.
+                val beat = cardMotion(skin.motion)
+                if (skin.motion == Motion.SHEEN) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                // Travels from well off one edge to well off the other,
+                                // so the band is out of sight between passes.
+                                translationX = (beat * 2.6f - 1.3f) * size.width
+                            }
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Palette.Stock.copy(alpha = 0.16f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                    )
+                }
+                if (skin.motion == Motion.DRIFT) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { translationY = (beat - 0.5f) * size.height * 0.5f }
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color(skin.c).copy(alpha = 0.20f), Color.Transparent)
+                                )
+                            )
+                    )
+                }
+                Canvas(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            if (skin.motion == Motion.PULSE) {
+                                val scale = 0.96f + 0.08f * beat
+                                scaleX = scale
+                                scaleY = scale
+                            }
+                        }
+                ) {
                     drawFaceOval(Color(skin.c), Palette.Outline, tilt = -28f)
                 }
                 OutlinedGlyphText(

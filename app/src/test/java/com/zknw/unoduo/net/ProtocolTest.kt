@@ -254,7 +254,7 @@ class ProtocolTest {
     fun `what a player is wearing survives the trip, and its absence is harmless`() {
         val dressed = NetMsg.Lobby(
             players = listOf(
-                LobbyPlayer(0, "Zak", 3, "fr.or", "ti.titan", "nm.neon", 77),
+                LobbyPlayer(0, "Zak", 3, "fr.or", "ti.titan", "nm.neon", "bk.retro", "ft.jade", 77),
                 // A phone on an older build announces none of it.
                 LobbyPlayer(1, "Bob", 1)
             ),
@@ -264,9 +264,13 @@ class ProtocolTest {
         val back = Wire.decode(Wire.encode(dressed)) as NetMsg.Lobby
         assertEquals(dressed, back)
         assertEquals("fr.or", back.players[0].frame)
+        assertEquals("bk.retro", back.players[0].back)
+        assertEquals("ft.jade", back.players[0].felt)
         assertEquals(77, back.players[0].level)
-        // Defaults, not nulls: the roster still draws.
+        // Defaults, not nulls: the roster still draws, and the table still deals.
         assertEquals("", back.players[1].frame)
+        assertEquals("", back.players[1].back)
+        assertEquals("", back.players[1].felt)
         assertEquals(1, back.players[1].level)
     }
 
@@ -277,6 +281,7 @@ class ProtocolTest {
         val back = Wire.decode(legacy.toByteArray()) as NetMsg.Hello
         assertEquals("ABC123", back.code)
         assertEquals("", back.title)
+        assertEquals("", back.felt)
         assertEquals(1, back.level)
     }
 
@@ -284,7 +289,10 @@ class ProtocolTest {
     fun `dressing everybody up does not blow the lobby frame budget`() {
         val loud = NetMsg.Lobby(
             players = (0 until 5).map {
-                LobbyPlayer(it, "Joueur numero $it", it, "fr.sangdencre", "ti.compteur", "nm.centieme", 100)
+                LobbyPlayer(
+                    it, "Joueur numero $it", it, "fr.sangdencre", "ti.compteur",
+                    "nm.centieme", "bk.centfaces", "ft.cercle", 100
+                )
             },
             started = true,
             mods = GameMod.entries.toList()

@@ -27,6 +27,10 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const BOT_THINK_MS = 750;
+
+/** Which cloth the table is currently wearing, so a repaint is skipped when it has not
+    changed — renderGame runs on every snapshot. */
+let feltShown = null;
 const BOT_AVATAR = 5;
 const BOT_AVATAR_ALT = 2;
 
@@ -489,6 +493,9 @@ function teardown() {
   });
   $('chat').classList.remove('on');
   $('emote-layer').innerHTML = '';
+  // Otherwise the next game opens on the last game's cloth.
+  $('felt-layers').innerHTML = '';
+  feltShown = null;
   $('over').classList.remove('on');
   $('picker').classList.remove('on');
   $('slam').classList.remove('on');
@@ -509,12 +516,16 @@ function meAsPlayer(seat) {
     fr: wornOf(p, 'FRAME').id,
     ti: wornOf(p, 'TITLE').id,
     nm: wornOf(p, 'NAME').id,
+    bk: wornOf(p, 'BACK').id,
+    ft: wornOf(p, 'FELT').id,
     lv: levelOf(p),
   };
 }
 
 /** Resolves what one seat announced, falling back rather than leaving a hole. */
 const frameOf = (player) => Cosm.resolve(player?.fr || '', 'FRAME', player?.lv || 1);
+const backOf = (player) => Cosm.resolve(player?.bk || '', 'BACK', player?.lv || 1);
+const feltOf = (player) => Cosm.resolve(player?.ft || '', 'FELT', player?.lv || 1);
 const titleOf = (player) => Cosm.worn(Cosm.resolve(player?.ti || '', 'TITLE', player?.lv || 1));
 const nameColorOf = (player) => Cosm.resolve(player?.nm || '', 'NAME', player?.lv || 1);
 const playerAt = (seat) => state.players.find((p) => p.s === seat);
@@ -713,7 +724,13 @@ function onGuestMessage(key, msg) {
       const seat = state.seatOfKey.get(key);
       if (seat === undefined) return;
       state.players = state.players.map((p) => (p.s !== seat ? p : {
-        ...p, fr: msg.fr || '', ti: msg.ti || '', nm: msg.nm || '', lv: msg.lv || 1,
+        ...p,
+        fr: msg.fr || '',
+        ti: msg.ti || '',
+        nm: msg.nm || '',
+        bk: msg.bk || '',
+        ft: msg.ft || '',
+        lv: msg.lv || 1,
       }));
       broadcastLobby();
       if (state.myView) renderGame(); else renderHostLobby();
@@ -742,6 +759,8 @@ function onGuestMessage(key, msg) {
         fr: msg.fr || '',
         ti: msg.ti || '',
         nm: msg.nm || '',
+        bk: msg.bk || '',
+        ft: msg.ft || '',
         lv: msg.lv || 1,
       }].sort((a, b) => a.s - b.s);
       state.net.send(key, { t: 'welcome', ok: true, s: seat });
@@ -1340,16 +1359,49 @@ function revealedStrip(cards) {
     .map((c) => `<div class="mini">${cardFace(c)}</div>`).join('')}</div>`;
 }
 
+/**
+ * Hands the cloth over to whoever the table is now waiting on.
+ *
+ * Two layers live at once during a hand-over: the new one fades in over the old, and the
+ * old is dropped once it is gone. A hard cut mid-game reads as a glitch; anything slower
+ * than a couple of hundred milliseconds is something you wait for.
+ */
+function setFelt(felt) {
+  if (feltShown === felt.id) return;
+  feltShown = felt.id;
+  const stack = $('felt-layers');
+  const layer = document.createElement('div');
+  layer.className = `felt${felt.motion !== 'NONE' ? ` m-${felt.motion}` : ''}`;
+  layer.style.background =
+    `radial-gradient(circle at 50% 38%, ${felt.a}, ${felt.b} 45%, ${felt.c})`;
+  if (felt.motion === 'SHEEN') {
+    const gleam = document.createElement('div');
+    gleam.className = 'gleam';
+    gleam.style.background = `linear-gradient(90deg, transparent, ${felt.a}8c, transparent)`;
+    layer.appendChild(gleam);
+  }
+  stack.appendChild(layer);
+  // Forcing a reflow rather than waiting for a frame: the browser needs to have seen the
+  // "off" state for the transition to run, and requestAnimationFrame is throttled when
+  // the tab is in the background — which would leave the table with no cloth at all.
+  void layer.offsetWidth;
+  layer.classList.add('on');
+  stack.querySelectorAll('.felt').forEach((gone) => {
+    if (gone === layer) return;
+    gone.classList.remove('on');
+    setTimeout(() => gone.remove(), 260);
+  });
+}
+
 function renderGame() {
   const v = state.myView;
   if (!v) return;
   renderSocial();
 
-  // ---- my own table: the cloth and the deck I chose, nobody else's
-  const felt = wornOf(state.profile, 'FELT');
-  $('screen-game').style.background =
-    `radial-gradient(circle at 50% 38%, ${felt.a}, ${felt.b} 45%, ${felt.c})`;
-  const back = wornOf(state.profile, 'BACK');
+  // ---- the table belongs to whoever it is waiting on: their cloth, their deck
+  const owner = playerAt(v.ts);
+  setFelt(feltOf(owner));
+  const back = backOf(owner);
 
   // ---- rivals
   const single = v.ri.length === 1 ? v.ri[0] : null;
@@ -1398,7 +1450,9 @@ function renderGame() {
   const faceUp = (shown?.rv ?? []).slice(0, total);
   const backs = total - faceUp.length;
   $('rival-fan').innerHTML =
-    Array.from({ length: backs }, () => `<div class="card">${cardBack(back)}</div>`).join('')
+    // A hand is drawn with its owner's back, not the table's: those are their cards, and
+    // it is the clearest way to see what somebody else unlocked.
+    Array.from({ length: backs }, () => `<div class="card">${cardBack(backOf(playerAt(shown?.s)))}</div>`).join('')
     + faceUp.map((c) => `<div class="card">${cardFace(c)}</div>`).join('');
 
   // ---- deck and discard

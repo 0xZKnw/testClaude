@@ -32,7 +32,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.zknw.unoduo.progress.Cosmetic
 import com.zknw.unoduo.progress.CosmeticKind
 import com.zknw.unoduo.progress.Cosmetics
+import com.zknw.unoduo.progress.Motion
 import com.zknw.unoduo.ui.theme.Palette
 
 /**
@@ -56,17 +65,56 @@ private val PANEL_SHAPE = RoundedCornerShape(22.dp)
 private const val INK_DEPTH = 5
 
 /**
- * The table. [felt] is the unlocked cloth the player picked; left out, it is the one
- * everybody starts on.
+ * The table.
+ *
+ * [felt] is whoever's cloth the table currently belongs to. It changes hands with the
+ * turn, so it is crossfaded rather than swapped: a hard cut mid-game reads as a glitch,
+ * and anything slower than a couple of hundred milliseconds would be something you wait
+ * for. Only the cloth crossfades — the cards on top never move.
  */
 @Composable
 fun TableBackground(
     felt: Cosmetic = Cosmetics.defaultOf(CosmeticKind.FELT),
     content: @Composable () -> Unit
 ) {
+    Box(Modifier.fillMaxSize().background(Palette.FeltDark)) {
+        Crossfade(
+            targetState = felt,
+            animationSpec = tween(FELT_SWAP_MS),
+            label = "felt"
+        ) { cloth ->
+            FeltLayer(cloth)
+        }
+        Box(Modifier.safeArea()) { content() }
+    }
+}
+
+/** Fast enough not to be a wait, slow enough not to be a flicker. */
+private const val FELT_SWAP_MS = 220
+
+@Composable
+private fun FeltLayer(felt: Cosmetic) {
+    // A slow transform on one static gradient, never a redrawn brush: the cloth covers
+    // the whole screen, and repainting that every frame is how a card game starts
+    // draining a battery.
+    val beat = feltMotion(felt.motion)
     Box(
         Modifier
             .fillMaxSize()
+            .graphicsLayer {
+                when (felt.motion) {
+                    Motion.PULSE -> {
+                        val scale = 1f + 0.10f * beat
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    Motion.DRIFT -> {
+                        translationX = (beat - 0.5f) * size.width * 0.16f
+                        translationY = (beat - 0.5f) * size.height * 0.10f
+                    }
+                    else -> Unit
+                }
+            }
             .background(Color(felt.b))
             .background(
                 Brush.radialGradient(
@@ -75,8 +123,45 @@ fun TableBackground(
                 )
             )
     ) {
-        Box(Modifier.safeArea()) { content() }
+        if (felt.motion == Motion.SHEEN) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { translationX = (beat * 2.4f - 1.2f) * size.width }
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                Color(felt.a).copy(alpha = 0.55f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+        }
     }
+}
+
+/** One slow clock per kind of movement. A still cloth starts none at all. */
+@Composable
+private fun feltMotion(motion: Motion): Float {
+    if (motion == Motion.NONE) return 0f
+    val clock = rememberInfiniteTransition(label = "felt")
+    val duration = when (motion) {
+        Motion.SHEEN -> 7000
+        Motion.PULSE -> 5200
+        else -> 9000
+    }
+    val value by clock.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(duration, easing = LinearEasing),
+            repeatMode = if (motion == Motion.SHEEN) RepeatMode.Restart else RepeatMode.Reverse
+        ),
+        label = "beat"
+    )
+    return value
 }
 
 @Composable

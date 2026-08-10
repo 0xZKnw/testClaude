@@ -20,17 +20,17 @@ export const KINDS = {
 export const KIND_ORDER = ['FRAME', 'BACK', 'FELT', 'TITLE', 'NAME', 'STICKER'];
 
 const frame = (id, name, level, style, a, b = '', c = '') =>
-  ({ id: `fr.${id}`, kind: 'FRAME', name, level, a, b, c, style, text: '' });
-const back = (id, name, level, top, bottom, oval) =>
-  ({ id: `bk.${id}`, kind: 'BACK', name, level, a: top, b: bottom, c: oval, style: 'SOLID', text: '' });
-const felt = (id, name, level, light, mid, dark) =>
-  ({ id: `ft.${id}`, kind: 'FELT', name, level, a: light, b: mid, c: dark, style: 'SOLID', text: '' });
+  ({ id: `fr.${id}`, kind: 'FRAME', name, level, a, b, c, style, motion: 'NONE', text: '' });
+const back = (id, name, level, top, bottom, oval, motion = 'NONE') =>
+  ({ id: `bk.${id}`, kind: 'BACK', name, level, a: top, b: bottom, c: oval, style: 'SOLID', motion, text: '' });
+const felt = (id, name, level, light, mid, dark, motion = 'NONE') =>
+  ({ id: `ft.${id}`, kind: 'FELT', name, level, a: light, b: mid, c: dark, style: 'SOLID', motion, text: '' });
 const title = (id, name, level) =>
-  ({ id: `ti.${id}`, kind: 'TITLE', name, level, a: '', b: '', c: '', style: 'SOLID', text: '' });
+  ({ id: `ti.${id}`, kind: 'TITLE', name, level, a: '', b: '', c: '', style: 'SOLID', motion: 'NONE', text: '' });
 const named = (id, name, level, a, b = '', c = '') =>
-  ({ id: `nm.${id}`, kind: 'NAME', name, level, a, b, c, style: 'SOLID', text: '' });
+  ({ id: `nm.${id}`, kind: 'NAME', name, level, a, b, c, style: 'SOLID', motion: 'NONE', text: '' });
 const sticker = (id, name, level, text) =>
-  ({ id: `st.${id}`, kind: 'STICKER', name, level, a: '', b: '', c: '', style: 'SOLID', text });
+  ({ id: `st.${id}`, kind: 'STICKER', name, level, a: '', b: '', c: '', style: 'SOLID', motion: 'NONE', text });
 
 export const FRAMES = [
   frame('encre', 'Encre', 1, 'SOLID', '#3b475d'),
@@ -74,16 +74,16 @@ export const BACKS = [
   back('violine', 'Violine', 28, '#382357', '#190f28', '#7a5cf0'),
   back('reglisse', 'Réglisse', 34, '#1a1a1e', '#07070a', '#f3f6fb'),
   back('sable', 'Sable', 40, '#5c4b2e', '#2a2113', '#ffc21a'),
-  back('menthe', 'Menthe glaciale', 46, '#17423c', '#091e1b', '#2ef2c4'),
-  back('cerise', 'Cerise noire', 52, '#3e0e1e', '#1b040c', '#f25da8'),
-  back('cuivre', 'Cuivre chaud', 57, '#52341a', '#24160a', '#c87137'),
-  back('nuit', 'Bleu de nuit', 63, '#17203d', '#070b1a', '#6e8cff'),
-  back('poudre', 'Rose poudré', 68, '#54293d', '#25101b', '#f25da8'),
-  back('vertdegris', 'Vert-de-gris', 73, '#2a423b', '#121d1a', '#19b79b'),
-  back('pourpre', 'Pourpre royal', 80, '#421338', '#1d0718', '#ffc531'),
-  back('orblanc', 'Or blanc', 85, '#3b3f49', '#171a20', '#d8e0ec'),
-  back('retro', 'Néon rétro', 92, '#201242', '#0b0620', '#2ef2c4'),
-  back('centfaces', 'Cent faces', 98, '#4a3a12', '#14161d', '#ffc531'),
+  back('menthe', 'Menthe glaciale', 46, '#17423c', '#091e1b', '#2ef2c4', 'SHEEN'),
+  back('cerise', 'Cerise noire', 52, '#3e0e1e', '#1b040c', '#f25da8', 'PULSE'),
+  back('cuivre', 'Cuivre chaud', 57, '#52341a', '#24160a', '#c87137', 'SHEEN'),
+  back('nuit', 'Bleu de nuit', 63, '#17203d', '#070b1a', '#6e8cff', 'DRIFT'),
+  back('poudre', 'Rose poudré', 68, '#54293d', '#25101b', '#f25da8', 'PULSE'),
+  back('vertdegris', 'Vert-de-gris', 73, '#2a423b', '#121d1a', '#19b79b', 'DRIFT'),
+  back('pourpre', 'Pourpre royal', 80, '#421338', '#1d0718', '#ffc531', 'SHEEN'),
+  back('orblanc', 'Or blanc', 85, '#3b3f49', '#171a20', '#d8e0ec', 'SHEEN'),
+  back('retro', 'Néon rétro', 92, '#201242', '#0b0620', '#2ef2c4', 'DRIFT'),
+  back('centfaces', 'Cent faces', 98, '#4a3a12', '#14161d', '#ffc531', 'SHEEN'),
 ];
 
 export const FELTS = [
@@ -96,13 +96,13 @@ export const FELTS = [
   felt('profonde', 'Forêt profonde', 35, '#1e4231', '#0f2519', '#040d08'),
   felt('sable', 'Sable chaud', 41, '#54452c', '#2e2617', '#120e07'),
   felt('cuivre', 'Cuivre', 47, '#5a3a22', '#301d11', '#130a05'),
-  felt('abysse', 'Abysse', 54, '#16323a', '#0a1b21', '#02080b'),
-  felt('braise', 'Braise', 60, '#5e2e18', '#33170b', '#140803'),
-  felt('jade', 'Jade', 67, '#1d4a45', '#0f2926', '#040f0e'),
-  felt('nebuleuse', 'Nébuleuse', 75, '#3a2660', '#1c1236', '#070414'),
-  felt('crepuscule', 'Crépuscule', 84, '#5a3352', '#2e1a2c', '#120810'),
-  felt('obsidienne', 'Obsidienne', 93, '#262a33', '#12141a', '#030406'),
-  felt('cercle', 'Cercle des cent', 99, '#4c3e18', '#231c0b', '#0a0803'),
+  felt('abysse', 'Abysse', 54, '#16323a', '#0a1b21', '#02080b', 'DRIFT'),
+  felt('braise', 'Braise', 60, '#5e2e18', '#33170b', '#140803', 'PULSE'),
+  felt('jade', 'Jade', 67, '#1d4a45', '#0f2926', '#040f0e', 'SHEEN'),
+  felt('nebuleuse', 'Nébuleuse', 75, '#3a2660', '#1c1236', '#070414', 'DRIFT'),
+  felt('crepuscule', 'Crépuscule', 84, '#5a3352', '#2e1a2c', '#120810', 'PULSE'),
+  felt('obsidienne', 'Obsidienne', 93, '#262a33', '#12141a', '#030406', 'SHEEN'),
+  felt('cercle', 'Cercle des cent', 99, '#4c3e18', '#231c0b', '#0a0803', 'DRIFT'),
 ];
 
 export const TITLES = [

@@ -253,7 +253,14 @@ export function cardFace(card, { dimmed = false } = {}) {
  */
 export function cardBack(skin = DEFAULT_BACK) {
   const gid = `gback-${skin.id.replace(/[^a-z0-9]/gi, '')}`;
-  return `<svg class="card-svg" viewBox="0 0 ${CARD_W} ${CARD_H}" xmlns="http://www.w3.org/2000/svg">
+  // The movement rides on top as a plain div, not inside the drawing: a CSS transform on
+  // one extra layer costs nothing, while animating the SVG would repaint every card on
+  // every frame — and a dozen backs are on screen at once.
+  const motion = skin.motion && skin.motion !== 'NONE'
+    ? `<div class="m-${skin.motion}"${skin.motion === 'DRIFT'
+      ? ` style="background:linear-gradient(${skin.c}33, transparent)"` : ''}></div>`
+    : '';
+  return `${motion}<svg class="card-svg" viewBox="0 0 ${CARD_W} ${CARD_H}" xmlns="http://www.w3.org/2000/svg">
     <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${skin.a}"/><stop offset="1" stop-color="${skin.b}"/>
     </linearGradient></defs>
@@ -261,12 +268,17 @@ export function cardBack(skin = DEFAULT_BACK) {
     <rect x="3.5" y="3.5" width="${CARD_W - 7}" height="${CARD_H - 7}" rx="11" fill="${PALETTE.stock}"/>
     <rect x="9.7" y="9.7" width="${CARD_W - 19.4}" height="${CARD_H - 19.4}" rx="8.5" fill="url(#${gid})"/>
     <g transform="rotate(-28 ${CARD_W / 2} ${CARD_H / 2})">
+      <!-- Nested rather than combined: a CSS transform would replace the rotate
+           attribute outright, and the tilt is what makes the back read as a back. -->
+      <g class="${skin.motion === 'PULSE' ? 'm-PULSE' : ''}"
+         style="transform-origin:${CARD_W / 2}px ${CARD_H / 2}px">
       <ellipse cx="${CARD_W / 2}" cy="${CARD_H / 2}" rx="47" ry="30" fill="${PALETTE.outline}"/>
       <ellipse cx="${CARD_W / 2}" cy="${CARD_H / 2}" rx="43" ry="26" fill="${skin.c}"/>
       <text x="${CARD_W / 2}" y="${CARD_H / 2}" text-anchor="middle" dominant-baseline="central"
         font-size="25" font-weight="900" font-family="system-ui, sans-serif"
         fill="${PALETTE.stock}" stroke="${PALETTE.outline}" stroke-width="2.2"
         stroke-linejoin="round" paint-order="stroke">UNO</text>
+      </g>
     </g>
   </svg>`;
 }

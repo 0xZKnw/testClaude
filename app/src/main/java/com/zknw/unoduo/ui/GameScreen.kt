@@ -74,6 +74,9 @@ import com.zknw.unoduo.ui.components.GhostButton
 import com.zknw.unoduo.ui.components.Panel
 import com.zknw.unoduo.ui.components.PrimaryButton
 import androidx.compose.runtime.CompositionLocalProvider
+import com.zknw.unoduo.progress.Cosmetic
+import com.zknw.unoduo.progress.CosmeticKind
+import com.zknw.unoduo.progress.Cosmetics
 import com.zknw.unoduo.ui.components.AvatarFrame
 import com.zknw.unoduo.ui.components.LocalCardBack
 import com.zknw.unoduo.ui.components.LevelBadge
@@ -136,8 +139,12 @@ fun GameScreen(
         }
     }
 
-    CompositionLocalProvider(LocalCardBack provides look.back) {
-    TableBackground(look.felt) {
+    // The table belongs to whoever it is waiting on: their cloth, their deck. Between
+    // rounds — nobody's turn — it stays with the last player to have had it, which is
+    // simply the winner.
+    val owner = view.turn
+    CompositionLocalProvider(LocalCardBack provides look.backOf(owner)) {
+    TableBackground(look.feltOf(owner)) {
         Column(Modifier.fillMaxSize()) {
 
             RivalsRow(view, photos, look, onQuit)
@@ -448,14 +455,20 @@ private fun RivalsRow(
 
         Spacer(Modifier.height(6.dp))
         if (single != null) {
-            OpponentFan(single.cards, single.revealed)
+            // A hand is drawn with its owner's back, not the table's: those are their
+            // cards, and it is the clearest way to see what somebody else unlocked.
+            OpponentFan(single.cards, single.revealed, look.backOf(single.seat))
         } else {
             // Only the player the table is waiting on gets their hand drawn — four fans
             // would not fit. The height is held even when that player is you, so the
             // table does not jump every time the turn comes back round.
             Box(Modifier.height(58.dp), contentAlignment = Alignment.Center) {
                 val onTurn = view.rivals.firstOrNull { it.seat == view.turn }
-                OpponentFan(onTurn?.cards ?: 0, onTurn?.revealed ?: emptyList())
+                OpponentFan(
+                    onTurn?.cards ?: 0,
+                    onTurn?.revealed ?: emptyList(),
+                    look.backOf(onTurn?.seat ?: view.turn)
+                )
             }
         }
     }
@@ -533,7 +546,11 @@ private fun CardCountLine(count: Int) {
  * them anywhere else would read as a second pile. Nobody else's screen shows them.
  */
 @Composable
-private fun OpponentFan(count: Int, revealed: List<Card> = emptyList()) {
+private fun OpponentFan(
+    count: Int,
+    revealed: List<Card> = emptyList(),
+    back: Cosmetic = Cosmetics.defaultOf(CosmeticKind.BACK)
+) {
     val shown = min(count, 14)
     val faceUp = revealed.take(shown)
     val backs = shown - faceUp.size
@@ -548,6 +565,7 @@ private fun OpponentFan(count: Int, revealed: List<Card> = emptyList()) {
                 val delta = index - mid
                 UnoCardBack(
                     width = width,
+                    skin = back,
                     modifier = Modifier
                         .offset(y = (abs(delta) * 1.4f).dp)
                         .graphicsLayer { rotationZ = delta * 3f },
