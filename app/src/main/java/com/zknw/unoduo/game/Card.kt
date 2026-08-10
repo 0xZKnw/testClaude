@@ -42,7 +42,13 @@ enum class CardKind {
     @SerialName("sp") SPY,
 
     /** [GameMod.DRAW_TWELVE] — the single card hidden in the draw pile. */
-    @SerialName("d12") WILD_DRAW_TWELVE
+    @SerialName("d12") WILD_DRAW_TWELVE,
+
+    /**
+     * The jackpot. Not a mod and not in any deck: roughly one round in a hundred, one of
+     * these is slipped into the draw pile and somebody eventually turns it over.
+     */
+    @SerialName("d50") WILD_DRAW_FIFTY
 }
 
 /**
@@ -64,13 +70,18 @@ data class Card(
             kind == CardKind.WILD_DRAW_EIGHT ||
             kind == CardKind.DOUBLE_PLAY ||
             kind == CardKind.SPY ||
-            kind == CardKind.WILD_DRAW_TWELVE
+            kind == CardKind.WILD_DRAW_TWELVE ||
+            kind == CardKind.WILD_DRAW_FIFTY
 
     val isPenalty: Boolean
         get() = kind == CardKind.DRAW_TWO ||
             kind == CardKind.WILD_DRAW_FOUR ||
             kind == CardKind.WILD_DRAW_EIGHT ||
-            kind == CardKind.WILD_DRAW_TWELVE
+            kind == CardKind.WILD_DRAW_TWELVE ||
+            kind == CardKind.WILD_DRAW_FIFTY
+
+    /** The one card that is worth stopping the game for. */
+    val isJackpot: Boolean get() = kind == CardKind.WILD_DRAW_FIFTY
 
     /** Short human label, used in the event feed ("+2 rouge", "8 bleu", ...). */
     fun label(): String {
@@ -92,6 +103,7 @@ data class Card(
             CardKind.DOUBLE_PLAY -> "Coup double"
             CardKind.SPY -> "Espion"
             CardKind.WILD_DRAW_TWELVE -> "+12"
+            CardKind.WILD_DRAW_FIFTY -> "+50"
         }
         return if (colorName.isEmpty()) kindName else "$kindName $colorName"
     }

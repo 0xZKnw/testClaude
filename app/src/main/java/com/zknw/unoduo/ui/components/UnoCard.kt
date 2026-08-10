@@ -206,6 +206,27 @@ private fun BoxScope.CenterMark(card: Card, width: Dp) {
                 drawWildTwelve(size, Offset.Zero, Palette.Outline)
             }
         }
+
+        CardKind.WILD_DRAW_FIFTY -> Box(box.size(width * 0.86f)) {
+            // The only card in the game that is never still.
+            val storm = rememberInfiniteTransition(label = "jackpot")
+            val beat by storm.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing)),
+                label = "beat"
+            )
+            Canvas(Modifier.fillMaxSize()) {
+                drawJackpot(size, Offset.Zero, Palette.Outline, beat)
+            }
+            OutlinedGlyphText(
+                text = "50",
+                fontSize = with(LocalDensity.current) { (width * 0.30f).toSp() },
+                fill = Palette.Stock,
+                outlineWidth = width * 0.03f,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
     }
 }
 
@@ -285,6 +306,14 @@ private fun BoxScope.CornerMark(
             // A third digit in the same box as "+8" would touch the keyline.
             fontSize = with(density) { (width * 0.165f).toSp() },
             fill = Palette.Stock,
+            outlineWidth = width * 0.022f,
+            modifier = base
+        )
+
+        CardKind.WILD_DRAW_FIFTY -> OutlinedGlyphText(
+            text = "+50",
+            fontSize = with(density) { (width * 0.165f).toSp() },
+            fill = Color(0xFFFFF3C4),
             outlineWidth = width * 0.022f,
             modifier = base
         )

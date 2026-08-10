@@ -35,21 +35,25 @@ fun main() {
 
     // The plain game first, so a diff against an older trace starts with the lines that
     // are supposed to be untouched.
+    // The jackpot passes are last, so everything above them is byte-for-byte what it
+    // was before the +50 existed — which is the claim worth being able to check.
     val modSets = listOf(
-        "" to emptySet<GameMod>(),
-        "8" to setOf(GameMod.DRAW_EIGHT),
-        "D" to setOf(GameMod.DOUBLE_PLAY),
-        "S" to setOf(GameMod.SPY),
-        "T" to setOf(GameMod.DRAW_TWELVE),
-        "X" to GameMod.entries.toSet()
+        Triple("", emptySet<GameMod>(), false),
+        Triple("8", setOf(GameMod.DRAW_EIGHT), false),
+        Triple("D", setOf(GameMod.DOUBLE_PLAY), false),
+        Triple("S", setOf(GameMod.SPY), false),
+        Triple("T", setOf(GameMod.DRAW_TWELVE), false),
+        Triple("X", GameMod.entries.toSet(), false),
+        Triple("j", emptySet(), true),
+        Triple("J", GameMod.entries.toSet(), true)
     )
 
-    for ((tag, mods) in modSets) {
+    for ((tag, mods, jackpot) in modSets) {
         for (players in 2..5) {
             for (seed in 1..30) {
                 // ---- policy A: always the lowest legal card
                 var e = UnoEngine(Random(seed.toLong()), players, mods)
-                e.startRound(seed % players)
+                e.startRound(seed % players, jackpot)
                 out.append(snapshot("A$tag$players/$seed deal", e)).append('\n')
                 var guard = 0
                 while (e.phase != Phase.GAME_OVER && guard++ < 4000) {
@@ -71,7 +75,7 @@ fun main() {
                 // ---- policy B: the bot, every level
                 val rng = Random(seed.toLong() * 31)
                 e = UnoEngine(Random(seed.toLong()), players, mods)
-                e.startRound(seed % players)
+                e.startRound(seed % players, jackpot)
                 val levels = (0 until players).map {
                     Difficulty.entries[it % Difficulty.entries.size]
                 }

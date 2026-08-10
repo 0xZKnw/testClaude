@@ -184,8 +184,52 @@ function centreMark(card) {
     case Kind.DOUBLE_PLAY: return doublePlay(cx - 5, cy - 8, 58);
     case Kind.SPY: return eyeGlyph(cx, cy, 66);
     case Kind.DRAW_TWELVE: return wildTwelve(cx, cy, 58);
+    case Kind.DRAW_FIFTY: return jackpotGlyph(cx, cy, CARD_W);
     default: return '';
   }
+}
+
+/** One jagged strike running from the rim in towards the middle. */
+function strike(cx, cy, reach, spread, degrees) {
+  const rad = ((degrees - 90) * Math.PI) / 180;
+  const nx = Math.cos(rad);
+  const ny = Math.sin(rad);
+  const px = -ny;
+  const py = nx;
+  return [[1, 0], [0.68, 0.5], [0.46, -0.35], [0.22, 0.4], [0, 0]]
+    .map(([along, side], i) => {
+      const x = cx + nx * reach * along + px * spread * side;
+      const y = cy + ny * reach * along + py * spread * side;
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
+    }).join(' ');
+}
+
+/**
+ * The +50: the fan buried under a storm.
+ *
+ * Every other card in the deck is a flat cartoon. This one deliberately breaks that — it
+ * is meant to be seen once and remembered — so it gets lightning, a lava core and a "50"
+ * the size of the card. The animation rides on CSS classes rather than SMIL, which
+ * nothing has to be told to keep running.
+ */
+function jackpotGlyph(cx, cy, w) {
+  const bolts = [0, 1, 2, 3].map((i) => `<path d="${strike(cx, cy, w * 0.6, w * 0.18, i * 90 + 45)}"
+    class="jk-bolt jk-bolt${i}" fill="none" stroke="#fff3c4" stroke-width="${w * 0.045}"
+    stroke-linecap="round" stroke-linejoin="round"/>`).join('');
+  return `<defs>
+      <radialGradient id="jk-core">
+        <stop offset="0" stop-color="#fff3c4" stop-opacity=".9"/>
+        <stop offset="0.55" stop-color="#ff5a1e" stop-opacity=".55"/>
+        <stop offset="1" stop-color="#ff5a1e" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <circle class="jk-core" cx="${cx}" cy="${cy}" r="${w * 0.62}" fill="url(#jk-core)"/>
+    ${bolts}
+    <g transform="translate(0 ${-w * 0.30})">${wildTwelve(cx, cy, 42)}</g>
+    <text x="${cx}" y="${cy + w * 0.36}" text-anchor="middle" dominant-baseline="central"
+      font-size="${w * 0.34}" font-weight="900" font-family="system-ui, sans-serif"
+      fill="#fff3c4" stroke="${PALETTE.outline}" stroke-width="${w * 0.035}"
+      stroke-linejoin="round" paint-order="stroke">50</text>`;
 }
 
 function cornerMark(card, x, y, flip) {
@@ -209,6 +253,11 @@ function cornerMark(card, x, y, flip) {
       font-family="system-ui, sans-serif" fill="${PALETTE.stock}" stroke="${PALETTE.outline}"
       stroke-width="2.2" stroke-linejoin="round" paint-order="stroke"
       transform="${rotate}">+12</text>`;
+    case Kind.DRAW_FIFTY: return `<text x="${x}" y="${y}" text-anchor="middle"
+      dominant-baseline="central" font-size="16.5" font-weight="900"
+      font-family="system-ui, sans-serif" fill="#fff3c4" stroke="${PALETTE.outline}"
+      stroke-width="2.2" stroke-linejoin="round" paint-order="stroke"
+      transform="${rotate}">+50</text>`;
     case Kind.SKIP: return `<g transform="${rotate}">${skipGlyph(x, y, 20, PALETTE.stock)}</g>`;
     case Kind.REVERSE: return `<g transform="${rotate}">${reverseGlyph(x, y, 20, PALETTE.stock)}</g>`;
     case Kind.WILD: return `<g transform="${rotate}">${wheel(x, y, 9)}</g>`;

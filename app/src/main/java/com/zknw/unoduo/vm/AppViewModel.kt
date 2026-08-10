@@ -15,6 +15,7 @@ import com.zknw.unoduo.game.MAX_PLAYERS
 import com.zknw.unoduo.game.MIN_PLAYERS
 import com.zknw.unoduo.game.ordered
 import com.zknw.unoduo.game.Phase
+import com.zknw.unoduo.game.Rules
 import com.zknw.unoduo.game.Seat
 import com.zknw.unoduo.game.UnoEngine
 import com.zknw.unoduo.net.BleGuest
@@ -161,6 +162,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var unlockJob: kotlinx.coroutines.Job? = null
     private var botJob: kotlinx.coroutines.Job? = null
     private val botRng = Random(SecureRandom().nextLong())
+
+    /** Only ever asked one question: is this round the one? */
+    private val luck = Random(SecureRandom().nextLong())
 
     /** Host-side seating: a Bluetooth address on one side, a seat on the other. */
     private val seatOfKey = mutableMapOf<String, Seat>()
@@ -633,7 +637,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val starter = if (firstRound) HOST_SEAT else nextStarter
         nextStarter = (starter + 1) % players.size
         rematch = mutableSetOf()
-        e.startRound(starter)
+        // Rolled here rather than inside the engine, and from a source that has nothing
+        // to do with the deal: the engine stays a pure replay of its seed, and nobody can
+        // work out from the shuffle whether tonight is the night.
+        //
+        // Genuinely one in a hundred, every round, independently. Not "every hundredth
+        // round" — that would be a schedule, and a schedule is not a surprise.
+        e.startRound(starter, jackpot = luck.nextInt(Rules.JACKPOT_ODDS) == 0)
         broadcastLobby()
         broadcast()
     }

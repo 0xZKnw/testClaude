@@ -1,6 +1,14 @@
 // The rule text, word for word from the Android app's Rules.kt — the two versions play
 // the same game, so they must also explain it the same way.
 
+/**
+ * One round in this many hides the +50, rolled fresh at the start of every round.
+ *
+ * Lives here rather than next to the code that rolls it because the odds are a rule
+ * players are told, and a number quoted in the rule text must be the number used.
+ */
+export const JACKPOT_ODDS = 100;
+
 export const RULES = [
   {
     title: 'Le jeu',
@@ -56,6 +64,17 @@ export const RULES = [
       'Rien à poser ? Touche la pioche au centre de la table.',
       'Si la carte piochée est jouable, tu choisis : la poser, ou passer ton tour.',
       "En revanche, un cumul de +2 ou +4 que tu ne peux pas contrer est encaissé automatiquement — inutile de le confirmer.",
+    ],
+  },
+  {
+    title: "La carte qui n'existe pas",
+    lines: [
+      `Environ une manche sur ${JACKPOT_ODDS}, une carte de trop est glissée au hasard dans la pioche : le +50.`,
+      `C'est du vrai hasard, retiré à chaque manche indépendamment. Ce n'est pas « toutes les ${JACKPOT_ODDS} manches » : elle peut sortir deux fois de suite, ou jamais de la soirée.`,
+      "Elle n'est jamais distribuée. Il faut tomber dessus en piochant, et tant qu'elle est en main, personne d'autre ne sait qu'elle existe.",
+      "Elle se joue comme un +4 — tu annonces une couleur — sauf qu'elle pose cinquante cartes sur la pile.",
+      "Un +2 de la couleur annoncée la renvoie quand même. Cinquante cartes, mais pour quelqu'un d'autre.",
+      "Si la pioche et la défausse réunies ne font pas cinquante cartes, la victime prend tout ce qui reste. C'est déjà largement suffisant.",
     ],
   },
   {

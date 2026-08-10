@@ -2,20 +2,23 @@ package com.zknw.unoduo.ui
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,8 +48,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -64,26 +73,26 @@ import com.zknw.unoduo.game.Penalty
 import com.zknw.unoduo.game.Phase
 import com.zknw.unoduo.game.Rival
 import com.zknw.unoduo.game.Seat
-import com.zknw.unoduo.ui.components.AvatarLook
-import com.zknw.unoduo.ui.components.ColorChip
-import com.zknw.unoduo.ui.components.InkChip
-import com.zknw.unoduo.ui.components.InkSurface
-import com.zknw.unoduo.ui.components.InkIconButton
-import com.zknw.unoduo.ui.components.PlayerAvatar
-import com.zknw.unoduo.ui.components.GhostButton
-import com.zknw.unoduo.ui.components.Panel
-import com.zknw.unoduo.ui.components.PrimaryButton
-import androidx.compose.runtime.CompositionLocalProvider
 import com.zknw.unoduo.progress.Cosmetic
 import com.zknw.unoduo.progress.CosmeticKind
 import com.zknw.unoduo.progress.Cosmetics
 import com.zknw.unoduo.ui.components.AvatarFrame
-import com.zknw.unoduo.ui.components.LocalCardBack
+import com.zknw.unoduo.ui.components.AvatarLook
+import com.zknw.unoduo.ui.components.ColorChip
+import com.zknw.unoduo.ui.components.GhostButton
+import com.zknw.unoduo.ui.components.InkChip
+import com.zknw.unoduo.ui.components.InkIconButton
+import com.zknw.unoduo.ui.components.InkSurface
 import com.zknw.unoduo.ui.components.LevelBadge
+import com.zknw.unoduo.ui.components.LocalCardBack
+import com.zknw.unoduo.ui.components.OutlinedGlyphText
+import com.zknw.unoduo.ui.components.Panel
+import com.zknw.unoduo.ui.components.PlayerAvatar
+import com.zknw.unoduo.ui.components.PrimaryButton
 import com.zknw.unoduo.ui.components.TableBackground
-import com.zknw.unoduo.ui.components.XpGainBar
 import com.zknw.unoduo.ui.components.UnoCardBack
 import com.zknw.unoduo.ui.components.UnoCardFace
+import com.zknw.unoduo.ui.components.XpGainBar
 import com.zknw.unoduo.ui.components.clickableNoRipple
 import com.zknw.unoduo.ui.theme.Palette
 import com.zknw.unoduo.vm.LevelPopup
@@ -114,7 +123,34 @@ fun GameScreen(
     var pendingWild by remember { mutableStateOf<Card?>(null) }
     var toast by remember { mutableStateOf("") }
     var penaltyHit by remember { mutableStateOf<PenaltyHit?>(null) }
+    var foundJackpot by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
+
+    // The whole table shakes when a +50 lands. Driven from here rather than from the
+    // card, because the point is that it is bigger than the card.
+    val shake = remember { Animatable(0f) }
+    val jackpotOnTop = view.top.isJackpot
+
+    // Turning it over is the moment: it is announced before anybody plays anything.
+    val holdingJackpot = view.hand.any { it.isJackpot }
+    LaunchedEffect(holdingJackpot) {
+        if (holdingJackpot) {
+            foundJackpot = true
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+    }
+
+    LaunchedEffect(jackpotOnTop, view.eventId) {
+        if (!jackpotOnTop) return@LaunchedEffect
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        // Decaying wobble rather than a single jolt: a table that rings and settles reads
+        // as impact, one that snaps back reads as a glitch.
+        repeat(9) { step ->
+            val amplitude = 26f * (1f - step / 9f)
+            shake.animateTo(if (step % 2 == 0) amplitude else -amplitude, tween(46))
+        }
+        shake.animateTo(0f, tween(70))
+    }
 
     LaunchedEffect(view.eventId) {
         if (view.event.isNotEmpty()) toast = view.event
@@ -142,7 +178,14 @@ fun GameScreen(
     val owner = view.turn
     CompositionLocalProvider(LocalCardBack provides look.backOf(owner)) {
     TableBackground(look.feltOf(owner)) {
-        Column(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = shake.value
+                    translationY = shake.value * 0.35f
+                }
+        ) {
 
             RivalsRow(view, photos, look, onQuit)
 
@@ -157,13 +200,14 @@ fun GameScreen(
                 )
 
                 if (social.enabled) {
-                    // Bottom-right, clear of the pile: folded away it is one button, and
-                    // when it opens it grows upwards along the edge rather than over the
-                    // cards you are trying to play.
+                    // Back at deck height on the right edge, where it started: it was
+                    // pushed into the corner to get out of the chat's way, and the chat
+                    // is gone. Folded away it is one button, so it no longer crowds the
+                    // pile the way six of them did.
                     StickerRail(
                         modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(end = 6.dp, bottom = 38.dp),
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 6.dp),
                         unlocked = look.stickers
                     ) { index ->
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -171,12 +215,7 @@ fun GameScreen(
                     }
                 }
 
-                EventToast(
-                    toast,
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(end = 56.dp)
-                )
+                EventToast(toast, Modifier.align(Alignment.BottomCenter))
             }
 
             TurnBanner(view)
@@ -228,10 +267,140 @@ fun GameScreen(
 
         penaltyHit?.let { PenaltyOverlay(it) }
 
+        if (foundJackpot) {
+            JackpotOverlay { foundJackpot = false }
+        }
+
         if (view.phase == Phase.GAME_OVER) {
             GameOverOverlay(view, lastXp, xpBefore, levelUp, onRematch, onQuit, onDismissLevelUp)
         }
     }
+    }
+}
+
+/**
+ * The moment somebody turns over the +50.
+ *
+ * Deliberately the loudest thing in the game: it happens to roughly one round in a
+ * hundred, so nobody is going to get tired of it, and a rare event that arrives quietly
+ * may as well not be rare. Lightning strikes in from the rim, embers rise, the number
+ * lands with a thump. It waits for a tap — you are supposed to look at it.
+ */
+@Composable
+private fun JackpotOverlay(onDismiss: () -> Unit) {
+    val land = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        land.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 130f))
+    }
+    val storm = rememberInfiniteTransition(label = "storm")
+    val beat by storm.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing)),
+        label = "beat"
+    )
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF08040A))
+            .clickableNoRipple { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val middle = Offset(size.width / 2f, size.height / 2f)
+            val reach = size.minDimension * 0.62f
+
+            // Lava welling up from the bottom.
+            drawRect(
+                brush = Brush.verticalGradient(
+                    0.55f to Color(0x00000000),
+                    0.86f to Color(0xFF7A1B06).copy(alpha = 0.55f + 0.2f * beat),
+                    1.00f to Color(0xFFFF5A1E).copy(alpha = 0.75f)
+                )
+            )
+
+            // A hot core behind the number.
+            drawCircle(
+                brush = Brush.radialGradient(
+                    listOf(
+                        Color(0xFFFFF3C4).copy(alpha = 0.5f * land.value),
+                        Color(0xFFFF5A1E).copy(alpha = 0.28f * land.value),
+                        Color(0x00000000)
+                    ),
+                    center = middle,
+                    radius = reach * (0.9f + 0.1f * beat)
+                ),
+                radius = reach * 1.2f,
+                center = middle
+            )
+
+            // Eight bolts, half of them lit at a time, marching round.
+            repeat(8) { i ->
+                val lit = ((beat * 8f).toInt() + i) % 3 == 0
+                drawPath(
+                    strikePath(middle, reach * (1.5f + 0.1f * land.value), reach * 0.2f, i * 45f),
+                    color = if (lit) Color(0xFFFFF3C4) else Color(0xFFFFC531).copy(alpha = 0.3f),
+                    style = Stroke(
+                        width = size.minDimension * 0.012f,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round
+                    )
+                )
+            }
+        }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.graphicsLayer {
+                val t = land.value
+                scaleX = 0.3f + 0.7f * t
+                scaleY = 0.3f + 0.7f * t
+                alpha = t.coerceIn(0f, 1f)
+                rotationZ = (1f - t) * -18f
+            }
+        ) {
+            OutlinedGlyphText(
+                text = "+50",
+                fontSize = 96.sp,
+                fill = Color(0xFFFFF3C4),
+                outlineWidth = 7.dp
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "UNE CARTE SUR CENT PARTIES",
+                color = Palette.Gold,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Elle est à toi. Choisis bien ta victime.",
+                color = Palette.Text,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(26.dp))
+            InkChip("Touche pour continuer", color = Palette.SlateHigh)
+        }
+    }
+}
+
+/** One jagged strike running from the rim in towards the middle. */
+private fun strikePath(centre: Offset, reach: Float, spread: Float, degrees: Float): Path {
+    val rad = ((degrees - 90f) * Math.PI / 180f).toFloat()
+    val nx = kotlin.math.cos(rad)
+    val ny = kotlin.math.sin(rad)
+    val px = -ny
+    val py = nx
+    val steps = listOf(1.0f to 0.0f, 0.74f to 0.55f, 0.52f to -0.4f, 0.28f to 0.45f, 0.06f to 0f)
+    return Path().apply {
+        steps.forEachIndexed { index, (along, side) ->
+            val x = centre.x + nx * reach * along + px * spread * side
+            val y = centre.y + ny * reach * along + py * spread * side
+            if (index == 0) moveTo(x, y) else lineTo(x, y)
+        }
     }
 }
 

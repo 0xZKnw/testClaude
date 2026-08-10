@@ -20,6 +20,8 @@ data class RoundStats(
     @SerialName("d4") val drawFoursPlayed: Int = 0,
     @SerialName("e8") val drawEightsPlayed: Int = 0,
     @SerialName("e12") val drawTwelvesPlayed: Int = 0,
+    /** How many +50s you have ever laid. For almost everybody this stays at zero. */
+    @SerialName("e50") val jackpotsPlayed: Int = 0,
     @SerialName("wc") val wildsPlayed: Int = 0,
     @SerialName("dp") val doublePlaysPlayed: Int = 0,
     @SerialName("sp") val spiesPlayed: Int = 0,
@@ -35,7 +37,8 @@ data class RoundStats(
 ) {
     /** Every attacking card, of whatever size. */
     val penaltiesPlayed: Int
-        get() = drawTwosPlayed + drawFoursPlayed + drawEightsPlayed + drawTwelvesPlayed
+        get() = drawTwosPlayed + drawFoursPlayed + drawEightsPlayed + drawTwelvesPlayed +
+            jackpotsPlayed
 
     operator fun plus(other: RoundStats) = RoundStats(
         cardsPlayed = cardsPlayed + other.cardsPlayed,
@@ -45,6 +48,7 @@ data class RoundStats(
         drawFoursPlayed = drawFoursPlayed + other.drawFoursPlayed,
         drawEightsPlayed = drawEightsPlayed + other.drawEightsPlayed,
         drawTwelvesPlayed = drawTwelvesPlayed + other.drawTwelvesPlayed,
+        jackpotsPlayed = jackpotsPlayed + other.jackpotsPlayed,
         wildsPlayed = wildsPlayed + other.wildsPlayed,
         doublePlaysPlayed = doublePlaysPlayed + other.doublePlaysPlayed,
         spiesPlayed = spiesPlayed + other.spiesPlayed,
@@ -68,6 +72,7 @@ internal class StatsBuilder {
     var drawFoursPlayed = 0
     var drawEightsPlayed = 0
     var drawTwelvesPlayed = 0
+    var jackpotsPlayed = 0
     var wildsPlayed = 0
     var doublePlaysPlayed = 0
     var spiesPlayed = 0
@@ -87,6 +92,7 @@ internal class StatsBuilder {
         drawFoursPlayed = 0
         drawEightsPlayed = 0
         drawTwelvesPlayed = 0
+        jackpotsPlayed = 0
         wildsPlayed = 0
         doublePlaysPlayed = 0
         spiesPlayed = 0
@@ -107,6 +113,7 @@ internal class StatsBuilder {
         drawFoursPlayed = drawFoursPlayed,
         drawEightsPlayed = drawEightsPlayed,
         drawTwelvesPlayed = drawTwelvesPlayed,
+        jackpotsPlayed = jackpotsPlayed,
         wildsPlayed = wildsPlayed,
         doublePlaysPlayed = doublePlaysPlayed,
         spiesPlayed = spiesPlayed,

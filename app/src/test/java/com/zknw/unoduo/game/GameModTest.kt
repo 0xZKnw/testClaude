@@ -740,4 +740,107 @@ class GameModTest {
         assertEquals(2, s.penaltiesPlayed)
         assertEquals(20, s.biggestStackDealt)
     }
+
+    // -------------------------------------------------------------- le jackpot
+
+    @Test
+    fun `a normal round deals exactly what it always dealt`() {
+        // The whole reason the jackpot is a parameter and not a dice roll inside the
+        // engine: with it off, not one card moves and not one number changes.
+        for (seed in 1..40) {
+            val plain = engine(seed = seed.toLong())
+            val same = engine(seed = seed.toLong())
+            plain.startRound(0)
+            same.startRound(0, jackpot = false)
+            assertEquals(plain.pileForTest(), same.pileForTest())
+            assertEquals(plain.handOf(HOST), same.handOf(HOST))
+            assertEquals(plain.handOf(GUEST), same.handOf(GUEST))
+        }
+    }
+
+    @Test
+    fun `the jackpot is never dealt, and there is only ever one`() {
+        for (seed in 1..40) {
+            val e = engine(seed = seed.toLong(), mods = every)
+            e.startRound(seed % 2, jackpot = true)
+            val inHands = (0..1).flatMap { e.handOf(it) }.count { it.isJackpot }
+            assertEquals("graine $seed", 0, inHands)
+            assertEquals("graine $seed", 1, e.pileForTest().count { it.isJackpot })
+            // Its id sits past every real card, so nothing can collide with it.
+            val others = (e.pileForTest() + (0..1).flatMap { e.handOf(it) })
+                .filterNot { it.isJackpot }
+            assertTrue("graine $seed", others.all { it.id < 9_000 })
+        }
+    }
+
+    @Test
+    fun `fifty cards actually change hands`() {
+        val e = engine()
+        e.forceState(
+            playerHands = listOf(
+                listOf(card(9_000, CardColor.WILD, CardKind.WILD_DRAW_FIFTY)) + filler(2, 700),
+                filler(3, 800)
+            ),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = HOST,
+            deck = filler(80, 100)
+        )
+        assertTrue(e.playCard(HOST, 9_000, CardColor.BLUE))
+        assertEquals(50, e.viewFor(GUEST).pendingDraw)
+
+        e.autoAdvance()
+        assertEquals(53, e.handOf(GUEST).size)
+        assertEquals(50, e.statsOf(GUEST).penaltyCardsTaken)
+        assertEquals(1, e.statsOf(HOST).jackpotsPlayed)
+        // A +50 costs the turn as well, exactly like the +4 family it belongs to.
+        assertEquals(HOST, e.turn)
+    }
+
+    @Test
+    fun `a plus two of the announced colour still sends the jackpot on`() {
+        // The funniest thing that can happen to somebody holding it, and it falls out of
+        // the house rules rather than being written specially.
+        val e = engine()
+        e.forceState(
+            playerHands = listOf(
+                listOf(card(9_000, CardColor.WILD, CardKind.WILD_DRAW_FIFTY)) + filler(2, 700),
+                listOf(card(1, CardColor.BLUE, CardKind.DRAW_TWO)) + filler(2, 800)
+            ),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = HOST,
+            deck = filler(80, 100)
+        )
+        assertTrue(e.playCard(HOST, 9_000, CardColor.BLUE))
+        assertTrue(e.legalCardIds(GUEST).contains(1))
+        assertTrue(e.playCard(GUEST, 1, null))
+        assertEquals(52, e.viewFor(HOST).pendingDraw)
+        e.autoAdvance()
+        // The one who threw it eats it.
+        assertEquals(54, e.handOf(HOST).size)
+    }
+
+    @Test
+    fun `a jackpot bigger than the deck takes what there is instead of hanging`() {
+        val e = engine()
+        e.forceState(
+            playerHands = listOf(
+                // A spare card, or laying the +50 would empty the hand and win the round
+                // before anybody had to pick anything up.
+                listOf(card(9_000, CardColor.WILD, CardKind.WILD_DRAW_FIFTY)) + filler(1, 700),
+                filler(2, 800)
+            ),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = HOST,
+            deck = filler(6, 100)
+        )
+        assertTrue(e.playCard(HOST, 9_000, CardColor.BLUE))
+        e.autoAdvance()
+        // Six in the pile, one recycled from the discard: it takes what exists and the
+        // round carries on rather than looping for cards that are not there.
+        assertTrue("main=${e.handOf(GUEST).size}", e.handOf(GUEST).size in 8..10)
+        assertEquals(Phase.PLAYING, e.phase)
+    }
 }

@@ -83,6 +83,9 @@ function score(card, v, sharp) {
     // There is one in the whole deck: worth holding, worth more still on somebody who is
     // about to go out.
     case Kind.DRAW_TWELVE: value = threatened ? 120 : 10; break;
+    // Fifty cards. There is no situation in which sitting on this beats playing it, and
+    // the bot should not pretend otherwise.
+    case Kind.DRAW_FIFTY: value = 400; break;
     // Two cards gone for the price of one, and the colour is yours to pick.
     case Kind.DOUBLE_PLAY: value = v.h.length > 2 ? 60 : 4; break;
     // A Joker that also buys information: a little more than a bare one, no more.

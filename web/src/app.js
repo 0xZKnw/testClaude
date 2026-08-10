@@ -7,12 +7,12 @@
 
 import {
   UnoEngine, Phase, Color, Kind, PLAYABLE_COLORS, HOST_SEAT, MIN_PLAYERS, MAX_PLAYERS,
-  view as V, isWild, Mod, MOD_ORDER, MOD_INFO, orderedMods,
+  view as V, isWild, isJackpot, Mod, MOD_ORDER, MOD_INFO, orderedMods,
 } from './engine.js';
 import { decide, DIFFICULTY_ORDER, DIFFICULTY_INFO } from './bot.js';
 import { cardFace, cardBack, colorChip, motifHtml, PALETTE } from './cards.js';
 import { WebRtcHost, WebRtcGuest } from './net.js';
-import { RULES } from './rules.js';
+import { RULES, JACKPOT_ODDS } from './rules.js';
 import {
   loadProfile, saveProfile, recordRound, resetStats, AVATAR_COLORS, shrinkPhoto,
   winRate, perRound, drawRate, aggression, averageLoss, closingRate,
@@ -408,6 +408,8 @@ function renderStats(s) {
     ['+4 posés', s.drawFoursPlayed],
     ['+8 posés', s.drawEightsPlayed],
     ['+12 posés', s.drawTwelvesPlayed],
+    // Almost everybody will read a zero here, which is the point of it.
+    ['+50 posés', s.jackpotsPlayed, PALETTE.gold],
     ['Contres réussis', s.countersPlayed],
     ['Cartes encaissées', s.penaltyCardsTaken],
     ['Encaissées par manche', perRound(s, s.penaltyCardsTaken)],
@@ -589,7 +591,13 @@ function startRound(firstRound) {
   const starter = firstRound ? HOST_SEAT : (state.nextStarter ?? 1);
   state.nextStarter = (starter + 1) % players.length;
   state.rematch = new Set();
-  e.startRound(starter);
+  // Rolled here rather than inside the engine, and from a source that has nothing to do
+  // with the deal: the engine stays a pure replay of its seed, and nobody can work out
+  // from the shuffle whether tonight is the night.
+  //
+  // Genuinely one in a hundred, every round, independently. Not "every hundredth round"
+  // — that would be a schedule, and a schedule is not a surprise.
+  e.startRound(starter, Math.floor(Math.random() * JACKPOT_ODDS) === 0);
   broadcast();
 }
 
@@ -1416,10 +1424,49 @@ function colorName(c) {
 
 let lastEventId = -1;
 let lastPenaltyRound = -1;
+let sawJackpot = false;
+let quakedOn = -1;
+
+/** The moment somebody turns it over. It waits for a tap — you are meant to look. */
+function revealJackpot() {
+  $('jackpot').classList.add('on');
+  // Restart the landing animation even if the overlay was shown earlier this session.
+  const huge = $('jackpot').querySelector('.huge');
+  huge.style.animation = 'none';
+  void huge.offsetWidth;
+  huge.style.animation = '';
+}
+$('jackpot').onclick = () => $('jackpot').classList.remove('on');
 
 function reactToEvent(v) {
-  if (!v || v.ei === lastEventId) return;
+  if (!v) return;
+
+  // Turning it over is the moment: announced before anybody plays anything, and checked
+  // outside the event guard because finding it is not an event, it is a state.
+  const holding = (v.h ?? []).some(isJackpot);
+  if (holding && !sawJackpot) {
+    sawJackpot = true;
+    navigator.vibrate?.([0, 90, 60, 140]);
+    revealJackpot();
+  } else if (!holding) {
+    sawJackpot = false;
+  }
+
+  if (v.ei === lastEventId) return;
   lastEventId = v.ei;
+
+  // The whole table shakes when a +50 lands. The point is that it is bigger than the
+  // card, so it is the screen that moves rather than the pile.
+  if (isJackpot(v.t) && quakedOn !== v.ei) {
+    quakedOn = v.ei;
+    const table = $('screen-game');
+    table.classList.remove('quake');
+    void table.offsetWidth;
+    table.classList.add('quake');
+    navigator.vibrate?.([0, 40, 40, 40, 40, 90]);
+    setTimeout(() => table.classList.remove('quake'), 500);
+  }
+
   if (v.ev) {
     $('toast').textContent = v.ev;
     $('toast').classList.remove('hidden');

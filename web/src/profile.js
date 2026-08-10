@@ -28,6 +28,7 @@ const emptyStats = () => ({
   fastestWin: 0, worstHand: 0,
   cardsPlayed: 0, cardsDrawn: 0, numbersPlayed: 0,
   drawTwosPlayed: 0, drawFoursPlayed: 0, drawEightsPlayed: 0, drawTwelvesPlayed: 0,
+  jackpotsPlayed: 0,
   wildsPlayed: 0, doublePlaysPlayed: 0, spiesPlayed: 0, skipsPlayed: 0,
   countersPlayed: 0, penaltyCardsTaken: 0,
   biggestStackTaken: 0, biggestStackDealt: 0,
@@ -36,7 +37,8 @@ const emptyStats = () => ({
 
 /** Every attacking card laid, of whatever size. */
 export const penaltiesPlayed = (s) =>
-  s.drawTwosPlayed + s.drawFoursPlayed + s.drawEightsPlayed + s.drawTwelvesPlayed;
+  s.drawTwosPlayed + s.drawFoursPlayed + s.drawEightsPlayed + s.drawTwelvesPlayed
+  + s.jackpotsPlayed;
 
 /** Whole percent, 0 when nothing has been played yet. */
 export const winRate = (s) =>
@@ -165,6 +167,7 @@ export function recordRound(won, roundStats) {
   s.drawFoursPlayed += r.d4 || 0;
   s.drawEightsPlayed += r.e8 || 0;
   s.drawTwelvesPlayed += r.e12 || 0;
+  s.jackpotsPlayed += r.e50 || 0;
   s.wildsPlayed += r.wc || 0;
   s.doublePlaysPlayed += r.dp || 0;
   s.spiesPlayed += r.sp || 0;

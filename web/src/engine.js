@@ -20,8 +20,21 @@ export const Kind = {
   // Only ever in the deck when the matching mod is on. Appended, like Kotlin's enum, so
   // a standard game sorts exactly as it always did.
   DRAW_EIGHT: 'd8', DOUBLE_PLAY: 'x2', SPY: 'sp', DRAW_TWELVE: 'd12',
+  /**
+   * The jackpot. Not a mod and not in any deck: roughly one round in a hundred, one of
+   * these is slipped into the draw pile and somebody eventually turns it over.
+   */
+  DRAW_FIFTY: 'd50',
 };
-const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7, sp: 8, d12: 9 };
+const KIND_ORDER = {
+  n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7, sp: 8, d12: 9, d50: 10,
+};
+
+/**
+ * The jackpot's card id. Past every real card in the fattest possible deck, so it can
+ * never collide with one whatever mods are on.
+ */
+export const JACKPOT_ID = 9000;
 
 /** The optional rules a host can switch on. Order matters: it numbers the extra cards. */
 export const Mod = {
@@ -71,9 +84,13 @@ export const MAX_PLAYERS = 5;
 
 export const isWild = (card) => card.k === Kind.WILD || card.k === Kind.DRAW_FOUR
   || card.k === Kind.DRAW_EIGHT || card.k === Kind.DOUBLE_PLAY || card.k === Kind.SPY
-  || card.k === Kind.DRAW_TWELVE;
+  || card.k === Kind.DRAW_TWELVE || card.k === Kind.DRAW_FIFTY;
 export const isPenalty = (card) => card.k === Kind.DRAW_TWO || card.k === Kind.DRAW_FOUR
-  || card.k === Kind.DRAW_EIGHT || card.k === Kind.DRAW_TWELVE;
+  || card.k === Kind.DRAW_EIGHT || card.k === Kind.DRAW_TWELVE
+  || card.k === Kind.DRAW_FIFTY;
+
+/** The one card that is worth stopping the game for. */
+export const isJackpot = (card) => card.k === Kind.DRAW_FIFTY;
 export const isRealColor = (color) => color !== Color.WILD;
 
 const COLOR_NAME = { R: 'rouge', Y: 'jaune', G: 'vert', B: 'bleu', W: '-' };
@@ -81,7 +98,7 @@ const COLOR_NAME = { R: 'rouge', Y: 'jaune', G: 'vert', B: 'bleu', W: '-' };
 export function cardLabel(card) {
   const kindName = {
     n: String(card.n), s: 'Passe', r: 'Sens interdit', d2: '+2', w: 'Joker', d4: '+4',
-    d8: '+8', x2: 'Coup double', sp: 'Espion', d12: '+12',
+    d8: '+8', x2: 'Coup double', sp: 'Espion', d12: '+12', d50: '+50',
   }[card.k];
   const colorName = card.c === Color.WILD ? '' : COLOR_NAME[card.c];
   return colorName ? `${kindName} ${colorName}` : kindName;
@@ -151,7 +168,7 @@ const sortedHand = (hand) => hand.slice().sort(handOrder);
  */
 function emptyStats() {
   return {
-    cp: 0, cd: 0, nb: 0, d2: 0, d4: 0, e8: 0, e12: 0, wc: 0, dp: 0, sp: 0,
+    cp: 0, cd: 0, nb: 0, d2: 0, d4: 0, e8: 0, e12: 0, e50: 0, wc: 0, dp: 0, sp: 0,
     sk: 0, ct: 0, pt: 0, bt: 0, bd: 0, un: 0, cl: 0,
   };
 }
@@ -240,7 +257,15 @@ export class UnoEngine {
    * Deals a fresh round. The starting card is re-drawn until it is a plain number card,
    * which removes every "first card is a +2 / wild / skip" special case.
    */
-  startRound(starter) {
+  /**
+   * Deals a round.
+   *
+   * `jackpot` slips the single +50 into the draw pile. The decision is the caller's, not
+   * the engine's, and it defaults to off — which is what keeps a normal round shuffling
+   * exactly as it always has, down to the card ids. Nothing here is rolled: an engine
+   * that decided this itself could not be replayed.
+   */
+  startRound(starter, jackpot = false) {
     this.hands.forEach((h) => { h.length = 0; });
     this.drawPile = shuffled(buildDeck(this.mods), this.rng);
     this.discardPile = [];
@@ -270,6 +295,13 @@ export class UnoEngine {
     // Somewhere at random in what is left, so nobody can count the deck down to it. The
     // draw comes off the end of the array, so index 0 is the very bottom.
     for (const card of hidden) {
+      this.drawPile.splice(this.rng.nextIntBelow(this.drawPile.length + 1), 0, card);
+    }
+
+    // The jackpot is minted rather than dealt: it belongs to no deck, so its id sits past
+    // every real card and cannot collide with one.
+    if (jackpot) {
+      const card = { i: JACKPOT_ID, c: Color.WILD, k: Kind.DRAW_FIFTY, n: -1 };
       this.drawPile.splice(this.rng.nextIntBelow(this.drawPile.length + 1), 0, card);
     }
 
@@ -308,6 +340,7 @@ export class UnoEngine {
         // The +8 is a +4 that hits harder, so it lands in both places.
         allowed = hand.filter((c) => c.k === Kind.DRAW_FOUR || c.k === Kind.DRAW_EIGHT
           || c.k === Kind.DRAW_TWELVE
+          || c.k === Kind.DRAW_FIFTY
           || (c.k === Kind.DRAW_TWO && c.c === this.activeColor));
       } else {
         allowed = [];
@@ -361,6 +394,7 @@ export class UnoEngine {
     else if (card.k === Kind.DRAW_FOUR) tally.d4++;
     else if (card.k === Kind.DRAW_EIGHT) tally.e8++;
     else if (card.k === Kind.DRAW_TWELVE) tally.e12++;
+    else if (card.k === Kind.DRAW_FIFTY) tally.e50++;
     else if (card.k === Kind.WILD) tally.wc++;
     else if (card.k === Kind.DOUBLE_PLAY) tally.dp++;
     else if (card.k === Kind.SPY) tally.sp++;
@@ -417,6 +451,17 @@ export class UnoEngine {
         tally.bd = Math.max(tally.bd, this.pendingDraw);
         this.turn = this.seatAfter(seat);
         this.pushEvent(`${name} pose +4 ${COLOR_NAME[this.activeColor]} — total +${this.pendingDraw}`);
+        break;
+      case Kind.DRAW_FIFTY:
+        this.activeColor = chosenColor;
+        this.pendingDraw += 50;
+        // Same family again: the +50 is absurd, not a new rule. A +2 of the announced
+        // colour still sends it on, which is the funniest thing that can happen to
+        // somebody holding it.
+        this.pendingType = Penalty.DRAW_FOUR;
+        tally.bd = Math.max(tally.bd, this.pendingDraw);
+        this.turn = this.seatAfter(seat);
+        this.pushEvent(`${name} pose +50 ${COLOR_NAME[this.activeColor]} — total +${this.pendingDraw}`);
         break;
       case Kind.DRAW_TWELVE:
         this.activeColor = chosenColor;

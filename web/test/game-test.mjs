@@ -96,6 +96,92 @@ try {
   console.log(`  main entierement visible, sans defilement : ${handVisible ? 'oui' : 'NON'}`);
   if (!handVisible) problems.push('la main deborde');
 
+  // --------------------------------------------------------------- le +50
+  // One round in a hundred is not something a test can sit and wait for, so both sources
+  // of chance are pinned and nothing else is: the roll is forced, and the engine is handed
+  // a seed that happens to leave the +50 on top of the pile. Everything after that is the
+  // real game — the card is drawn by clicking the deck and played by clicking it.
+  console.log('\n=== Le +50, tire de force ===\n');
+  const lucky = await browser.newPage();
+  guard(lucky, 'jackpot');
+  await lucky.goto(URL);
+  await lucky.click('#go-solo');
+  await lucky.evaluate(() => {
+    const realBytes = crypto.getRandomValues.bind(crypto);
+    let pinned = false;
+    crypto.getRandomValues = (a) => {
+      // Only the engine's seed — the first request for a pair of words — is pinned.
+      // Anything else the page asks for stays as random as it was.
+      if (!pinned && a instanceof Uint32Array && a.length === 2) {
+        pinned = true;
+        a[0] = 64;
+        a[1] = 2380164160;
+        return a;
+      }
+      return realBytes(a);
+    };
+    // The jackpot roll is the first thing to ask Math.random after this point; it is put
+    // back the moment the table is dealt, so the bot plays normally.
+    window.__realRandom = Math.random;
+    Math.random = () => 0;
+  });
+  await lucky.click('[data-difficulty="EASY"]');
+  await lucky.waitForSelector('#screen-game.on');
+  await lucky.evaluate(() => { Math.random = window.__realRandom; });
+
+  const rivalCount = () => Number(
+    document.getElementById('rivals').textContent.match(/(\d+)\s*cartes?/)?.[1] ?? -1,
+  );
+  await lucky.waitForFunction(yourTurn, null, { timeout: 10000 });
+  const heldBefore = await lucky.evaluate(rivalCount);
+  await lucky.evaluate(() => document.getElementById('deck').click());
+
+  let revealed = true;
+  await lucky.waitForSelector('#jackpot.on', { timeout: 5000 }).catch(() => { revealed = false; });
+  console.log(`  annonce a la pioche : ${revealed ? 'oui' : 'NON'}`);
+  if (!revealed) problems.push("le +50 pioche n'est pas annonce");
+
+  const inHand = await lucky.$$eval('#hand [data-card="9000"]', (n) => n.length);
+  if (inHand !== 1) problems.push(`le +50 n'est pas dans la main (${inHand} exemplaire)`);
+
+  await lucky.click('#jackpot');
+  await lucky.waitForFunction(
+    () => !document.getElementById('jackpot').classList.contains('on'),
+  );
+  await lucky.evaluate(() => document.querySelector('#hand [data-card="9000"]').click());
+  await lucky.waitForSelector('#picker.on', { timeout: 5000 });
+  await lucky.evaluate(() => document.querySelector('#picker [data-pick]').click());
+
+  // The shake is deliberately short — 500 ms — so it is polled rather than awaited.
+  let quaked = true;
+  await lucky.waitForFunction(
+    () => document.getElementById('screen-game').classList.contains('quake'),
+    null,
+    { timeout: 3000, polling: 20 },
+  ).catch(() => { quaked = false; });
+  console.log(`  l'ecran tremble quand il tombe : ${quaked ? 'oui' : 'NON'}`);
+  if (!quaked) problems.push("poser le +50 ne fait pas trembler l'ecran");
+
+  // Fifty cards change hands. Which hand depends on whether the bot holds the +2 of the
+  // announced colour that sends them straight back — and if it does, the pile is on its
+  // way to me instead, so the turns have to keep being played until it lands somewhere.
+  const biggestHand = () => Math.max(
+    Number(document.getElementById('rivals').textContent.match(/(\d+)\s*cartes?/)?.[1] ?? 0),
+    document.querySelectorAll('#hand [data-card]').length,
+  );
+  let dealt = false;
+  for (let i = 0; i < 40 && !dealt; i++) {
+    dealt = (await lucky.evaluate(biggestHand)) >= 50;
+    if (dealt) break;
+    if (await lucky.evaluate(yourTurn)) await takeTurn(lucky);
+    await lucky.waitForTimeout(150);
+  }
+  const heldAfter = await lucky.evaluate(rivalCount);
+  const mine = await lucky.$$eval('#hand [data-card]', (n) => n.length);
+  console.log(`  adversaire : ${heldBefore} cartes avant, ${heldAfter} apres ; ma main : ${mine}`);
+  if (!dealt) problems.push('le +50 ne distribue pas cinquante cartes');
+  await lucky.close();
+
   // ------------------------------------------------------- two browsers, WebRTC
   console.log('\n=== Partie a deux, appairage WebRTC ===\n');
   const host = await browser.newPage();

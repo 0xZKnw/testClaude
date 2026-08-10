@@ -317,6 +317,8 @@ private fun StatsPanels(profile: Profile) {
             StatLine("+4 posés", totals.drawFoursPlayed)
             StatLine("+8 posés", totals.drawEightsPlayed)
             StatLine("+12 posés", totals.drawTwelvesPlayed)
+            // Almost everybody will read a zero here, which is the point of it.
+            StatLine("+50 posés", totals.jackpotsPlayed, Palette.Gold)
             StatLine("Contres réussis", totals.countersPlayed)
             StatLine("Cartes encaissées", totals.penaltyCardsTaken)
             StatText("Encaissées par manche", stats.penaltiesTakenPerRound)

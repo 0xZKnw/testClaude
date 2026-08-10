@@ -7,7 +7,9 @@ import { UnoEngine, Phase, Color, view as V } from '../src/engine.js';
 import { decide, Difficulty, DIFFICULTY_ORDER } from '../src/bot.js';
 import { KotlinRandom } from '../src/random.js';
 
-const KIND_ORDER = { n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7, sp: 8, d12: 9 };
+const KIND_ORDER = {
+  n: 0, s: 1, r: 2, d2: 3, w: 4, d4: 5, d8: 6, x2: 7, sp: 8, d12: 9, d50: 10,
+};
 const COLOR_ORDER = { R: 0, Y: 1, G: 2, B: 3, W: 4 };
 
 // Kotlin prints enum names; map the wire codes back so the traces read the same.
@@ -39,21 +41,25 @@ const lines = [];
 
 // The plain game first, so a diff against an older trace starts with the lines that are
 // supposed to be untouched.
+// The jackpot passes are last, so everything above them is byte-for-byte what it was
+// before the +50 existed — which is the claim worth being able to check.
 const MOD_SETS = [
-  ['', []],
-  ['8', ['d8']],
-  ['D', ['x2']],
-  ['S', ['sp']],
-  ['T', ['d12']],
-  ['X', ['d8', 'x2', 'sp', 'd12']],
+  ['', [], false],
+  ['8', ['d8'], false],
+  ['D', ['x2'], false],
+  ['S', ['sp'], false],
+  ['T', ['d12'], false],
+  ['X', ['d8', 'x2', 'sp', 'd12'], false],
+  ['j', [], true],
+  ['J', ['d8', 'x2', 'sp', 'd12'], true],
 ];
 
-for (const [tag, mods] of MOD_SETS) {
+for (const [tag, mods, jackpot] of MOD_SETS) {
   for (let players = 2; players <= 5; players++) {
     for (let seed = 1; seed <= 30; seed++) {
       // ---- policy A: always the lowest legal card
       let e = new UnoEngine(seed, 0, players, mods);
-      e.startRound(seed % players);
+      e.startRound(seed % players, jackpot);
       lines.push(snapshot(`A${tag}${players}/${seed} deal`, e));
       let guard = 0;
       while (e.phase !== Phase.GAME_OVER && guard++ < 4000) {
@@ -79,7 +85,7 @@ for (const [tag, mods] of MOD_SETS) {
       // ---- policy B: the bot, every level
       const rng = new KotlinRandom(seed * 31, 0);
       e = new UnoEngine(seed, 0, players, mods);
-      e.startRound(seed % players);
+      e.startRound(seed % players, jackpot);
       const levels = [...Array(players).keys()]
         .map((i) => DIFFICULTY_ORDER[i % DIFFICULTY_ORDER.length]);
       guard = 0;

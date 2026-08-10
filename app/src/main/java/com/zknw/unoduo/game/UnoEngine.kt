@@ -140,7 +140,15 @@ class UnoEngine(
      * Deals a fresh round. The starting card is re-drawn until it is a plain number
      * card, which removes every "first card is a +2 / wild / skip" special case.
      */
-    fun startRound(starter: Seat) {
+    /**
+     * Deals a round.
+     *
+     * [jackpot] slips the single +50 into the draw pile. The decision is the caller's,
+     * not the engine's, and it defaults to off — which is what keeps a normal round
+     * shuffling exactly as it always has, down to the card ids. Nothing here is rolled:
+     * an engine that decided this itself could not be replayed.
+     */
+    fun startRound(starter: Seat, jackpot: Boolean = false) {
         hands.values.forEach { it.clear() }
         drawPile.clear()
         discardPile.clear()
@@ -178,6 +186,13 @@ class UnoEngine(
         // The draw comes off the end of the list, so index 0 is the very bottom.
         hidden.forEach { drawPile.add(rng.nextInt(drawPile.size + 1), it) }
 
+        // The jackpot is minted rather than dealt: it belongs to no deck, so its id sits
+        // past every real card and cannot collide with one.
+        if (jackpot) {
+            val card = Card(JACKPOT_ID, CardColor.WILD, CardKind.WILD_DRAW_FIFTY)
+            drawPile.add(rng.nextInt(drawPile.size + 1), card)
+        }
+
         discardPile.add(start)
         activeColor = start.color
         turn = starter.coerceIn(0, playerCount - 1)
@@ -213,6 +228,7 @@ class UnoEngine(
                     it.kind == CardKind.WILD_DRAW_FOUR ||
                         it.kind == CardKind.WILD_DRAW_EIGHT ||
                         it.kind == CardKind.WILD_DRAW_TWELVE ||
+                        it.kind == CardKind.WILD_DRAW_FIFTY ||
                         (it.kind == CardKind.DRAW_TWO && it.color == activeColor)
                 }
                 Penalty.NONE -> emptyList()
@@ -272,6 +288,7 @@ class UnoEngine(
             CardKind.WILD_DRAW_FOUR -> tally.drawFoursPlayed++
             CardKind.WILD_DRAW_EIGHT -> tally.drawEightsPlayed++
             CardKind.WILD_DRAW_TWELVE -> tally.drawTwelvesPlayed++
+            CardKind.WILD_DRAW_FIFTY -> tally.jackpotsPlayed++
             CardKind.WILD -> tally.wildsPlayed++
             CardKind.DOUBLE_PLAY -> tally.doublePlaysPlayed++
             CardKind.SPY -> tally.spiesPlayed++
@@ -334,6 +351,18 @@ class UnoEngine(
                 tally.biggestStackDealt = maxOf(tally.biggestStackDealt, pendingDraw)
                 turn = seatAfter(seat)
                 pushEvent("$name pose +4 ${colorName(activeColor)} — total +$pendingDraw")
+            }
+
+            CardKind.WILD_DRAW_FIFTY -> {
+                activeColor = chosenColor!!
+                pendingDraw += 50
+                // Same family again: the +50 is absurd, not a new rule. A +2 of the
+                // announced colour still sends it on, which is the funniest thing that
+                // can happen to somebody holding it.
+                pendingType = Penalty.DRAW_FOUR
+                tally.biggestStackDealt = maxOf(tally.biggestStackDealt, pendingDraw)
+                turn = seatAfter(seat)
+                pushEvent("$name pose +50 ${colorName(activeColor)} — total +$pendingDraw")
             }
 
             CardKind.WILD_DRAW_TWELVE -> {
@@ -643,6 +672,12 @@ class UnoEngine(
 
     private companion object {
         const val AUTO_GUARD = 300
+
+        /**
+         * The jackpot's card id. Past every real card in the fattest possible deck, so it
+         * can never collide with one whatever mods are on.
+         */
+        const val JACKPOT_ID = 9_000
 
         /** How many cards a Coup double buys. */
         const val BONUS_PLAYS = 2

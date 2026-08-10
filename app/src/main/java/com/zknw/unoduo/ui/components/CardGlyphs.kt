@@ -9,6 +9,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -19,6 +20,9 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.Dp
 import com.zknw.unoduo.game.CardColor
 import com.zknw.unoduo.ui.theme.Palette
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * Every action symbol is drawn twice: once fatter in the ink colour, then once in its
@@ -250,6 +254,67 @@ fun DrawScope.drawWildEight(boxSize: Size, origin: Offset, outline: Color) =
 /** The +12: the same fan a third time. One card in the deck, and it looks like it. */
 fun DrawScope.drawWildTwelve(boxSize: Size, origin: Offset, outline: Color) =
     drawWildRows(boxSize, origin, outline, rows = 3)
+
+/**
+ * The +50: the fan buried under a storm.
+ *
+ * Every other card in the deck is a flat cartoon. This one deliberately breaks that —
+ * it is meant to be seen once and remembered, so it gets lightning, embers and a
+ * lettered "50" the size of the card. [beat] runs 0..1 and drives the whole thing.
+ */
+fun DrawScope.drawJackpot(boxSize: Size, origin: Offset, outline: Color, beat: Float) {
+    val w = boxSize.width
+    val h = boxSize.height
+    val middle = Offset(origin.x + w / 2f, origin.y + h / 2f)
+
+    // Lava behind: a hot disc that swells and fades on the beat.
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(
+                Color(0xFFFFF3C4).copy(alpha = 0.85f),
+                Color(0xFFFF5A1E).copy(alpha = 0.55f),
+                Color(0x00000000)
+            ),
+            center = middle,
+            radius = w * (0.55f + 0.12f * beat)
+        ),
+        radius = w * (0.62f + 0.14f * beat),
+        center = middle
+    )
+
+    // Four bolts striking inward, lit two at a time so the strike travels round.
+    repeat(4) { i ->
+        val lit = ((beat * 4f).toInt() % 4) == i
+        val angle = i * 90f + 45f
+        drawPath(
+            boltPath(middle, w * 0.62f, w * 0.18f, angle),
+            color = if (lit) Color(0xFFFFF3C4) else Color(0xFFFFC531).copy(alpha = 0.55f),
+            style = Stroke(width = w * 0.045f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+    }
+
+    // The fan, small and half-buried: the storm is the card, the fan only says which
+    // family it belongs to.
+    drawWildRows(Size(w * 0.52f, h * 0.34f), Offset(middle.x - w * 0.26f, origin.y), outline, rows = 3)
+}
+
+/** One jagged stroke from the rim towards the centre. */
+private fun boltPath(centre: Offset, reach: Float, spread: Float, degrees: Float): Path {
+    val rad = ((degrees - 90f) * PI / 180f).toFloat()
+    val nx = cos(rad)
+    val ny = sin(rad)
+    // Perpendicular, so the zigzag steps sideways rather than doubling back.
+    val px = -ny
+    val py = nx
+    val steps = listOf(1.0f to 0.0f, 0.68f to 0.5f, 0.46f to -0.35f, 0.22f to 0.4f, 0.0f to 0.0f)
+    return Path().apply {
+        steps.forEachIndexed { index, (along, side) ->
+            val x = centre.x + nx * reach * along + px * spread * side
+            val y = centre.y + ny * reach * along + py * spread * side
+            if (index == 0) moveTo(x, y) else lineTo(x, y)
+        }
+    }
+}
 
 /**
  * [rows] copies of the four-colour fan, stacked and staggered. They overlap by design:
