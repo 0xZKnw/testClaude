@@ -10,7 +10,7 @@ import {
   view as V, isWild, Mod, MOD_ORDER, MOD_INFO, orderedMods,
 } from './engine.js';
 import { decide, DIFFICULTY_ORDER, DIFFICULTY_INFO } from './bot.js';
-import { cardFace, cardBack, colorChip, PALETTE } from './cards.js';
+import { cardFace, cardBack, colorChip, motifHtml, PALETTE } from './cards.js';
 import { WebRtcHost, WebRtcGuest } from './net.js';
 import { RULES } from './rules.js';
 import {
@@ -20,7 +20,7 @@ import {
 } from './profile.js';
 import * as Cosm from './cosmetics.js';
 import * as Lv from './levels.js';
-import { STICKERS, cleanLine, MAX_CHARS } from './talk.js';
+import { STICKERS } from './talk.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
@@ -55,8 +55,8 @@ const state = {
   xpBefore: 0,
   levelUp: null,
   toastTimer: null,
-  // Chat and stickers. None of it touches the rules, so none of it is in a snapshot.
-  social: { enabled: false, chat: [], flash: [], open: false, unread: 0 },
+  // Stickers. None of it touches the rules, so none of it is in a snapshot.
+  social: { enabled: false },
   socialId: 1,
 };
 
@@ -132,7 +132,8 @@ function pseudoHtml(name, item, size) {
     // A two-stop gradient repeats its last colour, so the CSS can always name three.
     ? `--na:${stops[0]};--nb:${stops[1]};--nc:${stops[2] || stops[1]};font-size:${size}px`
     : `color:${stops[0] || '#f3f6fb'};font-size:${size}px`;
-  return `<span class="pseudo${stops.length >= 2 ? ' grad' : ''}" style="${style}">${esc(name)}</span>`;
+  const classes = `pseudo${stops.length >= 2 ? ' grad' : ''}${item.motion === 'SHEEN' ? ' lit' : ''}`;
+  return `<span class="${classes}" style="${style}">${esc(name)}</span>`;
 }
 
 function levelBadgeHtml(level, size) {
@@ -341,7 +342,7 @@ function previewHtml(item, p) {
       return `<div class="card">${cardBack(item)}</div>`;
     case 'FELT':
       return `<div class="felt-shot" style="background:radial-gradient(circle at 50% 38%,
-        ${item.a}, ${item.b} 45%, ${item.c})"></div>`;
+        ${item.a}, ${item.b} 45%, ${item.c})">${motifHtml(item.pattern, item.a)}</div>`;
     case 'TITLE':
       return `<div class="title-shot">${esc(Cosm.worn(item) || '—')}</div>`;
     case 'NAME':
@@ -489,9 +490,8 @@ function teardown() {
     myView: null, mods: [], rematch: new Set(), seatOfKey: new Map(), keyOfSeat: new Map(),
     net: null, botTimer: null, pendingWild: null, lastRecordedRound: -1,
     nextStarter: 1,
-    social: { enabled: false, chat: [], flash: [], open: false, unread: 0 },
+    social: { enabled: false },
   });
-  $('chat').classList.remove('on');
   $('emote-layer').innerHTML = '';
   // Otherwise the next game opens on the last game's cloth.
   $('felt-layers').innerHTML = '';
@@ -811,16 +811,6 @@ function onGuestMessage(key, msg) {
       else broadcast();
       break;
     }
-    case 'chat': {
-      const seat = state.seatOfKey.get(key);
-      const text = cleanLine(msg.m);
-      if (seat === undefined || !text) return;
-      // Relayed with the seat the host knows, never the one the guest claimed, and never
-      // back to the sender — its own line is already on its screen.
-      relay({ t: 'chat', s: seat, m: text }, key);
-      addChat(seat, text);
-      break;
-    }
     case 'emo': {
       const seat = state.seatOfKey.get(key);
       if (seat === undefined || !STICKERS[msg.e]) return;
@@ -874,11 +864,6 @@ function onHostMessage(msg) {
       show('game');
       renderGame();
       break;
-    case 'chat': {
-      const text = cleanLine(msg.m);
-      if (text) addChat(msg.s ?? 0, text);
-      break;
-    }
     case 'emo':
       addEmote(msg.s ?? 0, msg.e);
       break;
@@ -1156,22 +1141,9 @@ $('lobby-copy').onclick = async () => {
   }
 };
 
-// ------------------------------------------------------------------- chat & stickers
+// ----------------------------------------------------------------------- stickers
 
-const FLASH_MS = 5000;
-const FADE_MS = 200;
 const EMOTE_MS = 2600;
-const CHAT_HISTORY = 60;
-
-function sendChat(raw) {
-  const text = cleanLine(raw);
-  if (!text) return;
-  const seat = state.mySeat;
-  const msg = { t: 'chat', s: seat, m: text };
-  if (state.role === 'guest') state.net?.send(msg);
-  else state.net?.broadcast(msg);
-  addChat(seat, text);
-}
 
 function sendSticker(index) {
   if (!STICKERS[index]) return;
@@ -1180,24 +1152,6 @@ function sendSticker(index) {
   if (state.role === 'guest') state.net?.send(msg);
   else state.net?.broadcast(msg);
   addEmote(seat, index);
-}
-
-function addChat(seat, text) {
-  const mine = seat === state.mySeat;
-  const line = { id: state.socialId++, seat, name: nameOfSeat(seat), text, mine };
-  const social = state.social;
-  social.chat = [...social.chat, line].slice(-CHAT_HISTORY);
-  // Your own line does not need popping at you, and neither does one that arrives while
-  // the chat is already open in front of you.
-  if (!mine && !social.open) {
-    social.flash = [...social.flash, line];
-    social.unread += 1;
-    setTimeout(() => {
-      social.flash = social.flash.filter((l) => l.id !== line.id);
-      renderSocial();
-    }, FLASH_MS);
-  }
-  renderSocial();
 }
 
 function addEmote(seat, index) {
@@ -1221,50 +1175,14 @@ function addEmote(seat, index) {
   setTimeout(() => node.remove(), EMOTE_MS);
 }
 
-function openChat() {
-  state.social.open = true;
-  state.social.unread = 0;
-  state.social.flash = [];
-  $('chat').classList.add('on');
-  renderSocial();
-  // Focused on open so the keyboard comes up with the sheet rather than after it.
-  setTimeout(() => $('chat-input').focus(), 60);
-}
-
-function closeChat() {
-  state.social.open = false;
-  $('chat').classList.remove('on');
-  renderSocial();
-}
-
+/**
+ * The sticker layer: the rail on the right, and whatever is currently in flight.
+ *
+ * There is deliberately no chat. Typing at a card table means looking away from it, and
+ * a rail you can hit with one thumb says everything a round of UNO needs said.
+ */
 function renderSocial() {
-  const social = state.social;
-  $('chat-bar').classList.toggle('hidden', !social.enabled);
-  $('sticker-rail').classList.toggle('hidden', !social.enabled);
-  if (!social.enabled) {
-    $('chat-flash').innerHTML = '';
-    return;
-  }
-
-  const last = social.chat[social.chat.length - 1];
-  const preview = $('chat-preview');
-  preview.textContent = last ? `${last.name} : ${last.text}` : 'Écrire un message…';
-  preview.classList.toggle('empty', !last);
-  $('chat-unread').textContent = String(social.unread);
-  $('chat-unread').classList.toggle('hidden', social.unread === 0);
-
-  // Three at a time: past that the table disappears behind the conversation.
-  $('chat-flash').innerHTML = social.flash.slice(-3).map((l) => `
-    <div class="flash"><div class="who">${esc(l.name)}</div>
-    <div class="what">${esc(l.text)}</div></div>`).join('');
-
-  $('chat-log').innerHTML = social.chat.map((l) => `
-    <div class="said ${l.mine ? 'mine' : ''}"><div class="bubble">
-      ${l.mine ? '' : `<div class="who">${esc(l.name)}</div>`}
-      <div>${esc(l.text)}</div>
-    </div></div>`).join('');
-  const log = $('chat-log');
-  log.scrollTop = log.scrollHeight;
+  $('sticker-rail').classList.toggle('hidden', !state.social.enabled);
 }
 
 /**
@@ -1296,40 +1214,6 @@ function renderRail() {
 }
 renderRail();
 
-$('chat-bar').onclick = openChat;
-$('chat-close').onclick = closeChat;
-$('chat').onclick = (e) => { if (e.target === $('chat')) closeChat(); };
-$('chat-send').onclick = () => {
-  sendChat($('chat-input').value);
-  $('chat-input').value = '';
-  armSend();
-};
-$('chat-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); $('chat-send').click(); }
-});
-// Gold once there is something to send, grey the rest of the time.
-const armSend = () => { $('chat-send').disabled = $('chat-input').value.trim() === ''; };
-$('chat-input').addEventListener('input', armSend);
-$('chat-input').setAttribute('maxlength', String(MAX_CHARS));
-armSend();
-
-/**
- * Keeps the sheet above the keyboard.
- *
- * There is no portable CSS for "how tall is the keyboard": the one thing every mobile
- * browser agrees on is that the visual viewport shrinks. The difference between it and
- * the layout viewport is the keyboard, so that is what the sheet is lifted by.
- */
-if (window.visualViewport) {
-  const lift = () => {
-    const vv = window.visualViewport;
-    const hidden = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-    document.documentElement.style.setProperty('--kb', `${Math.round(hidden)}px`);
-  };
-  window.visualViewport.addEventListener('resize', lift);
-  window.visualViewport.addEventListener('scroll', lift);
-  lift();
-}
 
 // ------------------------------------------------------------------- the table
 
@@ -1374,6 +1258,7 @@ function setFelt(felt) {
   layer.className = `felt${felt.motion !== 'NONE' ? ` m-${felt.motion}` : ''}`;
   layer.style.background =
     `radial-gradient(circle at 50% 38%, ${felt.a}, ${felt.b} 45%, ${felt.c})`;
+  layer.innerHTML = motifHtml(felt.pattern, felt.a);
   if (felt.motion === 'SHEEN') {
     const gleam = document.createElement('div');
     gleam.className = 'gleam';

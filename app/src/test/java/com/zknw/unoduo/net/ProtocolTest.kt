@@ -41,8 +41,6 @@ class ProtocolTest {
             NetMsg.Draw,
             NetMsg.Pass,
             NetMsg.Rematch,
-            NetMsg.Say(2, "bien joué"),
-            NetMsg.Say(0, "et un +8 dans ta face 😹"),
             NetMsg.Emote(3, 4),
             NetMsg.Bye
         )
@@ -73,11 +71,14 @@ class ProtocolTest {
     // -------------------------------------------------------------- chat & stickers
 
     @Test
-    fun `a typed line is trimmed, capped, and refused when it is empty`() {
-        assertEquals("salut", Talk.clean("  salut  "))
-        assertNull(Talk.clean("   "))
-        assertNull(Talk.clean(""))
-        assertEquals(Talk.MAX_CHARS, Talk.clean("a".repeat(500))?.length)
+    fun `an emoji sticker survives the wire intact`() {
+        // Sent as an index, but the catalogue behind it is full of astral-plane emoji,
+        // and a wire that mangled those would draw tofu boxes on the other screen.
+        val thrown = NetMsg.Emote(1, Talk.STICKERS.indexOf("🤝"))
+        val decoded = Wire.decode(Wire.encode(thrown)) as? NetMsg.Emote
+        assertNotNull(decoded)
+        assertEquals("🤝", Talk.sticker(decoded!!.index))
+        assertEquals(1, decoded.seat)
     }
 
     @Test
@@ -87,15 +88,6 @@ class ProtocolTest {
         assertNull(Talk.sticker(Talk.STICKERS.size))
         // Distinct, or two rail buttons would send the same thing.
         assertEquals(Talk.STICKERS.size, Talk.STICKERS.toSet().size)
-    }
-
-    @Test
-    fun `an accented, emoji-carrying line survives the wire intact`() {
-        val line = NetMsg.Say(1, "à toi 😻 dépêche")
-        val decoded = Wire.decode(Wire.encode(line)) as? NetMsg.Say
-        assertNotNull(decoded)
-        assertEquals("à toi 😻 dépêche", decoded!!.text)
-        assertEquals(1, decoded.seat)
     }
 
     @Test

@@ -244,6 +244,64 @@ export function cardFace(card, { dimmed = false } = {}) {
 
 /** The back of a card: the opponent's hand and the draw pile. */
 /**
+ * The repeating motif printed on a back or woven into a cloth.
+ *
+ * Faint and repeated, never a picture: a back is on screen a dozen times at once and a
+ * cloth sits under the whole game, so a motif that shouted would be unbearable inside
+ * one round. Tiles are inline SVG — a strict page has no business fetching an image to
+ * draw a card.
+ */
+const MOTIF_SHAPES = {
+  BOLTS: 'M15 3 L7 13 h5 l-3 10 8-12 h-5 z',
+  FLAMES: 'M13 3 C9 9 15 10 13 14 C11 12 12 10 10 9 C7 13 6 19 13 22 C20 19 18 10 13 3 z',
+  CONFETTI: 'M6 10 l7-4 5 6 -7 4 z',
+  CROWNS: 'M5 19 v-11 l4 5 4-7 4 7 4-5 v11 z',
+  RAYS: 'M13 0 v26',
+  STRIPES: 'M-4 22 L22 -4 M9 35 L35 9',
+  DOTS: 'M13 13 m-3 0 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0',
+  WAVES: 'M0 16 q6.5 -7 13 0 t13 0',
+  HEX: 'M13 1 L25 13 L13 25 L1 13 z',
+};
+
+/** The ones that are outlines rather than solids. */
+const MOTIF_STROKED = new Set(['RAYS', 'STRIPES', 'WAVES', 'HEX']);
+
+/**
+ * The motif as an SVG tile, for painting inside another drawing.
+ *
+ * It has to live in the same SVG as the card: an HTML layer underneath would be hidden
+ * by the card's own artwork, and one on top would cover the UNO.
+ */
+export function motifPattern(pattern, colour, id) {
+  const shape = MOTIF_SHAPES[pattern];
+  if (!shape) return { defs: '', fill: '' };
+  const paint = MOTIF_STROKED.has(pattern)
+    ? `fill="none" stroke="${colour}" stroke-width="1.6"`
+    : `fill="${colour}"`;
+  return {
+    defs: `<pattern id="${id}" width="26" height="26" patternUnits="userSpaceOnUse">`
+      + `<path d="${shape}" ${paint} opacity="0.22"/></pattern>`,
+    fill: `url(#${id})`,
+  };
+}
+
+/**
+ * The same motif as a standalone layer, for the table cloth — which is a plain div with
+ * nothing painted over it, so an HTML layer is both simpler and cheaper there.
+ */
+export function motifHtml(pattern, colour) {
+  if (!pattern || pattern === 'PLAIN') return '';
+  const { defs, fill } = motifPattern(pattern, colour, 'p');
+  if (!defs) return '';
+  const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%'>"
+    + `<defs>${defs.replace(/"/g, "'")}</defs>`
+    + `<rect width='100%' height='100%' fill='url(#p)'/></svg>`;
+  // Single quotes throughout: this ends up inside a double-quoted style attribute.
+  return `<div class="motif" style="background-image:url('data:image/svg+xml,`
+    + `${encodeURIComponent(svg)}')"></div>`;
+}
+
+/**
  * The back of a card. `skin` is the unlocked back the player picked: only the inner
  * panel and the oval change, because the paper, the ink keyline and the tilted UNO are
  * what make every one of them read as the same deck.
@@ -260,13 +318,16 @@ export function cardBack(skin = DEFAULT_BACK) {
     ? `<div class="m-${skin.motion}"${skin.motion === 'DRIFT'
       ? ` style="background:linear-gradient(${skin.c}33, transparent)"` : ''}></div>`
     : '';
+  const motif = motifPattern(skin.pattern, skin.c, `pat-${gid}`);
   return `${motion}<svg class="card-svg" viewBox="0 0 ${CARD_W} ${CARD_H}" xmlns="http://www.w3.org/2000/svg">
     <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${skin.a}"/><stop offset="1" stop-color="${skin.b}"/>
-    </linearGradient></defs>
+    </linearGradient>${motif.defs}</defs>
     <rect width="${CARD_W}" height="${CARD_H}" rx="13" fill="${PALETTE.outline}"/>
     <rect x="3.5" y="3.5" width="${CARD_W - 7}" height="${CARD_H - 7}" rx="11" fill="${PALETTE.stock}"/>
     <rect x="9.7" y="9.7" width="${CARD_W - 19.4}" height="${CARD_H - 19.4}" rx="8.5" fill="url(#${gid})"/>
+    ${motif.fill ? `<rect x="9.7" y="9.7" width="${CARD_W - 19.4}" height="${CARD_H - 19.4}"
+      rx="8.5" fill="${motif.fill}"/>` : ''}
     <g transform="rotate(-28 ${CARD_W / 2} ${CARD_H / 2})">
       <!-- Nested rather than combined: a CSS transform would replace the rotate
            attribute outright, and the tilt is what makes the back read as a back. -->

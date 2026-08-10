@@ -180,8 +180,6 @@ private fun App(vm: AppViewModel = viewModel()) {
         }
     }
 
-    // The chat sheet is the innermost thing on screen, so it is the first to close.
-    BackHandler(enabled = state.social.open) { vm.closeChat() }
 
     BackHandler(enabled = state.screen != Screen.HOME && !state.social.open) {
         when (state.screen) {
@@ -316,9 +314,6 @@ private fun App(vm: AppViewModel = viewModel()) {
                     onRematch = vm::requestRematch,
                     onQuit = vm::leaveGame,
                     onSticker = vm::sendSticker,
-                    onSendChat = vm::sendChat,
-                    onOpenChat = vm::openChat,
-                    onCloseChat = vm::closeChat,
                     onDismissLevelUp = vm::dismissLevelUp
                 )
             }

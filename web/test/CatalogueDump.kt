@@ -26,7 +26,7 @@ fun main() {
     }
     for (item in Cosmetics.all) {
         println(
-            "item ${item.id} ${item.kind.code} ${item.level} ${item.style} ${item.motion} " +
+            "item ${item.id} ${item.kind.code} ${item.level} ${item.style} ${item.motion} ${item.pattern} " +
                 "${hex(item.a)} ${hex(item.b)} ${hex(item.c)} ${item.text} ${item.name}"
         )
     }

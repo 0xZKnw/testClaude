@@ -154,6 +154,115 @@ textarea {
 }
 @keyframes ringspin { to { transform: rotate(360deg) } }
 
+/* A pseudo that catches the light: the gradient slides along the word rather than
+   sitting still on it. Only the late unlocks do this — movement is a reward too. */
+.pseudo.grad.lit {
+  background: linear-gradient(90deg, var(--na), var(--nb), var(--nc), var(--na), var(--nb));
+  background-size: 260% 100%;
+  animation: pseudoslide 2.6s linear infinite;
+}
+@keyframes pseudoslide { from { background-position: 0% 0 } to { background-position: 130% 0 } }
+
+/* ------------------------------------------------------- frames that are things */
+/* Fire, lightning, water, a laurel, stars, a crown. Drawn as a repeating conic motif on
+   the same masked disc as the rest: one extra layer, no images, and the ink underneath
+   still shows through every gap. */
+.frame.f-FLAME::before,
+.frame.f-BOLT::before,
+.frame.f-WAVE::before,
+.frame.f-ORBIT::before,
+.frame.f-STARS::before,
+.frame.f-CROWN::before { background: var(--fa); }
+
+/* Tongues of fire: alternating wedges of two heats, flickering out of step. */
+.frame.f-FLAME::after {
+  content: ''; position: absolute; inset: calc(var(--ink-w) * -.6); border-radius: 50%;
+  background: repeating-conic-gradient(var(--fb) 0 8deg, transparent 8deg 20deg);
+  -webkit-mask: radial-gradient(closest-side, transparent 62%, #000 62%);
+  mask: radial-gradient(closest-side, transparent 62%, #000 62%);
+  animation: flicker .9s steps(4) infinite;
+}
+@keyframes flicker {
+  0% { transform: scale(1) rotate(0deg) }
+  50% { transform: scale(1.07) rotate(6deg) }
+  100% { transform: scale(1) rotate(12deg) }
+}
+
+/* A zigzag ring with one tooth lit, running round it. */
+.frame.f-BOLT::before {
+  background: repeating-conic-gradient(
+    var(--fa) 0 12deg, var(--fb) 12deg 14deg, var(--fa) 14deg 26deg);
+}
+.frame.f-BOLT::after {
+  content: ''; position: absolute; inset: var(--ink-w); border-radius: 50%;
+  background: conic-gradient(transparent 0 84%, var(--fb) 88% 92%, transparent 96%);
+  animation: ringspin 1.4s steps(14) infinite;
+}
+
+/* Water: two bands of colour rolling round at different speeds. */
+.frame.f-WAVE::before {
+  background: repeating-conic-gradient(var(--fa) 0 9deg, var(--fb) 9deg 18deg);
+  animation: ringspin 3.6s linear infinite;
+}
+.frame.f-WAVE::after {
+  content: ''; position: absolute; inset: calc(var(--ink-w) + var(--band) * .38);
+  border-radius: 50%;
+  background: repeating-conic-gradient(transparent 0 12deg, var(--fb) 12deg 16deg);
+  animation: ringspin 5.4s linear reverse infinite;
+}
+
+/* A bead running the ring, with a tail fading behind it. */
+.frame.f-ORBIT::before { background: var(--fb); }
+.frame.f-ORBIT::after {
+  content: ''; position: absolute; inset: var(--ink-w); border-radius: 50%;
+  background: conic-gradient(var(--fa) 0 4%, transparent 14% 100%);
+  animation: ringspin 2.6s linear infinite;
+}
+
+/* Stars set into the ring, twinkling together but softly. */
+.frame.f-STARS::before { background: var(--fb); }
+.frame.f-STARS::after {
+  content: ''; position: absolute; inset: var(--ink-w); border-radius: 50%;
+  background: repeating-conic-gradient(var(--fa) 0 3deg, transparent 3deg 45deg);
+  animation: twinkle 2s ease-in-out infinite alternate;
+}
+@keyframes twinkle { from { opacity: .45 } to { opacity: 1 } }
+
+/* The last frame in the game: gold points all round, and a shine that sweeps them. */
+.frame.f-CROWN::before {
+  background:
+    repeating-conic-gradient(var(--fa) 0 18deg, var(--fc) 18deg 36deg);
+}
+.frame.f-CROWN::after {
+  content: ''; position: absolute; inset: calc(var(--ink-w) * -.5); border-radius: 50%;
+  background:
+    repeating-conic-gradient(var(--fa) 0 10deg, transparent 10deg 36deg),
+    conic-gradient(transparent 0 42%, var(--fb) 50%, transparent 58% 100%);
+  background-blend-mode: normal;
+  -webkit-mask: radial-gradient(closest-side, transparent 58%, #000 58%);
+  mask: radial-gradient(closest-side, transparent 58%, #000 58%);
+  animation: ringspin 3s linear infinite;
+}
+
+/* ------------------------------------------------------------ printed motifs */
+/* Faint and repeated, never a picture: a back is on screen a dozen times at once and a
+   cloth sits under the whole game. */
+.motif { position: absolute; inset: 0; pointer-events: none; opacity: .16; }
+.felt .motif { opacity: .1; }
+.p-RAYS { background: repeating-conic-gradient(currentColor 0 1.2deg, transparent 1.2deg 15deg); }
+.p-STRIPES { background: repeating-linear-gradient(45deg, currentColor 0 2px, transparent 2px 14px); }
+.p-DOTS { background-image: radial-gradient(currentColor 22%, transparent 24%); background-size: 16px 16px; }
+.p-WAVES {
+  background-image: radial-gradient(circle at 50% 120%, transparent 45%, currentColor 46%, transparent 48%);
+  background-size: 18px 12px;
+}
+.p-HEX {
+  background-image:
+    repeating-linear-gradient(60deg, currentColor 0 1px, transparent 1px 15px),
+    repeating-linear-gradient(-60deg, currentColor 0 1px, transparent 1px 15px);
+}
+
+
 /* A pseudo, painted: an ink outline underneath, the colour on top — the same way every
    glyph on every card is drawn. A plain tint reads as a label; an outlined one reads as
    part of the deck. */
@@ -177,13 +286,22 @@ textarea {
 /* Slow and rare on purpose: the cloth sits behind the cards and a back is drawn a dozen
    times at once, so anything lively here would fight the game rather than decorate it.
    Every one of these is a transform or an opacity — never a repainted gradient. */
-.card .m-SHEEN, .card .m-DRIFT { position: absolute; inset: 0; pointer-events: none; }
-.card .m-SHEEN {
-  background: linear-gradient(90deg, transparent, rgba(253,251,244,.16), transparent);
+.card .m-SHEEN, .card .m-DRIFT {
+  position: absolute; inset: 9.7%; pointer-events: none;
+  border-radius: 8%; overflow: hidden;
+}
+/* The band travels inside its own clipped box, so it can sweep right off the panel
+   without ever appearing beside the card. */
+.card .m-SHEEN::before, .card .m-DRIFT::before { content: ''; position: absolute; inset: 0; }
+.card .m-SHEEN::before {
+  background: linear-gradient(90deg, transparent, rgba(253,251,244,.2), transparent);
   animation: backsheen 3.4s linear infinite;
 }
 @keyframes backsheen { from { transform: translateX(-130%) } to { transform: translateX(130%) } }
-.card .m-DRIFT { animation: backdrift 4.6s ease-in-out infinite alternate; }
+.card .m-DRIFT::before {
+  background: inherit;
+  animation: backdrift 4.6s ease-in-out infinite alternate;
+}
 @keyframes backdrift { from { transform: translateY(-14%) } to { transform: translateY(14%) } }
 .card .m-PULSE { animation: backpulse 2.2s ease-in-out infinite alternate; transform-origin: center; }
 @keyframes backpulse { from { transform: scale(.96) } to { transform: scale(1.04) } }
@@ -256,7 +374,10 @@ textarea {
 .cosmetic.locked .who { color: var(--dim); }
 .cosmetic .tag { margin-top: 6px; }
 .cosmetic .shot .card { width: 46px; }
-.felt-shot { width: 100%; aspect-ratio: 1.6; border-radius: 12px; border: 3px solid var(--ink); }
+.felt-shot {
+  position: relative; overflow: hidden;
+  width: 100%; aspect-ratio: 1.6; border-radius: 12px; border: 3px solid var(--ink);
+}
 .title-shot { font-size: 14px; font-weight: 900; color: var(--gold); overflow-wrap: anywhere; }
 .sticker-shot { font-size: 40px; line-height: 1; }
 
@@ -267,7 +388,10 @@ textarea {
 #levelup .unlock b { color: var(--gold); font-size: 14px; font-weight: 900; }
 
 /* ----------------------------------------------------------------------- cards */
+ /* Clipped: the animated layers on a card back travel well past its edges, and an
+    unclipped one paints a band of colour across the table. */
 .card { position: relative; flex: none; transition: transform .18s ease-out; }
+.card .m-SHEEN, .card .m-DRIFT, .card .m-PULSE { border-radius: 11%; }
 .card-svg { display: block; width: 100%; height: auto; filter: drop-shadow(0 3px 2px rgba(0,0,0,.45)); }
 .card.playable { transform: translateY(-14%); }
 .card.playable::after {
@@ -312,8 +436,8 @@ textarea {
   border-radius: 14px; padding: 5px 14px; font-size: 20px; font-weight: 900;
   animation: breathe 1.2s ease-in-out infinite;
 }
-/* Laid out by #table-bottom rather than pinned on its own, so the chat bubbles stack
-   above it instead of landing on it. */
+/* Laid out by #table-bottom rather than pinned on its own, so it keeps clear of the
+   sticker rail in the corner. */
 #toast {
   background: rgba(11,14,20,.82); border: 2px solid var(--line); border-radius: 12px;
   padding: 5px 12px; font-size: 12px; color: var(--text); white-space: nowrap;
@@ -336,27 +460,12 @@ textarea {
   background: linear-gradient(transparent, var(--felt-dark));
 }
 
-/* ---------------------------------------------------------------- chat & stickers */
+/* ---------------------------------------------------------------------- stickers */
 #table-bottom {
   position: absolute; left: 0; right: 0; bottom: 6px;
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   pointer-events: none;
 }
-#chat-flash {
-  align-self: stretch; display: flex; flex-direction: column; gap: 6px;
-  padding: 0 64px 0 14px;
-}
-.flash {
-  align-self: flex-start; max-width: 260px;
-  background: var(--slate); border: 2.5px solid var(--ink); border-radius: 14px;
-  padding: 8px 12px; animation: flash-in .2s ease-out both;
-}
-@keyframes flash-in { from { opacity: 0; transform: translateY(6px) } to { opacity: 1 } }
-.flash.leaving { animation: flash-out .2s ease-in both; }
-@keyframes flash-out { to { opacity: 0 } }
-.flash .who { color: var(--gold); font-size: 10px; font-weight: 900; }
-.flash .what { font-size: 13px; margin-top: 2px; word-break: break-word; }
-
 /* Bottom-right, clear of the pile: folded away it is one button, and when it opens it
    grows upwards along the edge rather than over the cards you are trying to play. */
 #sticker-rail {
@@ -380,17 +489,6 @@ textarea {
 }
 #sticker-rail button:active { transform: scale(.9); }
 
-#chat-bar {
-  display: flex; align-items: center; gap: 10px; cursor: pointer;
-  margin: 0 14px 10px; padding: 10px 14px;
-  background: var(--slate); border: 3px solid var(--ink); border-radius: 16px;
-  box-shadow: 0 4px 0 var(--ink); font-size: 13px;
-}
-#chat-bar .bubble-icon { font-size: 17px; }
-#chat-bar .chip.red { background: var(--red); color: var(--stock); }
-#chat-preview.empty { color: var(--dim); font-weight: 400; }
-#chat-preview { font-weight: 700; }
-
 /* Above everything, including the cards: a sticker that slid under the hand would be a
    sticker nobody saw. */
 #emote-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 15; }
@@ -413,40 +511,6 @@ textarea {
   100% { opacity: 0; transform: translate(-50%, -30vh) scale(1.15) }
 }
 
-/* The sheet rides on the keyboard: --kb is kept in step with the visual viewport, which
-   is the only thing every mobile browser agrees on. */
-.overlay.sheet { align-items: flex-end; padding: 0; }
-.overlay.sheet .panel { margin: 10px; margin-bottom: calc(10px + var(--kb, 0px)); }
-#chat-log { max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-#chat-log:empty::after {
-  content: "Rien pour l'instant. Lance la conversation.";
-  color: var(--dim); font-size: 13px; padding: 18px 0; display: block;
-}
-.said { display: flex; }
-.said.mine { justify-content: flex-end; }
-.said .bubble {
-  max-width: 260px; border: 2.5px solid var(--ink); border-radius: 14px;
-  padding: 8px 12px; background: var(--slate-high); font-size: 13px;
-  word-break: break-word;
-}
-.said.mine .bubble { background: var(--gold); color: var(--ink); }
-.said .who { color: var(--gold); font-size: 10px; font-weight: 900; margin-bottom: 2px; }
-/* One line, the height of its send button, and nothing else — the tall bordered box it
-   replaced read as a form field dropped into a game. */
-#chat-input {
-  height: 46px; background: #0b0e14; color: var(--text);
-  border: 2.5px solid var(--ink); border-radius: 15px;
-  padding: 0 12px; font: inherit; font-size: 15px; min-width: 0;
-}
-#chat-input:focus { outline: none; border-color: var(--gold); }
-#chat-send {
-  width: 46px; height: 46px; flex: none; padding: 0; margin: 0;
-  border: 3px solid var(--ink); border-radius: 50%;
-  background: var(--gold); color: var(--ink);
-  font-size: 17px; font-weight: 900; line-height: 1; cursor: pointer;
-}
-#chat-send:disabled { background: var(--slate-high); color: var(--dim); cursor: default; }
-#chat-send:active:not(:disabled) { transform: scale(.92); }
 #hand .row { display: flex; justify-content: center; }
 #pass-wrap { padding: 0 20px; }
 
@@ -742,18 +806,12 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
     <div id="pending" class="hidden"></div>
     <div id="sticker-rail" class="hidden"></div>
     <div id="table-bottom">
-      <div id="chat-flash"></div>
       <div id="toast" class="hidden"></div>
     </div>
   </div>
   <div id="banner"></div>
   <div id="pass-wrap" class="hidden"><button class="btn" id="pass-btn">Passer mon tour</button></div>
   <div id="hand"></div>
-  <div id="chat-bar" class="hidden">
-    <span class="bubble-icon">&#128172;</span>
-    <span class="grow ellipsis" id="chat-preview">Écrire un message…</span>
-    <span class="chip red hidden" id="chat-unread">0</span>
-  </div>
   <div id="emote-layer"></div>
 </section>
 
@@ -778,23 +836,6 @@ video { width: 100%; border-radius: 12px; background: #000; display: none; }
     <div id="over-xp" class="hidden" style="margin-bottom:18px"></div>
     <button class="btn" id="rematch-btn">Revanche</button>
     <button class="btn ghost" id="quit-btn">Quitter</button>
-  </div>
-</div>
-
-<!-- The sheet is anchored to the bottom and lifted by the keyboard: what you type has
-     to stay in sight while you type it. -->
-<div class="overlay sheet" id="chat">
-  <div class="panel" id="chat-panel">
-    <div class="row-line" style="padding:0 0 10px">
-      <div class="grow" style="font-weight:900;font-size:18px">Chat</div>
-      <span class="chip" id="chat-close" style="cursor:pointer">Fermer</span>
-    </div>
-    <div id="chat-log"></div>
-    <div class="row-line" style="padding:12px 0 0">
-      <input id="chat-input" class="grow" maxlength="120" placeholder="Ton message"
-             autocomplete="off" enterkeyhint="send">
-      <button type="button" id="chat-send" aria-label="Envoyer">&#10148;</button>
-    </div>
   </div>
 </div>
 

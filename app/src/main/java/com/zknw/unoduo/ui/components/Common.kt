@@ -1,5 +1,6 @@
 package com.zknw.unoduo.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,6 +53,7 @@ import com.zknw.unoduo.progress.Cosmetic
 import com.zknw.unoduo.progress.CosmeticKind
 import com.zknw.unoduo.progress.Cosmetics
 import com.zknw.unoduo.progress.Motion
+import com.zknw.unoduo.progress.Pattern
 import com.zknw.unoduo.ui.theme.Palette
 
 /**
@@ -123,6 +125,13 @@ private fun FeltLayer(felt: Cosmetic) {
                 )
             )
     ) {
+        if (felt.pattern != Pattern.PLAIN) {
+            Canvas(Modifier.fillMaxSize()) {
+                // Fainter than on a card: the cloth is behind everything, and a motif you
+                // can read from across the table is a motif you stop seeing the cards on.
+                drawPattern(felt.pattern, Color(felt.a), cell = 74f, alpha = 0.10f)
+            }
+        }
         if (felt.motion == Motion.SHEEN) {
             Box(
                 Modifier

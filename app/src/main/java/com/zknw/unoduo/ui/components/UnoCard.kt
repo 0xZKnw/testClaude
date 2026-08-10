@@ -45,6 +45,7 @@ import com.zknw.unoduo.progress.Cosmetic
 import com.zknw.unoduo.progress.CosmeticKind
 import com.zknw.unoduo.progress.Cosmetics
 import com.zknw.unoduo.progress.Motion
+import com.zknw.unoduo.progress.Pattern
 import com.zknw.unoduo.ui.theme.Palette
 
 const val CARD_ASPECT = 1.52f
@@ -440,6 +441,11 @@ fun UnoCardBack(
                                 )
                             )
                     )
+                }
+                if (skin.pattern != Pattern.PLAIN) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        drawPattern(skin.pattern, Color(skin.c), cell = size.width * 0.34f)
+                    }
                 }
                 Canvas(
                     Modifier

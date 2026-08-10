@@ -24,7 +24,7 @@ const hex = (value) => (value ? value.replace('#', '').toUpperCase() : '-');
 
 for (const item of ALL) {
   out.push(
-    `item ${item.id} ${KINDS[item.kind].code} ${item.level} ${item.style} ${item.motion} `
+    `item ${item.id} ${KINDS[item.kind].code} ${item.level} ${item.style} ${item.motion} ${item.pattern} `
     + `${hex(item.a)} ${hex(item.b)} ${hex(item.c)} ${item.text} ${item.name}`,
   );
 }

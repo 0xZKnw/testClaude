@@ -4,165 +4,53 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zknw.unoduo.game.GameView
 import com.zknw.unoduo.game.Seat
 import com.zknw.unoduo.net.Talk
-import com.zknw.unoduo.ui.components.InkChip
 import com.zknw.unoduo.ui.components.InkSurface
 import com.zknw.unoduo.ui.components.clickableNoRipple
 import com.zknw.unoduo.ui.theme.Palette
-import com.zknw.unoduo.vm.ChatLine
 import com.zknw.unoduo.vm.Emote
-import com.zknw.unoduo.vm.Social
 
 /**
- * Everything players send each other that is not a card: the chat under the hand, the
- * lines that pop over it as they arrive, the sticker rail down the right edge, and the
- * stickers themselves flying in from whoever threw them.
+ * What players throw at each other instead of talking: the sticker rail down the right
+ * edge, and the stickers themselves flying in from whoever threw them.
+ *
+ * There is deliberately no chat. Typing at a card table means looking away from it, and
+ * a rail you can hit with one thumb says everything a round of UNO needs said.
  *
  * All of it is drawn in the same cartoon language as the cards — flat fill, ink keyline,
  * a solid slab underneath — so it reads as part of the table rather than as a widget
  * bolted onto it.
  */
-
-/** How long a popped line stays up. Must match the view model, which drops it. */
-private const val FLASH_MS = 5_000
-private const val FADE_MS = 200
-
-/** The strip under the hand: one tap opens the log, and it counts what you missed. */
-@Composable
-fun ChatBar(social: Social, onOpen: () -> Unit, modifier: Modifier = Modifier) {
-    val last = social.chat.lastOrNull()
-    InkSurface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickableNoRipple { onOpen() },
-        color = Palette.Slate,
-        shape = RoundedCornerShape(16.dp),
-        depth = 4.dp
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("💬", fontSize = 17.sp)
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = last?.let { "${it.name} : ${it.text}" } ?: "Écrire un message…",
-                color = if (last == null) Palette.TextDim else Palette.Text,
-                fontSize = 13.sp,
-                fontWeight = if (last == null) FontWeight.Normal else FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            if (social.unread > 0) {
-                Spacer(Modifier.width(8.dp))
-                InkChip(
-                    text = social.unread.toString(),
-                    color = Palette.Red,
-                    textColor = Palette.Stock,
-                    fontSize = 11
-                )
-            }
-        }
-    }
-}
-
-/**
- * Incoming lines, stacked over the hand and fading away on their own after a few
- * seconds. Deliberately narrow and left-aligned: the middle of the table belongs to the
- * cards, and a bubble that covered the discard pile would be worse than no bubble.
- */
-@Composable
-fun ChatFlash(lines: List<ChatLine>, modifier: Modifier = Modifier) {
-    Column(
-        modifier.padding(start = 14.dp, end = 64.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        // Three at a time: past that the table disappears behind the conversation.
-        lines.takeLast(3).forEach { line ->
-            key(line.id) { FlashBubble(line) }
-        }
-    }
-}
-
-@Composable
-private fun FlashBubble(line: ChatLine) {
-    val alpha = remember { Animatable(0f) }
-    LaunchedEffect(line.id) {
-        alpha.animateTo(1f, tween(FADE_MS))
-        // Fades itself out just before the view model drops it, so the line leaves
-        // rather than blinking out of existence.
-        kotlinx.coroutines.delay((FLASH_MS - FADE_MS * 2).toLong())
-        alpha.animateTo(0f, tween(FADE_MS))
-    }
-
-    Box(
-        Modifier
-            .graphicsLayer { this.alpha = alpha.value }
-            .widthIn(max = 260.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(Palette.Slate)
-            .border(2.5.dp, Palette.Outline, RoundedCornerShape(14.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-    ) {
-        Column {
-            Text(line.name, color = Palette.Gold, fontSize = 10.sp, fontWeight = FontWeight.Black)
-            Spacer(Modifier.height(2.dp))
-            Text(line.text, color = Palette.Text, fontSize = 13.sp)
-        }
-    }
-}
 
 /**
  * The sticker rail, tucked against the right edge at the height of the deck.
@@ -309,191 +197,3 @@ private fun FlyingEmote(emote: Emote, origin: EmoteOrigin, box: IntSize) {
  * [Modifier.imePadding] on the panel is the entire point of this being a sheet rather
  * than an inline field: what you are typing has to stay in sight while you type it.
  */
-@Composable
-fun ChatSheet(social: Social, onSend: (String) -> Unit, onClose: () -> Unit) {
-    var draft by remember { mutableStateOf("") }
-    val listState = rememberLazyListState()
-    val focus = remember { FocusRequester() }
-
-    LaunchedEffect(social.chat.size) {
-        if (social.chat.isNotEmpty()) listState.animateScrollToItem(social.chat.lastIndex)
-    }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-
-    fun send() {
-        val text = draft
-        draft = ""
-        onSend(text)
-    }
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.72f))
-            .clickableNoRipple { onClose() },
-        contentAlignment = Alignment.BottomCenter
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .imePadding()
-                // Swallows the taps that would otherwise close the sheet through it.
-                .clickableNoRipple { }
-        ) {
-            InkSurface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(10.dp),
-                color = Palette.Slate,
-                shape = RoundedCornerShape(22.dp)
-            ) {
-                Column(Modifier.padding(14.dp)) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Chat",
-                            color = Palette.Text,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Black,
-                            modifier = Modifier.weight(1f)
-                        )
-                        InkChip(
-                            text = "Fermer",
-                            modifier = Modifier.clickableNoRipple { onClose() },
-                            color = Palette.SlateHigh,
-                            fontSize = 11
-                        )
-                    }
-
-                    Spacer(Modifier.height(10.dp))
-
-                    if (social.chat.isEmpty()) {
-                        Text(
-                            "Rien pour l'instant. Lance la conversation.",
-                            color = Palette.TextDim,
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(vertical = 18.dp)
-                        )
-                    } else {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.heightIn(max = 260.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(social.chat, key = { it.id }) { line -> ChatRow(line) }
-                        }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-                    ChatInput(
-                        draft = draft,
-                        focus = focus,
-                        onChange = { draft = it.take(Talk.MAX_CHARS) },
-                        onSend = { send() }
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * One line, one round send button, both the same height.
- *
- * A Material text field is 56dp tall before its own padding, and next to a full-width
- * button the row took a third of the sheet. This is the shape every messaging app uses
- * because it is the one that gets out of the way.
- */
-@Composable
-private fun ChatInput(
-    draft: String,
-    focus: FocusRequester,
-    onChange: (String) -> Unit,
-    onSend: () -> Unit
-) {
-    val shape = RoundedCornerShape(14.dp)
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            Modifier
-                .weight(1f)
-                .height(46.dp)
-                .clip(shape)
-                .background(Palette.Ink)
-                .border(2.5.dp, Palette.Outline, shape)
-                .padding(horizontal = 12.dp),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            BasicTextField(
-                value = draft,
-                onValueChange = onChange,
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focus),
-                textStyle = TextStyle(color = Palette.Text, fontSize = 15.sp),
-                cursorBrush = SolidColor(Palette.Gold),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { onSend() }),
-                decorationBox = { field ->
-                    if (draft.isEmpty()) {
-                        Text("Ton message", color = Palette.TextDim, fontSize = 15.sp)
-                    }
-                    field()
-                }
-            )
-        }
-        Spacer(Modifier.width(10.dp))
-        Box(
-            Modifier
-                .size(46.dp)
-                .clip(CircleShape)
-                .background(if (draft.isBlank()) Palette.SlateHigh else Palette.Gold)
-                .border(2.5.dp, Palette.Outline, CircleShape)
-                .clickableNoRipple(enabled = draft.isNotBlank()) { onSend() },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "➤",
-                color = if (draft.isBlank()) Palette.TextDim else Palette.Outline,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Black
-            )
-        }
-    }
-}
-
-@Composable
-private fun ChatRow(line: ChatLine) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = if (line.mine) Arrangement.End else Arrangement.Start
-    ) {
-        Box(
-            Modifier
-                .widthIn(max = 260.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(if (line.mine) Palette.Gold else Palette.SlateHigh)
-                .border(2.5.dp, Palette.Outline, RoundedCornerShape(14.dp))
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-        ) {
-            Column {
-                if (!line.mine) {
-                    Text(
-                        line.name,
-                        color = Palette.Gold,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Black
-                    )
-                    Spacer(Modifier.height(2.dp))
-                }
-                Text(
-                    line.text,
-                    color = if (line.mine) Palette.Outline else Palette.Text,
-                    fontSize = 13.sp
-                )
-            }
-        }
-    }
-}

@@ -104,13 +104,14 @@ try {
   // page with a fragment on the end, so a plain second goto would be a fragment jump the
   // browser never reloads for, and the offer would never be read.
   //
-  // 424 XP is one point short of level 11, so whatever the round does — a win is 25 XP,
+  // 2294 XP is one point short of level 28, so whatever the round does — a win is 25 XP,
   // a loss 10 — the guest is guaranteed to cross a level during it. That is what the
-  // host's copy of its badge has to notice. Level 10 also owns the green cloth, which is
-  // a cloth the host has never unlocked: the two tables are then visibly different.
+  // host's copy of its badge has to notice. Level 27 is also exactly where the green
+  // cloth lands, and the host has never unlocked it: the two tables are then visibly
+  // different, which is what the hand-over check needs.
   await guestContext.addInitScript(() => {
     localStorage.setItem('uno.profile', JSON.stringify({
-      name: 'Bob', avatarColor: 4, photo: null, stats: {}, xp: 424,
+      name: 'Bob', avatarColor: 4, photo: null, stats: {}, xp: 2294,
       wearing: { FELT: 'ft.feutre' },
     }));
   });
@@ -171,9 +172,14 @@ try {
   await guest.waitForSelector('#screen-game.on', { timeout: 15000 });
   console.log('  les deux ecrans sont sur la table');
 
+  // Nothing to type at any more: the chat is gone, stickers are the whole channel.
+  if (await host.$$eval('#chat-bar, #chat, #chat-input', (n) => n.length) !== 0) {
+    problems.push('il reste du chat dans la page');
+  }
+
   const badgeBefore = await host.textContent('#rivals .level-badge');
   console.log(`  niveau de l'invite vu par l'hote : ${badgeBefore}`);
-  if (badgeBefore !== '10') problems.push(`l'hote voit l'invite au niveau ${badgeBefore} au lieu de 10`);
+  if (badgeBefore !== '27') problems.push(`l'hote voit l'invite au niveau ${badgeBefore} au lieu de 27`);
 
   // ------------------------------------------------------------ the cloth changes hands
   // The guest arrived wearing the green cloth, which the host has never unlocked. Both
@@ -192,18 +198,21 @@ try {
     if (green !== guestOnTurn) problems.push(`le tapis de ${who} ne suit pas le joueur au trait`);
   }
 
-  // And it must actually change hands when the turn does. Six turns at most: with seven
-  // cards each the round cannot end inside that, so this cannot wander into the
-  // end-of-round overlays and leave them blocking the checks that follow.
+  // And it must actually change hands when the turn does.
+  //
+  // One turn at a time, sampled after each: playing both players in the same pass hands
+  // the table over and straight back, and the cloth would look as if it had never moved.
+  // Six turns at most, so with seven cards each this cannot reach the end of the round
+  // and leave its overlays blocking the checks below.
   const clothBefore = await clothOf(host);
-  for (let i = 0; i < 6; i++) {
+  let clothAfter = clothBefore;
+  for (let i = 0; i < 6 && clothAfter === clothBefore; i++) {
     for (const page of [host, guest]) {
-      if (await page.evaluate(yourTurn)) await takeTurn(page);
+      if (await page.evaluate(yourTurn)) { await takeTurn(page); break; }
     }
     await host.waitForTimeout(140);
-    if ((await clothOf(host)) !== clothBefore) break;
+    clothAfter = await clothOf(host);
   }
-  const clothAfter = await clothOf(host);
   console.log(`  le tapis a change de main : ${clothAfter !== clothBefore ? 'oui' : 'NON'}`);
   if (clothAfter === clothBefore) problems.push('le tapis ne change jamais de main');
 
@@ -216,25 +225,7 @@ try {
   }
   await host.waitForTimeout(200);
 
-  // ------------------------------------------------------------ chat and stickers
-  await guest.click('#chat-bar');
-  await guest.fill('#chat-input', 'salut mon reuf');
-  await guest.click('#chat-send');
-  await host.waitForTimeout(600);
-
-  const flash = await host.$$eval('#chat-flash .flash .what', (n) => n.map((x) => x.textContent));
-  console.log(`  bulle recue par l'hote : ${JSON.stringify(flash)}`);
-  if (!flash.includes('salut mon reuf')) problems.push("le message n'arrive pas chez l'hote");
-  if (await host.textContent('#chat-unread') !== '1') problems.push('le compteur de non-lus est faux');
-  // The sender is not flashed at with its own line, but it is in its own log.
-  if (await guest.$$eval('#chat-flash .flash', (n) => n.length) !== 0) {
-    problems.push("l'expediteur voit sa propre bulle");
-  }
-  if (await guest.$$eval('#chat-log .said', (n) => n.length) !== 1) {
-    problems.push("la ligne manque dans le log de l'expediteur");
-  }
-  await guest.click('#chat-close');
-
+  // ---------------------------------------------------------------- stickers
   // The rail is folded away by default, so it takes a tap to unfold before picking.
   if (await host.$$eval('#sticker-rail [data-sticker]', (n) => n.length) !== 0) {
     problems.push('le rail des stickers est deja ouvert');
@@ -252,19 +243,11 @@ try {
   // The host is the rival along the top of the guest's screen, so it comes down.
   else if (!emotes[0].includes('from-top')) problems.push("l'emoji arrive du mauvais cote");
 
-  // Both are transient: the sticker clears itself, the bubble folds away after 5 s.
+  // The sticker clears itself once its flight is over.
   await guest.waitForTimeout(2800);
   if (await guest.$$eval('#emote-layer .emote', (n) => n.length) !== 0) {
     problems.push("l'emoji ne disparait pas");
   }
-  // Five seconds from when it arrived, not from here: the sticker checks above already
-  // burned part of that, and hard-coding the remainder is how a test starts flaking.
-  const folded = await host.waitForFunction(
-    () => document.querySelectorAll('#chat-flash .flash').length === 0,
-    null,
-    { timeout: 4000 },
-  ).then(() => true).catch(() => false);
-  if (!folded) problems.push('la bulle ne disparait pas apres 5 s');
 
   let exchanged = 0;
   for (let i = 0; i < 600; i++) {
@@ -321,7 +304,7 @@ try {
   // everybody else for the rest of the evening.
   const badgeAfter = await host.textContent('#rivals .level-badge');
   console.log(`  niveau de l'invite apres la manche : ${badgeAfter}`);
-  if (Number(badgeAfter) < 11) {
+  if (Number(badgeAfter) < 28) {
     problems.push(`l'hote voit toujours l'invite au niveau ${badgeAfter} apres sa montee`);
   }
 
@@ -329,7 +312,7 @@ try {
   // guest was seeded one point short of level 5 and gets there either way. So the check
   // is against the arithmetic, not against the result. Either way the overlay must not
   // be left blocking the table.
-  for (const [page, who, startLevel] of [[host, "l'hote", 1], [guest, "l'invite", 10]]) {
+  for (const [page, who, startLevel] of [[host, "l'hote", 1], [guest, "l'invite", 27]]) {
     const won = (await page.textContent('#over-title')) === 'Gagné !';
     const level = await page.evaluate(async () => {
       const Lv = await import('./src/levels.js');
@@ -387,17 +370,28 @@ try {
   console.log(`  familles de cosmetiques : ${tabs.length}`);
   if (tabs.length !== 6) problems.push(`il manque des familles de cosmetiques : ${tabs.join(', ')}`);
 
-  const frames = await host.$$eval('#wardrobe .cosmetic', (n) => n.length);
-  const wearable = await host.$$eval('#wardrobe [data-wear]', (n) => n.length);
-  const locked = await host.$$eval('#wardrobe .cosmetic.locked', (n) => n.length);
-  console.log(`  cadres : ${frames} au total, ${wearable} debloques, ${locked} verrouilles`);
-  if (frames < 25) problems.push(`trop peu de cadres : ${frames}`);
-  // Eighteen frames land at or before level 51; the rest must still be shut.
-  if (wearable !== 18) problems.push(`cadres portables : ${wearable} au lieu de 18`);
-  if (locked !== frames - wearable) problems.push('les cadres verrouilles ne sont pas marques comme tels');
+  // Checked against the catalogue rather than against a number typed here: the catalogue
+  // grows, and a test that has to be edited every time it does is a test that gets
+  // edited into agreeing with whatever the code now says.
+  const LEVEL = 51;
+  for (const [tab, kind] of [[1, 'FRAME'], [2, 'BACK'], [3, 'FELT'], [4, 'TITLE'], [5, 'NAME'], [6, 'STICKER']]) {
+    await host.click(`#kind-tabs button:nth-child(${tab})`);
+    const seen = await host.$$eval('#wardrobe .cosmetic', (n) => n.length);
+    const wearable = await host.$$eval('#wardrobe [data-wear]', (n) => n.map((x) => x.dataset.wear));
+    const truth = await host.evaluate(async (family) => {
+      const C = await import('./src/cosmetics.js');
+      const all = C.ofKind(family);
+      return { total: all.length, owned: all.filter((i) => i.level <= 51).map((i) => i.id) };
+    }, kind);
+    console.log(`  ${kind} : ${seen} affiches, ${wearable.length} portables sur ${truth.owned.length} merites`);
+    if (seen !== truth.total) problems.push(`${kind} : ${seen} tuiles pour ${truth.total} cosmetiques`);
+    if (wearable.join() !== truth.owned.join()) {
+      problems.push(`${kind} : les portables ne suivent pas le niveau ${LEVEL}`);
+    }
+  }
 
-  // The gold frame is exactly the level-51 reward: it must be reachable, and putting it
-  // on must stick.
+  // The gold frame is a level-51 reward: it must be reachable, and putting it on sticks.
+  await host.click('#kind-tabs button:nth-child(1)');
   await host.click('[data-wear="fr.or"]');
   const wornFrame = await host.evaluate(() => JSON.parse(localStorage.getItem('uno.profile')).wearing.FRAME);
   console.log(`  cadre porte : ${wornFrame}`);
@@ -405,23 +399,10 @@ try {
   if (await host.$$eval('#wardrobe .cosmetic.worn', (n) => n.length) !== 1) {
     problems.push("le cadre porte n'est pas marque dans la grille");
   }
-
-  // Something a level 51 has not earned must stay untouchable.
-  if (await host.$$eval('[data-wear="fr.centieme"]', (n) => n.length) !== 0) {
-    problems.push('un cadre du niveau 100 est portable au niveau 51');
+  // The crown is the last thing in the game and must stay shut at 51.
+  if (await host.$$eval('[data-wear="fr.couronne"]', (n) => n.length) !== 0) {
+    problems.push('le cadre du niveau 100 est portable au niveau 51');
   }
-
-  await host.click('#kind-tabs button:nth-child(4)');
-  const titleTiles = await host.$$eval('#wardrobe [data-wear]', (n) => n.map((x) => x.dataset.wear));
-  console.log(`  titres portables au niveau 51 : ${titleTiles.length}`);
-  if (!titleTiles.includes('ti.sanspitie')) problems.push("le titre du niveau 49 n'est pas portable");
-  if (titleTiles.includes('ti.briscard')) problems.push('un titre du niveau 53 est deja portable');
-
-  // The rail grows with the level: six at the start, ten by level 51.
-  await host.click('#kind-tabs button:nth-child(6)');
-  const stickers = await host.$$eval('#wardrobe [data-wear]', (n) => n.length);
-  console.log(`  stickers debloques au niveau 51 : ${stickers}`);
-  if (stickers !== 11) problems.push(`stickers debloques : ${stickers} au lieu de 11`);
 } finally {
   await browser.close();
   server.kill();

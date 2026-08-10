@@ -1,13 +1,9 @@
-// What players send each other alongside the cards, ported from the Android app's
+// What players throw at each other alongside the cards, ported from the Android app's
 // Talk.kt. None of it touches the rules, so none of it lives in the engine.
+//
+// Stickers only, deliberately. Typing at a card table means looking away from it.
 
 import { STICKER_ITEMS } from './cosmetics.js';
-
-/**
- * A line has to fit in a data-channel frame, not in a novel. Long enough for a taunt,
- * short enough that nobody can stall the table by pasting a page of text.
- */
-export const MAX_CHARS = 120;
 
 /**
  * Every sticker there is, in catalogue order. Sent as an index, never as text: a build
@@ -21,9 +17,3 @@ export const MAX_CHARS = 120;
 export const STICKERS = STICKER_ITEMS.map((item) => item.text);
 
 export const sticker = (index) => STICKERS[index] ?? null;
-
-/** Trims and caps a typed line; returns null when there is nothing worth sending. */
-export function cleanLine(raw) {
-  const text = String(raw ?? '').trim().slice(0, MAX_CHARS);
-  return text.length ? text : null;
-}

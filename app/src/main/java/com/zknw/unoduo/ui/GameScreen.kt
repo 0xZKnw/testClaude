@@ -109,9 +109,6 @@ fun GameScreen(
     onRematch: () -> Unit,
     onQuit: () -> Unit,
     onSticker: (Int) -> Unit = {},
-    onSendChat: (String) -> Unit = {},
-    onOpenChat: () -> Unit = {},
-    onCloseChat: () -> Unit = {},
     onDismissLevelUp: () -> Unit = {}
 ) {
     var pendingWild by remember { mutableStateOf<Card?>(null) }
@@ -174,19 +171,12 @@ fun GameScreen(
                     }
                 }
 
-                // Stacked rather than overlaid: the log line and the chat both live at
-                // the bottom of the table, and they must not land on top of each other.
-                Column(
+                EventToast(
+                    toast,
                     Modifier
                         .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                ) {
-                    if (social.flash.isNotEmpty()) {
-                        ChatFlash(social.flash, Modifier.fillMaxWidth())
-                        Spacer(Modifier.height(6.dp))
-                    }
-                    EventToast(toast, Modifier.align(Alignment.CenterHorizontally))
-                }
+                        .padding(end = 56.dp)
+                )
             }
 
             TurnBanner(view)
@@ -220,14 +210,6 @@ fun GameScreen(
                     }
                 }
             )
-
-            if (social.enabled) {
-                ChatBar(
-                    social = social,
-                    onOpen = onOpenChat,
-                    modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp)
-                )
-            }
         }
 
         // Above everything, including the cards: a sticker that slid under the hand
@@ -242,10 +224,6 @@ fun GameScreen(
                 },
                 onCancel = { pendingWild = null }
             )
-        }
-
-        if (social.open) {
-            ChatSheet(social = social, onSend = onSendChat, onClose = onCloseChat)
         }
 
         penaltyHit?.let { PenaltyOverlay(it) }

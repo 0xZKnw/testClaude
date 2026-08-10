@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -29,6 +30,10 @@ import com.zknw.unoduo.progress.CosmeticKind
 import com.zknw.unoduo.progress.Cosmetics
 import com.zknw.unoduo.progress.FrameStyle
 import com.zknw.unoduo.ui.theme.Palette
+import kotlin.math.PI
+import kotlin.math.absoluteValue
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * The ring that goes round an avatar.
@@ -54,10 +59,7 @@ fun AvatarFrame(
     val outer = size + (band + ink) * 2
 
     // Only the moving styles ask for a clock; a still frame costs nothing to draw.
-    val moving = frame.style == FrameStyle.SPIN ||
-        frame.style == FrameStyle.GLOW ||
-        frame.style == FrameStyle.SHINE
-    val phase = if (moving) rememberPhase(frame.style) else 0f
+    val phase = if (frame.style in MOVING) rememberPhase(frame.style) else 0f
 
     Box(modifier.size(outer), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
@@ -67,21 +69,37 @@ fun AvatarFrame(
     }
 }
 
-/** One clock per style, so a pulse, a sheen and a rotation keep their own periods. */
+/** Everything that needs a clock. A still frame starts no animation at all. */
+private val MOVING = setOf(
+    FrameStyle.GLOW, FrameStyle.SHINE, FrameStyle.SPIN,
+    FrameStyle.FLAME, FrameStyle.BOLT, FrameStyle.WAVE,
+    FrameStyle.ORBIT, FrameStyle.STARS, FrameStyle.CROWN
+)
+
+/** One clock per style, so a flicker, a sheen and a rotation keep their own periods. */
 @Composable
 private fun rememberPhase(style: FrameStyle): Float {
     val clock = rememberInfiniteTransition(label = "frame")
     val duration = when (style) {
         FrameStyle.SPIN -> 4200
         FrameStyle.SHINE -> 2400
+        FrameStyle.FLAME -> 900
+        FrameStyle.BOLT -> 1400
+        FrameStyle.WAVE -> 3600
+        FrameStyle.ORBIT -> 2600
+        FrameStyle.STARS -> 2000
+        FrameStyle.CROWN -> 3000
         else -> 1700
     }
+    // Only the two that breathe run back and forth; the rest go round and round, and a
+    // reversing rotation would look like a mistake.
+    val bounces = style == FrameStyle.GLOW || style == FrameStyle.STARS
     val value by clock.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(duration, easing = LinearEasing),
-            repeatMode = if (style == FrameStyle.GLOW) RepeatMode.Reverse else RepeatMode.Restart
+            repeatMode = if (bounces) RepeatMode.Reverse else RepeatMode.Restart
         ),
         label = "phase"
     )
@@ -176,7 +194,191 @@ private fun DrawScope.drawFrame(frame: Cosmetic, band: Float, ink: Float, phase:
         FrameStyle.SPIN -> rotate(phase * 360f, pivot = middle) {
             disc(Brush.sweepGradient(listOf(a, b, c, a), center = middle))
         }
+
+        // ---------------------------------------------------------------- things
+
+        // Tongues of fire licking outward. Each one breathes on its own offset, so the
+        // ring flickers rather than pumping in unison.
+        FrameStyle.FLAME -> {
+            flat(a)
+            val tongues = 9
+            for (i in 0 until tongues) {
+                val lick = 0.55f + 0.45f * sin((phase * 2f + i * 0.7f) * PI2).absoluteValue
+                drawPath(
+                    tongue(middle, paint, band * (0.9f + 1.5f * lick), i * 360f / tongues, band),
+                    color = if (i % 2 == 0) b else a
+                )
+            }
+            // A hot core, so the base of the fire is brighter than its tips.
+            drawCircle(b.copy(alpha = 0.55f), radius = paint - band * 0.45f, center = middle)
+        }
+
+        // A zigzag ring, with one segment lit at a time running round it.
+        FrameStyle.BOLT -> {
+            flat(a.copy(alpha = 0.28f))
+            val teeth = 14
+            val lit = (phase * teeth).toInt()
+            for (i in 0 until teeth) {
+                drawPath(
+                    zag(middle, paint - band * 0.5f, band, i, teeth),
+                    color = if (i == lit || i == (lit + 7) % teeth) b else a,
+                    style = Stroke(width = band * 0.42f, cap = StrokeCap.Round)
+                )
+            }
+        }
+
+        // A rippling ring: a circle whose radius rides a sine, turning slowly.
+        FrameStyle.WAVE -> {
+            flat(a.copy(alpha = 0.35f))
+            drawPath(ripple(middle, paint - band * 0.5f, band * 0.5f, 6, phase), color = a,
+                style = Stroke(width = band * 0.55f, cap = StrokeCap.Round))
+            drawPath(ripple(middle, paint - band * 0.5f, band * 0.34f, 6, phase + 0.5f), color = b,
+                style = Stroke(width = band * 0.36f, cap = StrokeCap.Round))
+        }
+
+        // A bead running round the ring, with a tail that fades behind it.
+        FrameStyle.ORBIT -> {
+            flat(b)
+            val ring = paint - band * 0.5f
+            for (i in 0 until 8) {
+                val at = phase - i * 0.012f
+                val point = onRing(middle, ring, at * 360f)
+                drawCircle(
+                    color = a.copy(alpha = (1f - i / 8f) * 0.9f),
+                    radius = band * (0.5f - i * 0.045f).coerceAtLeast(0.08f),
+                    center = point
+                )
+            }
+        }
+
+        // Small stars set into the ring, twinkling out of step with each other.
+        FrameStyle.STARS -> {
+            flat(b)
+            val count = 8
+            for (i in 0 until count) {
+                val twinkle = 0.35f + 0.65f *
+                    sin((phase + i * 0.37f) * PI2).absoluteValue
+                drawPath(
+                    star(onRing(middle, paint - band * 0.5f, i * 360f / count), band * 0.62f * twinkle),
+                    color = a.copy(alpha = 0.55f + 0.45f * twinkle)
+                )
+            }
+        }
+
+        // The last frame in the game: gold points all round, a jewel on each, and a
+        // shine that sweeps over the lot.
+        FrameStyle.CROWN -> {
+            disc(
+                Brush.sweepGradient(
+                    listOf(a, b, a, c, a),
+                    center = middle
+                )
+            )
+            val points = 10
+            for (i in 0 until points) {
+                drawPath(
+                    tongue(middle, paint, band * 1.15f, i * 360f / points, band * 0.78f),
+                    color = a
+                )
+                drawCircle(
+                    color = b,
+                    radius = band * 0.22f,
+                    center = onRing(middle, paint + band * 0.55f, i * 360f / points)
+                )
+            }
+            // The sweep, on top of everything, so the gold catches the light.
+            rotate(phase * 360f, pivot = middle) {
+                drawCircle(
+                    brush = Brush.sweepGradient(
+                        0.00f to Color.Transparent,
+                        0.42f to Color.Transparent,
+                        0.50f to b.copy(alpha = 0.85f),
+                        0.58f to Color.Transparent,
+                        1.00f to Color.Transparent,
+                        center = middle
+                    ),
+                    radius = paint,
+                    center = middle
+                )
+            }
+        }
     }
+}
+
+private const val PI2 = (PI * 2).toFloat()
+
+/** A point on a circle, angles measured from twelve o'clock and running clockwise. */
+private fun onRing(centre: Offset, radius: Float, degrees: Float): Offset {
+    val radians = ((degrees - 90f) * PI / 180f).toFloat()
+    return Offset(centre.x + radius * cos(radians), centre.y + radius * sin(radians))
+}
+
+/**
+ * One lick of flame — or one point of a crown, which is the same shape with straighter
+ * sides. Built from plain line segments rather than curves: at forty pixels across, the
+ * difference is invisible and the code has no API surface to go stale.
+ */
+private fun tongue(centre: Offset, base: Float, height: Float, at: Float, width: Float): Path {
+    val half = (width / base) * 28f
+    return Path().apply {
+        val left = onRing(centre, base - width * 0.2f, at - half)
+        moveTo(left.x, left.y)
+        // Sampled along the outline: out to the tip up one side, back down the other.
+        for (step in 1..8) {
+            val t = step / 8f
+            val side = 1f - t
+            val spot = onRing(centre, base + height * t * (2f - t), at - half * side)
+            lineTo(spot.x, spot.y)
+        }
+        for (step in 7 downTo 0) {
+            val t = step / 8f
+            val side = 1f - t
+            val spot = onRing(centre, base + height * t * (2f - t), at + half * side)
+            lineTo(spot.x, spot.y)
+        }
+        close()
+    }
+}
+
+/** One tooth of a lightning ring: out, across, back in. */
+private fun zag(centre: Offset, radius: Float, amp: Float, index: Int, total: Int): Path {
+    val step = 360f / total
+    val at = index * step
+    return Path().apply {
+        val start = onRing(centre, radius + amp * 0.5f, at)
+        moveTo(start.x, start.y)
+        val mid = onRing(centre, radius - amp * 0.5f, at + step * 0.5f)
+        lineTo(mid.x, mid.y)
+        val end = onRing(centre, radius + amp * 0.5f, at + step)
+        lineTo(end.x, end.y)
+    }
+}
+
+/** A circle whose radius rides a sine wave, turning with the phase. */
+private fun ripple(centre: Offset, radius: Float, amp: Float, cycles: Int, phase: Float): Path =
+    Path().apply {
+        val steps = 72
+        for (step in 0..steps) {
+            val at = step * 360f / steps
+            val wave = sin((at / 360f * cycles + phase) * PI2)
+            val spot = onRing(centre, radius + amp * wave, at)
+            if (step == 0) moveTo(spot.x, spot.y) else lineTo(spot.x, spot.y)
+        }
+        close()
+    }
+
+/** A four-pointed sparkle, the shape the cards already use for a highlight. */
+private fun star(centre: Offset, size: Float): Path = Path().apply {
+    val thin = size * 0.28f
+    moveTo(centre.x, centre.y - size)
+    lineTo(centre.x + thin, centre.y - thin)
+    lineTo(centre.x + size, centre.y)
+    lineTo(centre.x + thin, centre.y + thin)
+    lineTo(centre.x, centre.y + size)
+    lineTo(centre.x - thin, centre.y + thin)
+    lineTo(centre.x - size, centre.y)
+    lineTo(centre.x - thin, centre.y - thin)
+    close()
 }
 
 /**

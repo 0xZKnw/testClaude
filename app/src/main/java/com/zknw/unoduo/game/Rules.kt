@@ -67,7 +67,8 @@ object Rules {
             listOf(
                 "Chaque manche terminée rapporte de l'expérience : 25 XP gagnée, 10 XP perdue. On monte donc même quand ça se passe mal, et une partie contre le bot compte aussi.",
                 "Chaque niveau coûte un peu plus que le précédent, toujours du même écart : 20 XP pour le premier, 5 de plus à chaque fois. Le niveau 100 est le dernier.",
-                "Chaque niveau, du 2 au 100, débloque au moins un cosmétique : cadres d'avatar, dos de carte, tapis, titres, couleurs de pseudo et stickers.",
+                "Chaque niveau, du 2 au 100, débloque au moins un cosmétique, et 43 niveaux en donnent deux ou plus : 154 en tout, répartis en cadres d'avatar, dos de carte, tapis, titres, couleurs de pseudo et stickers.",
+                "Les cadres les plus hauts ne sont plus des cercles de couleur : flammes, éclairs, vagues, satellite, constellation, et une couronne dorée au niveau 100.",
                 "Tout ce que tu portes est vu par les autres. Le cadre, le titre et la couleur du pseudo restent sur toi ; le tapis et le dos de la pioche appartiennent au joueur dont c'est le tour, et changent de main avec lui.",
                 "La main de chaque joueur est dessinée avec son dos de carte à lui, donc tu vois ce que les autres ont débloqué.",
                 "Remettre les statistiques à zéro n'efface ni l'expérience ni les cosmétiques."

@@ -11,10 +11,23 @@ enum class CosmeticKind(val code: String, val label: String, val blurb: String) 
 }
 
 /**
- * How a frame is drawn. Nine primitives are enough for every ring in the catalogue,
- * which is also why they all look like they came from the same set.
+ * How a frame is drawn.
+ *
+ * The first nine are geometry — a ring filled, split, dashed or swept. The last six are
+ * things: fire, lightning, water, a laurel, a ring of stars, a crown. Those are the ones
+ * worth climbing for, so they sit high in the catalogue and every one of them moves.
  */
-enum class FrameStyle { SOLID, DUO, DUAL, DASH, BEADS, NOTCH, GLOW, SHINE, SPIN }
+enum class FrameStyle {
+    SOLID, DUO, DUAL, DASH, BEADS, NOTCH, GLOW, SHINE, SPIN,
+    FLAME, BOLT, WAVE, ORBIT, STARS, CROWN
+}
+
+/**
+ * The motif printed on a card back or woven into a cloth. Drawn faintly and repeated —
+ * a back is seen a dozen times at once and a cloth sits under the whole game, so a motif
+ * that shouted would be unbearable within one round.
+ */
+enum class Pattern { PLAIN, RAYS, STRIPES, DOTS, WAVES, BOLTS, FLAMES, HEX, CONFETTI, CROWNS }
 
 /**
  * What a card back or a table cloth does while you look at it.
@@ -44,6 +57,8 @@ data class Cosmetic(
     val style: FrameStyle = FrameStyle.SOLID,
     /** Backs and cloths only; everything else stands still. */
     val motion: Motion = Motion.NONE,
+    /** Backs and cloths only. */
+    val pattern: Pattern = Pattern.PLAIN,
     /** The emoji, for a sticker. Empty for everything else. */
     val text: String = ""
 ) {
@@ -69,79 +84,104 @@ object Cosmetics {
 
     val frames: List<Cosmetic> = listOf(
         frame("encre", "Encre", 1, FrameStyle.SOLID, 0xFF3B475D),
-        frame("braise", "Braise", 3, FrameStyle.SOLID, 0xFFF23B2E),
-        frame("menthe", "Menthe", 6, FrameStyle.SOLID, 0xFF41C258),
-        frame("azur", "Azur", 9, FrameStyle.SOLID, 0xFF2E9CF2),
-        frame("safran", "Safran", 12, FrameStyle.SOLID, 0xFFFFC21A),
-        frame("amethyste", "Améthyste", 15, FrameStyle.SOLID, 0xFF7A5CF0),
-        frame("couchant", "Couchant", 18, FrameStyle.DUO, 0xFFFF8A1E, 0xFFF23B2E),
-        frame("lagon", "Lagon", 21, FrameStyle.DUO, 0xFF19B79B, 0xFF2E9CF2),
-        frame("pointilles", "Pointillés", 24, FrameStyle.DASH, 0xFFF3F6FB),
-        frame("barbapapa", "Barbe à papa", 27, FrameStyle.DUO, 0xFFF25DA8, 0xFF7A5CF0),
-        frame("perles", "Perles", 30, FrameStyle.BEADS, 0xFF2EF2C4),
-        frame("cuivre", "Cuivre", 33, FrameStyle.DUAL, 0xFFC87137, 0xFFF0A862),
-        frame("argent", "Argent", 36, FrameStyle.SHINE, 0xFFA8B4C6, 0xFFFDFBF4),
-        frame("feuillage", "Feuillage", 39, FrameStyle.DUO, 0xFF41C258, 0xFF19B79B),
-        frame("orage", "Orage", 42, FrameStyle.NOTCH, 0xFF2E9CF2, 0xFF3B475D),
-        frame("lave", "Lave", 45, FrameStyle.GLOW, 0xFFFF5A1E),
-        frame("givre", "Givre", 48, FrameStyle.GLOW, 0xFF9FE8FF),
+        frame("braise", "Braise", 2, FrameStyle.SOLID, 0xFFF23B2E),
+        frame("menthe", "Menthe", 4, FrameStyle.SOLID, 0xFF41C258),
+        frame("azur", "Azur", 6, FrameStyle.SOLID, 0xFF2E9CF2),
+        frame("safran", "Safran", 8, FrameStyle.SOLID, 0xFFFFC21A),
+        frame("amethyste", "Améthyste", 10, FrameStyle.SOLID, 0xFF7A5CF0),
+        frame("couchant", "Couchant", 12, FrameStyle.DUO, 0xFFFF8A1E, 0xFFF23B2E),
+        frame("lagon", "Lagon", 14, FrameStyle.DUO, 0xFF19B79B, 0xFF2E9CF2),
+        frame("pointilles", "Pointillés", 16, FrameStyle.DASH, 0xFFF3F6FB),
+        frame("barbapapa", "Barbe à papa", 18, FrameStyle.DUO, 0xFFF25DA8, 0xFF7A5CF0),
+        frame("perles", "Perles", 20, FrameStyle.BEADS, 0xFF2EF2C4),
+        frame("cuivre", "Cuivre", 22, FrameStyle.DUAL, 0xFFC87137, 0xFFF0A862),
+        frame("argent", "Argent", 24, FrameStyle.SHINE, 0xFFA8B4C6, 0xFFFDFBF4),
+        frame("feuillage", "Feuillage", 26, FrameStyle.DUO, 0xFF41C258, 0xFF19B79B),
+        frame("orage", "Orage", 28, FrameStyle.NOTCH, 0xFF2E9CF2, 0xFF3B475D),
+        // Fire, from here on the frames are things rather than shapes.
+        frame("flammeches", "Flammèches", 30, FrameStyle.FLAME, 0xFFFF8A1E, 0xFFFFD23F),
+        frame("lave", "Lave", 33, FrameStyle.GLOW, 0xFFFF5A1E),
+        frame("etincelle", "Étincelle", 36, FrameStyle.BOLT, 0xFFFFE27A, 0xFFFDFBF4),
+        frame("givre", "Givre", 39, FrameStyle.GLOW, 0xFF9FE8FF),
+        frame("ressac", "Ressac", 42, FrameStyle.WAVE, 0xFF2E9CF2, 0xFF9FE8FF),
+        frame("bitume", "Bitume", 45, FrameStyle.NOTCH, 0xFF9DAABF, 0xFF4A5568),
+        frame("satellite", "Satellite", 48, FrameStyle.ORBIT, 0xFF2EF2C4, 0xFF1D3A4A),
         frame("or", "Or", 51, FrameStyle.SHINE, 0xFFFFC531, 0xFFFFF3C4),
-        frame("prisme", "Prisme", 55, FrameStyle.SPIN, 0xFFF23B2E, 0xFFFFC21A, 0xFF2E9CF2),
-        frame("bitume", "Bitume", 58, FrameStyle.NOTCH, 0xFF9DAABF, 0xFF4A5568),
-        frame("sangdencre", "Sang d'encre", 62, FrameStyle.DUAL, 0xFFC01C12, 0xFFF23B2E),
+        frame("sangdencre", "Sang d'encre", 54, FrameStyle.DUAL, 0xFFC01C12, 0xFFF23B2E),
+        frame("constellation", "Constellation", 57, FrameStyle.STARS, 0xFFFDFBF4, 0xFF2E4B8C),
+        frame("prisme", "Prisme", 60, FrameStyle.SPIN, 0xFFF23B2E, 0xFFFFC21A, 0xFF2E9CF2),
+        frame("brasier", "Brasier", 63, FrameStyle.FLAME, 0xFFF23B2E, 0xFFFFC531),
         frame("aurore", "Aurore", 66, FrameStyle.SPIN, 0xFF2EF2C4, 0xFF7A5CF0, 0xFF2E9CF2),
-        frame("rubis", "Rubis", 70, FrameStyle.GLOW, 0xFFFF2D55),
-        frame("emeraude", "Émeraude", 74, FrameStyle.GLOW, 0xFF2EE06A),
-        frame("saphir", "Saphir", 78, FrameStyle.GLOW, 0xFF3D7DFF),
-        frame("onyx", "Onyx", 82, FrameStyle.DUAL, 0xFF2B3242, 0xFF6B7688),
-        frame("platine", "Platine", 86, FrameStyle.SHINE, 0xFFD8E0EC, 0xFFFDFBF4),
+        frame("rubis", "Rubis", 69, FrameStyle.GLOW, 0xFFFF2D55),
+        frame("foudre", "Foudre", 72, FrameStyle.BOLT, 0xFFB98BFF, 0xFFFDFBF4),
+        frame("emeraude", "Émeraude", 75, FrameStyle.GLOW, 0xFF2EE06A),
+        frame("maree", "Marée", 78, FrameStyle.WAVE, 0xFF19B79B, 0xFFD8F6FF),
+        frame("saphir", "Saphir", 81, FrameStyle.GLOW, 0xFF3D7DFF),
+        frame("onyx", "Onyx", 84, FrameStyle.DUAL, 0xFF2B3242, 0xFF6B7688),
+        frame("anneau", "Anneau d'or", 87, FrameStyle.ORBIT, 0xFFFFC531, 0xFF4A3A12),
         frame("cendre", "Cendre ardente", 90, FrameStyle.SPIN, 0xFFFF8A1E, 0xFFC01C12, 0xFF2B1A12),
-        frame("couronne", "Couronne", 95, FrameStyle.DUAL, 0xFFFFC531, 0xFFFDFBF4),
-        frame("centieme", "Centième", 100, FrameStyle.SPIN, 0xFFFFC531, 0xFFF23B2E, 0xFF2E9CF2)
+        frame("lactee", "Voie lactée", 93, FrameStyle.STARS, 0xFFFDFBF4, 0xFF4A2E8C),
+        frame("platine", "Platine", 96, FrameStyle.SHINE, 0xFFD8E0EC, 0xFFFDFBF4),
+        frame("enfer", "Enfer", 98, FrameStyle.FLAME, 0xFFFFF3C4, 0xFFFF5A1E),
+        // The last one in the game, and the only crown: gold points, and a shine that
+        // sweeps round them.
+        frame("couronne", "Couronne", 100, FrameStyle.CROWN, 0xFFFFC531, 0xFFFFF3C4, 0xFFDC9200)
     )
 
     // ------------------------------------------------------------ dos de carte
 
     val backs: List<Cosmetic> = listOf(
         back("classique", "Classique", 1, 0xFF2B3242, 0xFF161A24, 0xFFF23B2E),
-        back("brique", "Brique", 4, 0xFF5A1F1A, 0xFF2A0E0B, 0xFFFF8A1E),
-        back("foret", "Forêt", 10, 0xFF1E4030, 0xFF0C1D16, 0xFF41C258),
-        back("ocean", "Océan", 16, 0xFF16344F, 0xFF081826, 0xFF2E9CF2),
-        back("dore", "Doré", 22, 0xFF4A3A12, 0xFF221A07, 0xFFFFC531),
-        back("violine", "Violine", 28, 0xFF382357, 0xFF190F28, 0xFF7A5CF0),
-        back("reglisse", "Réglisse", 34, 0xFF1A1A1E, 0xFF07070A, 0xFFF3F6FB),
-        back("sable", "Sable", 40, 0xFF5C4B2E, 0xFF2A2113, 0xFFFFC21A),
-        back("menthe", "Menthe glaciale", 46, 0xFF17423C, 0xFF091E1B, 0xFF2EF2C4, Motion.SHEEN),
-        back("cerise", "Cerise noire", 52, 0xFF3E0E1E, 0xFF1B040C, 0xFFF25DA8, Motion.PULSE),
-        back("cuivre", "Cuivre chaud", 57, 0xFF52341A, 0xFF24160A, 0xFFC87137, Motion.SHEEN),
-        back("nuit", "Bleu de nuit", 63, 0xFF17203D, 0xFF070B1A, 0xFF6E8CFF, Motion.DRIFT),
-        back("poudre", "Rose poudré", 68, 0xFF54293D, 0xFF25101B, 0xFFF25DA8, Motion.PULSE),
-        back("vertdegris", "Vert-de-gris", 73, 0xFF2A423B, 0xFF121D1A, 0xFF19B79B, Motion.DRIFT),
-        back("pourpre", "Pourpre royal", 80, 0xFF421338, 0xFF1D0718, 0xFFFFC531, Motion.SHEEN),
-        back("orblanc", "Or blanc", 85, 0xFF3B3F49, 0xFF171A20, 0xFFD8E0EC, Motion.SHEEN),
-        back("retro", "Néon rétro", 92, 0xFF201242, 0xFF0B0620, 0xFF2EF2C4, Motion.DRIFT),
-        back("centfaces", "Cent faces", 98, 0xFF4A3A12, 0xFF14161D, 0xFFFFC531, Motion.SHEEN)
+        back("brique", "Brique", 3, 0xFF5A1F1A, 0xFF2A0E0B, 0xFFFF8A1E),
+        back("foret", "Forêt", 5, 0xFF1E4030, 0xFF0C1D16, 0xFF41C258, Pattern.STRIPES),
+        back("ocean", "Océan", 7, 0xFF16344F, 0xFF081826, 0xFF2E9CF2, Pattern.WAVES),
+        back("dore", "Doré", 9, 0xFF4A3A12, 0xFF221A07, 0xFFFFC531, Pattern.RAYS),
+        back("violine", "Violine", 11, 0xFF382357, 0xFF190F28, 0xFF7A5CF0, Pattern.DOTS),
+        back("reglisse", "Réglisse", 13, 0xFF1A1A1E, 0xFF07070A, 0xFFF3F6FB, Pattern.STRIPES),
+        back("sable", "Sable", 15, 0xFF5C4B2E, 0xFF2A2113, 0xFFFFC21A, Pattern.HEX),
+        back("confettis", "Confettis", 17, 0xFF2A2440, 0xFF14101F, 0xFFF25DA8, Pattern.CONFETTI),
+        back("menthe", "Menthe glaciale", 19, 0xFF17423C, 0xFF091E1B, 0xFF2EF2C4, Pattern.WAVES, Motion.SHEEN),
+        back("cerise", "Cerise noire", 21, 0xFF3E0E1E, 0xFF1B040C, 0xFFF25DA8, Pattern.DOTS, Motion.PULSE),
+        back("cuivre", "Cuivre chaud", 23, 0xFF52341A, 0xFF24160A, 0xFFC87137, Pattern.RAYS, Motion.SHEEN),
+        back("nuit", "Bleu de nuit", 25, 0xFF17203D, 0xFF070B1A, 0xFF6E8CFF, Pattern.DOTS, Motion.DRIFT),
+        back("brasier", "Brasier", 29, 0xFF4A1A0C, 0xFF200806, 0xFFFF8A1E, Pattern.FLAMES, Motion.PULSE),
+        back("poudre", "Rose poudré", 32, 0xFF54293D, 0xFF25101B, 0xFFF25DA8, Pattern.HEX, Motion.PULSE),
+        back("tonnerre", "Tonnerre", 35, 0xFF1E2136, 0xFF0A0C18, 0xFFFFE27A, Pattern.BOLTS, Motion.SHEEN),
+        back("vertdegris", "Vert-de-gris", 38, 0xFF2A423B, 0xFF121D1A, 0xFF19B79B, Pattern.STRIPES, Motion.DRIFT),
+        back("abysses", "Abysses", 41, 0xFF0E2A3A, 0xFF04121C, 0xFF3D7DFF, Pattern.WAVES, Motion.DRIFT),
+        back("pourpre", "Pourpre royal", 47, 0xFF421338, 0xFF1D0718, 0xFFFFC531, Pattern.CROWNS, Motion.SHEEN),
+        back("orblanc", "Or blanc", 53, 0xFF3B3F49, 0xFF171A20, 0xFFD8E0EC, Pattern.RAYS, Motion.SHEEN),
+        back("retro", "Néon rétro", 59, 0xFF201242, 0xFF0B0620, 0xFF2EF2C4, Pattern.BOLTS, Motion.DRIFT),
+        back("fournaise", "Fournaise", 65, 0xFF3A0B06, 0xFF190403, 0xFFFF5A1E, Pattern.FLAMES, Motion.SHEEN),
+        back("carnaval", "Carnaval", 71, 0xFF2E1240, 0xFF13061C, 0xFFFFC531, Pattern.CONFETTI, Motion.PULSE),
+        back("centfaces", "Cent faces", 83, 0xFF4A3A12, 0xFF14161D, 0xFFFFC531, Pattern.CROWNS, Motion.SHEEN)
     )
 
     // -------------------------------------------------------------------- tapis
 
     val felts: List<Cosmetic> = listOf(
         felt("nuit", "Table de nuit", 1, 0xFF2A3444, 0xFF171D27, 0xFF080A10),
-        felt("feutre", "Feutre vert", 5, 0xFF27503A, 0xFF14301F, 0xFF06130C),
-        felt("bordeaux", "Bordeaux", 11, 0xFF54202A, 0xFF2E1017, 0xFF120508),
-        felt("encre", "Encre bleue", 17, 0xFF22375C, 0xFF111D35, 0xFF050A14),
-        felt("cendre", "Cendre", 23, 0xFF3D4148, 0xFF212429, 0xFF0B0C0E),
-        felt("prune", "Prune", 29, 0xFF3E2B57, 0xFF221733, 0xFF0C0714),
-        felt("profonde", "Forêt profonde", 35, 0xFF1E4231, 0xFF0F2519, 0xFF040D08),
-        felt("sable", "Sable chaud", 41, 0xFF54452C, 0xFF2E2617, 0xFF120E07),
-        felt("cuivre", "Cuivre", 47, 0xFF5A3A22, 0xFF301D11, 0xFF130A05),
-        felt("abysse", "Abysse", 54, 0xFF16323A, 0xFF0A1B21, 0xFF02080B, Motion.DRIFT),
-        felt("braise", "Braise", 60, 0xFF5E2E18, 0xFF33170B, 0xFF140803, Motion.PULSE),
-        felt("jade", "Jade", 67, 0xFF1D4A45, 0xFF0F2926, 0xFF040F0E, Motion.SHEEN),
-        felt("nebuleuse", "Nébuleuse", 75, 0xFF3A2660, 0xFF1C1236, 0xFF070414, Motion.DRIFT),
-        felt("crepuscule", "Crépuscule", 84, 0xFF5A3352, 0xFF2E1A2C, 0xFF120810, Motion.PULSE),
-        felt("obsidienne", "Obsidienne", 93, 0xFF262A33, 0xFF12141A, 0xFF030406, Motion.SHEEN),
-        felt("cercle", "Cercle des cent", 99, 0xFF4C3E18, 0xFF231C0B, 0xFF0A0803, Motion.DRIFT)
+        felt("feutre", "Feutre vert", 27, 0xFF27503A, 0xFF14301F, 0xFF06130C, Pattern.STRIPES),
+        felt("bordeaux", "Bordeaux", 31, 0xFF54202A, 0xFF2E1017, 0xFF120508, Pattern.RAYS),
+        felt("encre", "Encre bleue", 34, 0xFF22375C, 0xFF111D35, 0xFF050A14, Pattern.HEX),
+        felt("cendre", "Cendre", 37, 0xFF3D4148, 0xFF212429, 0xFF0B0C0E, Pattern.DOTS),
+        felt("prune", "Prune", 40, 0xFF3E2B57, 0xFF221733, 0xFF0C0714, Pattern.CONFETTI),
+        felt("profonde", "Forêt profonde", 43, 0xFF1E4231, 0xFF0F2519, 0xFF040D08, Pattern.STRIPES),
+        felt("sable", "Sable chaud", 46, 0xFF54452C, 0xFF2E2617, 0xFF120E07, Pattern.RAYS),
+        felt("cuivre", "Cuivre", 49, 0xFF5A3A22, 0xFF301D11, 0xFF130A05, Pattern.HEX, Motion.SHEEN),
+        felt("abysse", "Abysse", 52, 0xFF16323A, 0xFF0A1B21, 0xFF02080B, Pattern.WAVES, Motion.DRIFT),
+        felt("braise", "Braise", 55, 0xFF5E2E18, 0xFF33170B, 0xFF140803, Pattern.FLAMES, Motion.PULSE),
+        felt("orageuse", "Table orageuse", 58, 0xFF243050, 0xFF121A2E, 0xFF05080F, Pattern.BOLTS, Motion.SHEEN),
+        felt("jade", "Jade", 61, 0xFF1D4A45, 0xFF0F2926, 0xFF040F0E, Pattern.WAVES, Motion.SHEEN),
+        felt("volcan", "Volcan", 64, 0xFF5A1F10, 0xFF2C0D07, 0xFF100301, Pattern.FLAMES, Motion.DRIFT),
+        felt("nebuleuse", "Nébuleuse", 67, 0xFF3A2660, 0xFF1C1236, 0xFF070414, Pattern.DOTS, Motion.DRIFT),
+        felt("recif", "Récif", 70, 0xFF13424A, 0xFF092329, 0xFF030D10, Pattern.WAVES, Motion.PULSE),
+        felt("crepuscule", "Crépuscule", 73, 0xFF5A3352, 0xFF2E1A2C, 0xFF120810, Pattern.RAYS, Motion.PULSE),
+        felt("foudroyee", "Table foudroyée", 76, 0xFF2A2440, 0xFF141020, 0xFF06040C, Pattern.BOLTS, Motion.DRIFT),
+        felt("obsidienne", "Obsidienne", 79, 0xFF262A33, 0xFF12141A, 0xFF030406, Pattern.HEX, Motion.SHEEN),
+        felt("fete", "Table de fête", 82, 0xFF3A2050, 0xFF1C0F28, 0xFF08040E, Pattern.CONFETTI, Motion.PULSE),
+        felt("couronnee", "Table couronnée", 85, 0xFF4A3A12, 0xFF241C09, 0xFF0A0803, Pattern.CROWNS, Motion.SHEEN),
+        felt("cercle", "Cercle des cent", 99, 0xFF5A4614, 0xFF2A2109, 0xFF0C0902, Pattern.CROWNS, Motion.DRIFT)
     )
 
     // ------------------------------------------------------------------- titres
@@ -150,30 +190,33 @@ object Cosmetics {
         // Wearing none is a choice, so it is an entry rather than a special case.
         title("aucun", "Aucun", 1),
         title("chair", "Chair à pioche", 2),
-        title("douze", "Toujours 12 cartes", 7),
-        title("piochetout", "Pioche-tout", 13),
-        title("distributeur", "Distributeur de +2", 19),
-        title("empileur", "Empileur compulsif", 25),
-        title("toxique", "Ami toxique", 31),
-        title("mainlegere", "Main légère", 37),
-        title("compteur", "Compte les cartes (mal)", 43),
-        title("sanspitie", "Sans pitié", 49),
-        title("briscard", "Vieux briscard", 53),
-        title("chasseur", "Chasseur de +4", 56),
-        title("briseur", "Briseur d'amitiés", 59),
-        title("stratege", "Stratège du dimanche", 61),
-        title("passecasse", "Ça passe ou ça casse", 64),
-        title("espionchef", "Espion en chef", 69),
-        title("coeurdepierre", "Cœur de pierre", 71),
-        title("tempete", "Tempête de +4", 76),
-        title("intouchable", "Intouchable", 79),
-        title("requin", "Requin de table", 81),
-        title("maitrecumul", "Maître du cumul", 83),
-        title("legende", "Légende du salon", 87),
+        title("douze", "Toujours 12 cartes", 5),
+        title("piochetout", "Pioche-tout", 9),
+        title("distributeur", "Distributeur de +2", 13),
+        title("empileur", "Empileur compulsif", 17),
+        title("toxique", "Ami toxique", 21),
+        title("mainlegere", "Main légère", 25),
+        title("compteur", "Compte les cartes (mal)", 29),
+        title("balance", "Balance ton +4", 33),
+        title("sanspitie", "Sans pitié", 37),
+        title("briscard", "Vieux briscard", 41),
+        title("chasseur", "Chasseur de +4", 44),
+        title("briseur", "Briseur d'amitiés", 50),
+        title("stratege", "Stratège du dimanche", 56),
+        title("passecasse", "Ça passe ou ça casse", 62),
+        title("espionchef", "Espion en chef", 68),
+        title("coeurdepierre", "Cœur de pierre", 74),
+        title("tempete", "Tempête de +4", 77),
+        title("intouchable", "Intouchable", 80),
+        title("requin", "Requin de table", 86),
+        title("maitrecumul", "Maître du cumul", 88),
         title("javaisunquatre", "J'avais un +4", 89),
         title("mangeur", "Mangeur de pioche", 91),
+        title("karma", "Karma en attente", 92),
         title("increvable", "Increvable", 94),
-        title("cauchemar", "Cauchemar récurrent", 96),
+        title("legende", "Légende du salon", 95),
+        title("cauchemar", "Cauchemar récurrent", 97),
+        title("dieudutapis", "Dieu du tapis", 99),
         title("centurion", "Centurion", 100)
     )
 
@@ -181,19 +224,24 @@ object Cosmetics {
 
     val names: List<Cosmetic> = listOf(
         name("blanc", "Blanc", 1, 0xFFF3F6FB),
-        name("rouge", "Rouge", 8, 0xFFFF4A3D),
-        name("vert", "Vert", 14, 0xFF4EDE6A),
-        name("bleu", "Bleu", 20, 0xFF3FB0FF),
+        name("rouge", "Rouge", 6, 0xFFFF4A3D),
+        name("vert", "Vert", 11, 0xFF4EDE6A),
+        name("bleu", "Bleu", 16, 0xFF3FB0FF),
         name("jaune", "Jaune", 26, 0xFFFFD23F),
-        name("rose", "Rose", 32, 0xFFFF6FB8),
-        name("turquoise", "Turquoise", 38, 0xFF2FD9BD),
-        name("violet", "Violet", 44, 0xFF9B7BFF),
-        name("or", "Or", 50, 0xFFFFE27A, 0xFFFFB200),
-        name("braise", "Braise", 65, 0xFFFFD23F, 0xFFFF8A1E, 0xFFF23B2E),
-        name("glacier", "Glacier", 72, 0xFFD8F6FF, 0xFF6FD4FF, 0xFF2E6CF2),
-        name("neon", "Néon", 77, 0xFFB6FF3F, 0xFF2EF2C4),
-        name("prisme", "Prisme", 88, 0xFFFF5DA8, 0xFF9B7BFF, 0xFF3FB0FF),
-        name("centieme", "Centième", 97, 0xFFFFF3C4, 0xFFFFC531, 0xFFFF8A1E)
+        name("rose", "Rose", 31, 0xFFFF6FB8),
+        name("turquoise", "Turquoise", 43, 0xFF2FD9BD),
+        name("violet", "Violet", 50, 0xFF9B7BFF),
+        // From here the letters catch the light as it passes.
+        name("or", "Or", 56, 0xFFFFE27A, 0xFFFFB200, motion = Motion.SHEEN),
+        name("braise", "Braise", 62, 0xFFFFD23F, 0xFFFF8A1E, 0xFFF23B2E, Motion.SHEEN),
+        name("glacier", "Glacier", 68, 0xFFD8F6FF, 0xFF6FD4FF, 0xFF2E6CF2, Motion.SHEEN),
+        name("neon", "Néon", 74, 0xFFB6FF3F, 0xFF2EF2C4, motion = Motion.SHEEN),
+        name("foudre", "Foudre", 80, 0xFFFDFBF4, 0xFFB98BFF, 0xFF6E8CFF, Motion.SHEEN),
+        name("prisme", "Prisme", 86, 0xFFFF5DA8, 0xFF9B7BFF, 0xFF3FB0FF, Motion.SHEEN),
+        name("magma", "Magma", 92, 0xFFFFF3C4, 0xFFFF5A1E, 0xFFC01C12, Motion.SHEEN),
+        name("abysse", "Abysse", 95, 0xFF2FD9BD, 0xFF2E6CF2, 0xFF1B1046, Motion.SHEEN),
+        name("centieme", "Centième", 97, 0xFFFFF3C4, 0xFFFFC531, 0xFFFF8A1E, Motion.SHEEN),
+        name("couronne", "Couronné", 100, 0xFFFDFBF4, 0xFFFFC531, 0xFFDC9200, Motion.SHEEN)
     )
 
     // ---------------------------------------------------------------- stickers
@@ -210,14 +258,19 @@ object Cosmetics {
         sticker("peur", "Chat terrifié", 1, "🙀"),
         sticker("doigt", "Doigt d'honneur", 1, "🖕"),
         sticker("feu", "En feu", 10, "🔥"),
-        sticker("sanglot", "Sanglot", 20, "😭"),
-        sticker("clown", "Clown", 30, "🤡"),
-        sticker("couronne", "Couronne", 40, "👑"),
-        sticker("trefle", "Trèfle", 50, "🍀"),
-        sticker("glacon", "Glaçon", 60, "🥶"),
-        sticker("salut", "Salut militaire", 70, "🫡"),
-        sticker("crane", "Crâne", 80, "💀"),
-        sticker("poignee", "Poignée de main", 90, "🤝")
+        sticker("sanglot", "Sanglot", 15, "😭"),
+        sticker("clown", "Clown", 20, "🤡"),
+        sticker("eclair", "Éclair", 28, "⚡"),
+        sticker("couronne", "Couronne", 34, "👑"),
+        sticker("trefle", "Trèfle", 40, "🍀"),
+        sticker("glacon", "Glaçon", 46, "🥶"),
+        sticker("vague", "Vague", 52, "🌊"),
+        sticker("salut", "Salut militaire", 58, "🫡"),
+        sticker("crane", "Crâne", 64, "💀"),
+        sticker("bombe", "Bombe", 70, "💣"),
+        sticker("poignee", "Poignée de main", 76, "🤝"),
+        sticker("gobe", "Gobe-mouches", 88, "😐"),
+        sticker("trophee", "Trophée", 90, "🏆")
     )
 
     /** Every cosmetic there is, in catalogue order. */
@@ -271,8 +324,12 @@ object Cosmetics {
         top: Long,
         bottom: Long,
         oval: Long,
+        pattern: Pattern = Pattern.PLAIN,
         motion: Motion = Motion.NONE
-    ) = Cosmetic("bk.$id", CosmeticKind.BACK, name, level, top, bottom, oval, motion = motion)
+    ) = Cosmetic(
+        "bk.$id", CosmeticKind.BACK, name, level, top, bottom, oval,
+        motion = motion, pattern = pattern
+    )
 
     private fun felt(
         id: String,
@@ -281,14 +338,25 @@ object Cosmetics {
         light: Long,
         mid: Long,
         dark: Long,
+        pattern: Pattern = Pattern.PLAIN,
         motion: Motion = Motion.NONE
-    ) = Cosmetic("ft.$id", CosmeticKind.FELT, name, level, light, mid, dark, motion = motion)
+    ) = Cosmetic(
+        "ft.$id", CosmeticKind.FELT, name, level, light, mid, dark,
+        motion = motion, pattern = pattern
+    )
 
     private fun title(id: String, name: String, level: Int) =
         Cosmetic("ti.$id", CosmeticKind.TITLE, name, level)
 
-    private fun name(id: String, name: String, level: Int, a: Long, b: Long = 0L, c: Long = 0L) =
-        Cosmetic("nm.$id", CosmeticKind.NAME, name, level, a, b, c)
+    private fun name(
+        id: String,
+        name: String,
+        level: Int,
+        a: Long,
+        b: Long = 0L,
+        c: Long = 0L,
+        motion: Motion = Motion.NONE
+    ) = Cosmetic("nm.$id", CosmeticKind.NAME, name, level, a, b, c, motion = motion)
 
     private fun sticker(id: String, name: String, level: Int, emoji: String) =
         Cosmetic("st.$id", CosmeticKind.STICKER, name, level, text = emoji)

@@ -27,6 +27,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -44,6 +50,7 @@ import com.zknw.unoduo.progress.Cosmetic
 import com.zknw.unoduo.progress.CosmeticKind
 import com.zknw.unoduo.progress.Cosmetics
 import com.zknw.unoduo.progress.Levels
+import com.zknw.unoduo.progress.Motion
 import com.zknw.unoduo.ui.components.AvatarFrame
 import com.zknw.unoduo.ui.components.AvatarLook
 import com.zknw.unoduo.ui.components.InkChip
@@ -289,9 +296,30 @@ fun PseudoText(
         item.c.takeIf { it != 0L }
     ).map { Color(it) }
 
+    // A pseudo that catches the light: the gradient slides along the word rather than
+    // sitting still on it. Only the late unlocks do this — movement is a reward too.
+    val slide = if (item.motion == Motion.SHEEN) {
+        val clock = rememberInfiniteTransition(label = "pseudo")
+        val value by clock.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing)),
+            label = "slide"
+        )
+        value
+    } else {
+        0f
+    }
+
     val fill = when {
         stops.size >= 2 -> TextStyle(
-            brush = Brush.horizontalGradient(stops),
+            // Repeated so the sweep closes on itself, and shifted by the phase so it
+            // travels instead of stretching.
+            brush = Brush.linearGradient(
+                colors = stops + stops,
+                start = Offset(slide * 240f - 240f, 0f),
+                end = Offset(slide * 240f + 240f, 0f)
+            ),
             fontSize = size,
             fontWeight = FontWeight.Black
         )
