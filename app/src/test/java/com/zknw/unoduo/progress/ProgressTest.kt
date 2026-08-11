@@ -132,10 +132,24 @@ class ProgressTest {
     }
 
     @Test
-    fun `a title has no colour and a colour has no title`() {
+    fun `a moving title has a gradient to move, and a still one has none`() {
         for (item in Cosmetics.of(CosmeticKind.TITLE)) {
-            assertEquals(0L, item.a)
-            assertEquals("", item.text)
+            assertEquals("${item.id} porte un emoji", "", item.text)
+            if (item.motion == Motion.NONE) {
+                // A single flat colour is fine standing still; a second one would be a
+                // gradient nothing ever sweeps.
+                assertEquals("${item.id} immobile avec un degrade", 0L, item.b)
+            } else {
+                // Every moving effect sweeps a gradient along the word, so one colour is
+                // not enough to see anything happen.
+                assertNotEquals0("${item.id} anime sans premiere couleur", item.a)
+                assertNotEquals0("${item.id} anime sans seconde couleur", item.b)
+            }
+        }
+        // The jokes at the bottom of the ladder stay deliberately plain.
+        for (item in Cosmetics.of(CosmeticKind.TITLE).filter { it.level < 50 }) {
+            assertEquals("${item.id} colore trop tot", 0L, item.a)
+            assertEquals("${item.id} anime trop tot", Motion.NONE, item.motion)
         }
         for (item in Cosmetics.of(CosmeticKind.STICKER)) {
             assertTrue("${item.id} sans emoji", item.text.isNotEmpty())

@@ -87,7 +87,7 @@ data class TableLook(
     val stickers: Int = Cosmetics.stickersAt(1).size
 ) {
     fun frameOf(seat: Seat): Cosmetic = frames[seat] ?: Cosmetics.defaultOf(CosmeticKind.FRAME)
-    fun titleOf(seat: Seat): String = titles[seat]?.worn.orEmpty()
+    fun titleOf(seat: Seat): Cosmetic = titles[seat] ?: Cosmetics.defaultOf(CosmeticKind.TITLE)
     fun nameColorOf(seat: Seat): Cosmetic = nameColors[seat] ?: Cosmetics.defaultOf(CosmeticKind.NAME)
 
     /** The deck a seat deals from, and the cloth it plays on. */

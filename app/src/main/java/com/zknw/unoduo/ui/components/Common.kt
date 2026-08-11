@@ -148,6 +148,48 @@ private fun FeltLayer(felt: Cosmetic) {
                     )
             )
         }
+        // Embers along the bottom edge, swelling and dying back. Anchored low rather than
+        // spread over the whole cloth: a table that glowed evenly would just look like a
+        // brightness setting, and the cards have to stay the brightest thing on it.
+        if (felt.motion == Motion.BLAZE) {
+            val heat = blazeHeat(beat)
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0.30f to Color.Transparent,
+                            0.62f to Color(felt.a).copy(alpha = 0.22f + 0.26f * heat),
+                            // Fire, not the cloth's own tone: every cloth is dark by
+                            // design, so lighting one with its own colour lights nothing.
+                            // Peaks above the hand rather than at the very bottom edge,
+                            // which is behind the cards and would light nobody's table.
+                            0.80f to EMBER.copy(alpha = 0.40f + 0.42f * heat),
+                            1.00f to EMBER.copy(alpha = 0.12f + 0.18f * heat)
+                        )
+                    )
+            )
+        }
+        // Two strikes, then a long dark wait. The cloths that wear this one already carry
+        // the bolt motif, so the flash reads as the storm the motif was promising.
+        if (felt.motion == Motion.STORM) {
+            val flash = stormFlash(beat)
+            if (flash > 0.01f) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    LIGHTNING.copy(alpha = 0.62f * flash),
+                                    Color(felt.a).copy(alpha = 0.30f * flash),
+                                    Color.Transparent
+                                )
+                            )
+                        )
+                )
+            }
+        }
     }
 }
 
@@ -159,6 +201,11 @@ private fun feltMotion(motion: Motion): Float {
     val duration = when (motion) {
         Motion.SHEEN -> 7000
         Motion.PULSE -> 5200
+        // Slower than either: this one is a whole table breathing, and a fire that
+        // hurried would read as a flickering backlight.
+        Motion.BLAZE -> 4200
+        // Long, because nearly all of it is the wait before the strike.
+        Motion.STORM -> 6400
         else -> 9000
     }
     val value by clock.animateFloat(
@@ -166,7 +213,7 @@ private fun feltMotion(motion: Motion): Float {
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(duration, easing = LinearEasing),
-            repeatMode = if (motion == Motion.SHEEN) RepeatMode.Restart else RepeatMode.Reverse
+            repeatMode = if (motion.runsOneWay()) RepeatMode.Restart else RepeatMode.Reverse
         ),
         label = "beat"
     )

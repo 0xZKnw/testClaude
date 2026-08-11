@@ -28,6 +28,24 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
 
 const BOT_THINK_MS = 750;
 
+/**
+ * The colour of fire and the colour of lightning, fixed rather than taken from whatever
+ * is burning. Every cloth in the catalogue is dark on purpose — it sits under the cards —
+ * so lighting one with its own tone lights nothing at all.
+ */
+const EMBER = '#ff8a1e';
+const LIGHTNING = '#cfe4ff';
+
+/** The two top-tier cloth movements, drawn the same way on the table and in the tile. */
+const feltSparkHtml = (item) => (
+  item.motion === 'BLAZE'
+    ? `<div class="ember" style="background:linear-gradient(transparent 30%,
+        ${item.a}7a 62%, ${EMBER}d6 80%, ${EMBER}4d 100%)"></div>`
+    : item.motion === 'STORM'
+      ? `<div class="bolt" style="background:linear-gradient(${LIGHTNING}9e,
+          ${item.a}4d 55%, transparent)"></div>`
+      : '');
+
 /** Which cloth the table is currently wearing, so a repaint is skipped when it has not
     changed — renderGame runs on every snapshot. */
 let feltShown = null;
@@ -122,18 +140,40 @@ function framedAvatarHtml(name, colorIndex, photo, size, frame, extraClass = '')
   return framedHtml(frame, size, avatarHtml(name, colorIndex, photo, size, extraClass));
 }
 
+/** What each movement is called in the stylesheet. Only a gradient can wear one. */
+const MOVES = { SHEEN: ' lit', BLAZE: ' burn', STORM: ' storm' };
+
 /**
  * A pseudo painted in its unlocked colour, with an ink outline: flat for one colour, a
  * gradient across the word for two or three.
+ *
+ * [role] is 'title' for the line underneath, which is painted the same way but thinner
+ * and duller when it has no colour of its own.
  */
-function pseudoHtml(name, item, size) {
+function pseudoHtml(name, item, size, role = '') {
   const stops = [item.a, item.b, item.c].filter(Boolean);
-  const style = stops.length >= 2
+  const grad = stops.length >= 2;
+  const style = grad
     // A two-stop gradient repeats its last colour, so the CSS can always name three.
-    ? `--na:${stops[0]};--nb:${stops[1]};--nc:${stops[2] || stops[1]};font-size:${size}px`
-    : `color:${stops[0] || '#f3f6fb'};font-size:${size}px`;
-  const classes = `pseudo${stops.length >= 2 ? ' grad' : ''}${item.motion === 'SHEEN' ? ' lit' : ''}`;
+    // --glow is the hottest of them, which is what the burn and the flash pick up.
+    ? `--na:${stops[0]};--nb:${stops[1]};--nc:${stops[2] || stops[1]};`
+      + `--glow:${stops[stops.length - 1]};font-size:${size}px`
+    : `color:${stops[0] || (role === 'title' ? 'var(--dim)' : '#f3f6fb')};font-size:${size}px`;
+  const classes = `pseudo${role ? ` ${role}` : ''}${grad ? ' grad' : ''}`
+    + (grad ? (MOVES[item.motion] || '') : '');
   return `<span class="${classes}" style="${style}">${esc(name)}</span>`;
+}
+
+/**
+ * The line under a pseudo.
+ *
+ * Painted like the pseudo above it on purpose: the two are read as one block, and a
+ * gilded name over a grey caption looks like the caption failed to load. Empty string
+ * when the wearer has chosen no title, so callers can drop it straight into a template.
+ */
+function titleHtml(item, size) {
+  const text = Cosm.worn(item);
+  return text ? `<div class="ellipsis">${pseudoHtml(text, item, size, 'title')}</div>` : '';
 }
 
 function levelBadgeHtml(level, size) {
@@ -242,7 +282,7 @@ function renderProfile() {
   $('name-input').value = p.name;
   const refresh = () => {
     const shown = ($('name-input').value || '?').trim();
-    const title = Cosm.worn(wornOf(p, 'TITLE'));
+    const title = wornOf(p, 'TITLE');
     // Framed and badged, exactly as the other players see you.
     $('profile-avatar').outerHTML = `<div id="profile-avatar" style="display:flex;
       flex-direction:column;align-items:center;gap:8px">
@@ -250,7 +290,7 @@ function renderProfile() {
         ${framedAvatarHtml(shown, p.avatarColor, p.photo, 96, wornOf(p, 'FRAME'))}
         <div style="position:absolute;right:0;bottom:0">${levelBadgeHtml(levelOf(p), 34)}</div>
       </div>
-      ${title ? `<span class="chip">${esc(title)}</span>` : ''}
+      ${Cosm.worn(title) ? `<span class="chip">${pseudoHtml(Cosm.worn(title), title, 13, 'title')}</span>` : ''}
     </div>`;
   };
   refresh();
@@ -341,10 +381,16 @@ function previewHtml(item, p) {
     case 'BACK':
       return `<div class="card">${cardBack(item)}</div>`;
     case 'FELT':
+      // The two loud cloths preview what they actually do. A still swatch would be
+      // selling a cloth nobody would recognise once it was on the table.
       return `<div class="felt-shot" style="background:radial-gradient(circle at 50% 38%,
-        ${item.a}, ${item.b} 45%, ${item.c})">${motifHtml(item.pattern, item.a)}</div>`;
+        ${item.a}, ${item.b} 45%, ${item.c})">${motifHtml(item.pattern, item.a)}${
+        feltSparkHtml(item)}</div>`;
     case 'TITLE':
-      return `<div class="title-shot">${esc(Cosm.worn(item) || '—')}</div>`;
+      // Shown exactly as it will be worn, movement included: a tile that previewed a
+      // grey caption would be selling the wrong thing.
+      return `<div class="title-shot">${Cosm.worn(item)
+        ? pseudoHtml(Cosm.worn(item), item, 14, 'title') : '—'}</div>`;
     case 'NAME':
       return pseudoHtml(p.name || 'Joueur', item, 17);
     default:
@@ -528,7 +574,7 @@ function meAsPlayer(seat) {
 const frameOf = (player) => Cosm.resolve(player?.fr || '', 'FRAME', player?.lv || 1);
 const backOf = (player) => Cosm.resolve(player?.bk || '', 'BACK', player?.lv || 1);
 const feltOf = (player) => Cosm.resolve(player?.ft || '', 'FELT', player?.lv || 1);
-const titleOf = (player) => Cosm.worn(Cosm.resolve(player?.ti || '', 'TITLE', player?.lv || 1));
+const titleOf = (player) => Cosm.resolve(player?.ti || '', 'TITLE', player?.lv || 1);
 const nameColorOf = (player) => Cosm.resolve(player?.nm || '', 'NAME', player?.lv || 1);
 const playerAt = (seat) => state.players.find((p) => p.s === seat);
 
@@ -1025,7 +1071,7 @@ function rosterHtml(target) {
       </div>
       <div class="grow" style="min-width:0">
         <div class="ellipsis">${pseudoHtml(p.n, nameColorOf(p), 15)}</div>
-        ${title ? `<div class="ellipsis" style="color:var(--dim);font-size:11px;font-weight:700">${esc(title)}</div>` : ''}
+        ${titleHtml(title, 11)}
       </div>
       ${p.s === HOST_SEAT ? '<span class="chip gold">Hôte</span>' : ''}
       ${p.s === state.mySeat ? '<span class="chip">Toi</span>' : ''}
@@ -1165,6 +1211,10 @@ function sendSticker(index) {
 function addEmote(seat, index) {
   const sticker = STICKERS[index];
   if (!sticker) return;
+  // What the catalogue says this one does on the way over. The flight itself is one
+  // animation on the outer div, so the flair rides an inner span rather than fighting
+  // it for the same transform.
+  const flair = Cosm.STICKER_ITEMS[index]?.motion ?? 'NONE';
   const layer = $('emote-layer');
   const node = document.createElement('div');
   // The sender's place on *this* screen: the rivals stand in a row along the top, so the
@@ -1178,7 +1228,8 @@ function addEmote(seat, index) {
   node.className = `emote ${mine ? 'from-bottom' : 'from-top'}`;
   node.style.left = `${x * 100}%`;
   node.style.top = mine ? '72%' : '10%';
-  node.textContent = sticker;
+  node.innerHTML = (flair === 'BLAZE' ? '<div class="halo"></div>' : '')
+    + `<span class="flair${flair === 'NONE' ? '' : ` f-${flair}`}">${sticker}</span>`;
   layer.appendChild(node);
   setTimeout(() => node.remove(), EMOTE_MS);
 }
@@ -1273,6 +1324,9 @@ function setFelt(felt) {
     gleam.style.background = `linear-gradient(90deg, transparent, ${felt.a}8c, transparent)`;
     layer.appendChild(gleam);
   }
+  // Anchored low rather than spread evenly: a table that glowed all over would just look
+  // like a brightness setting, and the cards have to stay the brightest thing on it.
+  layer.insertAdjacentHTML('beforeend', feltSparkHtml(felt));
   stack.appendChild(layer);
   // Forcing a reflow rather than waiting for a frame: the browser needs to have seen the
   // "off" state for the transition to run, and requestAnimationFrame is throttled when
@@ -1309,7 +1363,7 @@ function renderGame() {
       </div>
       <div class="grow">
         <div class="ellipsis">${pseudoHtml(single.n, nameColorOf(seat), 15)}</div>
-        ${title ? `<div class="ellipsis" style="color:var(--dim);font-size:10px;font-weight:700">${esc(title)}</div>` : ''}
+        ${titleHtml(title, 10)}
         <div style="font-size:12px;color:${single.c === 1 ? 'var(--red)' : 'var(--dim)'};
           font-weight:${single.c === 1 ? 900 : 400}">
           ${single.c} carte${single.c > 1 ? 's' : ''}${single.c === 1 ? ' · UNO !' : ''}

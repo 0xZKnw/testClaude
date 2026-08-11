@@ -25,12 +25,12 @@ const back = (id, name, level, top, bottom, oval, pattern = 'PLAIN', motion = 'N
   ({ id: `bk.${id}`, kind: 'BACK', name, level, a: top, b: bottom, c: oval, style: 'SOLID', motion, pattern, text: '' });
 const felt = (id, name, level, light, mid, dark, pattern = 'PLAIN', motion = 'NONE') =>
   ({ id: `ft.${id}`, kind: 'FELT', name, level, a: light, b: mid, c: dark, style: 'SOLID', motion, pattern, text: '' });
-const title = (id, name, level) =>
-  ({ id: `ti.${id}`, kind: 'TITLE', name, level, a: '', b: '', c: '', style: 'SOLID', motion: 'NONE', pattern: 'PLAIN', text: '' });
+const title = (id, name, level, a = '', b = '', c = '', motion = 'NONE') =>
+  ({ id: `ti.${id}`, kind: 'TITLE', name, level, a, b, c, style: 'SOLID', motion, pattern: 'PLAIN', text: '' });
 const named = (id, name, level, a, b = '', c = '', motion = 'NONE') =>
   ({ id: `nm.${id}`, kind: 'NAME', name, level, a, b, c, style: 'SOLID', motion, pattern: 'PLAIN', text: '' });
-const sticker = (id, name, level, text) =>
-  ({ id: `st.${id}`, kind: 'STICKER', name, level, a: '', b: '', c: '', style: 'SOLID', motion: 'NONE', pattern: 'PLAIN', text });
+const sticker = (id, name, level, text, motion = 'NONE') =>
+  ({ id: `st.${id}`, kind: 'STICKER', name, level, a: '', b: '', c: '', style: 'SOLID', motion, pattern: 'PLAIN', text });
 
 export const FRAMES = [
   frame('encre', 'Encre', 1, 'SOLID', '#3b475d'),
@@ -96,10 +96,11 @@ export const BACKS = [
   back('abysses', 'Abysses', 41, '#0e2a3a', '#04121c', '#3d7dff', 'WAVES', 'DRIFT'),
   back('pourpre', 'Pourpre royal', 47, '#421338', '#1d0718', '#ffc531', 'CROWNS', 'SHEEN'),
   back('orblanc', 'Or blanc', 53, '#3b3f49', '#171a20', '#d8e0ec', 'RAYS', 'SHEEN'),
-  back('retro', 'Néon rétro', 59, '#201242', '#0b0620', '#2ef2c4', 'BOLTS', 'DRIFT'),
-  back('fournaise', 'Fournaise', 65, '#3a0b06', '#190403', '#ff5a1e', 'FLAMES', 'SHEEN'),
+  back('retro', 'Néon rétro', 59, '#201242', '#0b0620', '#2ef2c4', 'BOLTS', 'STORM'),
+  back('fournaise', 'Fournaise', 65, '#3a0b06', '#190403', '#ff5a1e', 'FLAMES', 'BLAZE'),
   back('carnaval', 'Carnaval', 71, '#2e1240', '#13061c', '#ffc531', 'CONFETTI', 'PULSE'),
-  back('centfaces', 'Cent faces', 83, '#4a3a12', '#14161d', '#ffc531', 'CROWNS', 'SHEEN'),
+  back('centfaces', 'Cent faces', 83, '#4a3a12', '#14161d', '#ffc531', 'CROWNS', 'BLAZE'),
+  back('centurion', 'Dos du centurion', 100, '#5c4708', '#1a1204', '#ffd75a', 'CROWNS', 'BLAZE'),
 ];
 
 export const FELTS = [
@@ -114,21 +115,21 @@ export const FELTS = [
   felt('cuivre', 'Cuivre', 49, '#5a3a22', '#301d11', '#130a05', 'HEX', 'SHEEN'),
   felt('abysse', 'Abysse', 52, '#16323a', '#0a1b21', '#02080b', 'WAVES', 'DRIFT'),
   felt('braise', 'Braise', 55, '#5e2e18', '#33170b', '#140803', 'FLAMES', 'PULSE'),
-  felt('orageuse', 'Table orageuse', 58, '#243050', '#121a2e', '#05080f', 'BOLTS', 'SHEEN'),
+  felt('orageuse', 'Table orageuse', 58, '#243050', '#121a2e', '#05080f', 'BOLTS', 'STORM'),
   felt('jade', 'Jade', 61, '#1d4a45', '#0f2926', '#040f0e', 'WAVES', 'SHEEN'),
-  felt('volcan', 'Volcan', 64, '#5a1f10', '#2c0d07', '#100301', 'FLAMES', 'DRIFT'),
+  felt('volcan', 'Volcan', 64, '#5a1f10', '#2c0d07', '#100301', 'FLAMES', 'BLAZE'),
   felt('nebuleuse', 'Nébuleuse', 67, '#3a2660', '#1c1236', '#070414', 'DOTS', 'DRIFT'),
   felt('recif', 'Récif', 70, '#13424a', '#092329', '#030d10', 'WAVES', 'PULSE'),
   felt('crepuscule', 'Crépuscule', 73, '#5a3352', '#2e1a2c', '#120810', 'RAYS', 'PULSE'),
-  felt('foudroyee', 'Table foudroyée', 76, '#2a2440', '#141020', '#06040c', 'BOLTS', 'DRIFT'),
+  felt('foudroyee', 'Table foudroyée', 76, '#2a2440', '#141020', '#06040c', 'BOLTS', 'STORM'),
   felt('obsidienne', 'Obsidienne', 79, '#262a33', '#12141a', '#030406', 'HEX', 'SHEEN'),
   felt('fete', 'Table de fête', 82, '#3a2050', '#1c0f28', '#08040e', 'CONFETTI', 'PULSE'),
-  felt('couronnee', 'Table couronnée', 85, '#4a3a12', '#241c09', '#0a0803', 'CROWNS', 'SHEEN'),
-  felt('cercle', 'Cercle des cent', 99, '#5a4614', '#2a2109', '#0c0902', 'CROWNS', 'DRIFT'),
+  felt('couronnee', 'Table couronnée', 85, '#4a3a12', '#241c09', '#0a0803', 'CROWNS', 'BLAZE'),
+  felt('cercle', 'Cercle des cent', 99, '#5a4614', '#2a2109', '#0c0902', 'CROWNS', 'STORM'),
+  felt('trone', 'Trône', 100, '#6b5310', '#2e2408', '#0d0a02', 'CROWNS', 'BLAZE'),
 ];
 
 export const TITLES = [
-  // Wearing none is a choice, so it is an entry rather than a special case.
   title('aucun', 'Aucun', 1),
   title('chair', 'Chair à pioche', 2),
   title('douze', 'Toujours 12 cartes', 5),
@@ -142,23 +143,23 @@ export const TITLES = [
   title('sanspitie', 'Sans pitié', 37),
   title('briscard', 'Vieux briscard', 41),
   title('chasseur', 'Chasseur de +4', 44),
-  title('briseur', "Briseur d'amitiés", 50),
-  title('stratege', 'Stratège du dimanche', 56),
-  title('passecasse', 'Ça passe ou ça casse', 62),
-  title('espionchef', 'Espion en chef', 68),
-  title('coeurdepierre', 'Cœur de pierre', 74),
-  title('tempete', 'Tempête de +4', 77),
-  title('intouchable', 'Intouchable', 80),
-  title('requin', 'Requin de table', 86),
-  title('maitrecumul', 'Maître du cumul', 88),
-  title('javaisunquatre', "J'avais un +4", 89),
-  title('mangeur', 'Mangeur de pioche', 91),
-  title('karma', 'Karma en attente', 92),
-  title('increvable', 'Increvable', 94),
-  title('legende', 'Légende du salon', 95),
-  title('cauchemar', 'Cauchemar récurrent', 97),
-  title('dieudutapis', 'Dieu du tapis', 99),
-  title('centurion', 'Centurion', 100),
+  title('briseur', "Briseur d'amitiés", 50, '#ff6fb8'),
+  title('stratege', 'Stratège du dimanche', 56, '#3fb0ff'),
+  title('passecasse', 'Ça passe ou ça casse', 62, '#ffd23f', '#ff5a1e', '', 'SHEEN'),
+  title('espionchef', 'Espion en chef', 68, '#d8f6ff', '#2fd9bd', '', 'SHEEN'),
+  title('coeurdepierre', 'Cœur de pierre', 74, '#d8e0ec', '#8a94a6', '', 'SHEEN'),
+  title('tempete', 'Tempête de +4', 77, '#fdfbf4', '#b98bff', '#6e8cff', 'STORM'),
+  title('intouchable', 'Intouchable', 80, '#9fe8ff', '#fdfbf4', '', 'SHEEN'),
+  title('requin', 'Requin de table', 86, '#b8c6da', '#3d7dff', '', 'SHEEN'),
+  title('maitrecumul', 'Maître du cumul', 88, '#ffd23f', '#ff8a1e', '#c01c12', 'BLAZE'),
+  title('javaisunquatre', "J'avais un +4", 89, '#ffe27a', '#ffb200', '', 'SHEEN'),
+  title('mangeur', 'Mangeur de pioche', 91, '#b6ff3f', '#2ee06a', '', 'SHEEN'),
+  title('karma', 'Karma en attente', 92, '#ff6fb8', '#9b7bff', '#3d7dff', 'STORM'),
+  title('increvable', 'Increvable', 94, '#fdfbf4', '#2ee06a', '#19b79b', 'BLAZE'),
+  title('legende', 'Légende du salon', 95, '#fff3c4', '#ffc531', '#dc9200', 'BLAZE'),
+  title('cauchemar', 'Cauchemar récurrent', 97, '#b98bff', '#6b2acf', '#ff2d55', 'STORM'),
+  title('dieudutapis', 'Dieu du tapis', 99, '#fff3c4', '#ff8a1e', '#c01c12', 'BLAZE'),
+  title('centurion', 'Centurion', 100, '#fff3c4', '#ffc531', '#dc9200', 'BLAZE'),
 ];
 
 export const NAMES = [
@@ -174,12 +175,12 @@ export const NAMES = [
   named('braise', 'Braise', 62, '#ffd23f', '#ff8a1e', '#f23b2e', 'SHEEN'),
   named('glacier', 'Glacier', 68, '#d8f6ff', '#6fd4ff', '#2e6cf2', 'SHEEN'),
   named('neon', 'Néon', 74, '#b6ff3f', '#2ef2c4', '', 'SHEEN'),
-  named('foudre', 'Foudre', 80, '#fdfbf4', '#b98bff', '#6e8cff', 'SHEEN'),
+  named('foudre', 'Foudre', 80, '#fdfbf4', '#b98bff', '#6e8cff', 'STORM'),
   named('prisme', 'Prisme', 86, '#ff5da8', '#9b7bff', '#3fb0ff', 'SHEEN'),
-  named('magma', 'Magma', 92, '#fff3c4', '#ff5a1e', '#c01c12', 'SHEEN'),
-  named('abysse', 'Abysse', 95, '#2fd9bd', '#2e6cf2', '#1b1046', 'SHEEN'),
-  named('centieme', 'Centième', 97, '#fff3c4', '#ffc531', '#ff8a1e', 'SHEEN'),
-  named('couronne', 'Couronné', 100, '#fdfbf4', '#ffc531', '#dc9200', 'SHEEN'),
+  named('magma', 'Magma', 92, '#fff3c4', '#ff5a1e', '#c01c12', 'BLAZE'),
+  named('abysse', 'Abysse', 95, '#2fd9bd', '#2e6cf2', '#1b1046', 'STORM'),
+  named('centieme', 'Centième', 97, '#fff3c4', '#ffc531', '#ff8a1e', 'BLAZE'),
+  named('couronne', 'Couronné', 100, '#fdfbf4', '#ffc531', '#dc9200', 'BLAZE'),
 ];
 
 /**
@@ -197,17 +198,17 @@ export const STICKER_ITEMS = [
   sticker('feu', 'En feu', 10, '🔥'),
   sticker('sanglot', 'Sanglot', 15, '😭'),
   sticker('clown', 'Clown', 20, '🤡'),
-  sticker('eclair', 'Éclair', 28, '⚡'),
-  sticker('couronne', 'Couronne', 34, '👑'),
+  sticker('eclair', 'Éclair', 28, '⚡', 'STORM'),
+  sticker('couronne', 'Couronne', 34, '👑', 'SHEEN'),
   sticker('trefle', 'Trèfle', 40, '🍀'),
   sticker('glacon', 'Glaçon', 46, '🥶'),
-  sticker('vague', 'Vague', 52, '🌊'),
+  sticker('vague', 'Vague', 52, '🌊', 'DRIFT'),
   sticker('salut', 'Salut militaire', 58, '🫡'),
-  sticker('crane', 'Crâne', 64, '💀'),
-  sticker('bombe', 'Bombe', 70, '💣'),
+  sticker('crane', 'Crâne', 64, '💀', 'PULSE'),
+  sticker('bombe', 'Bombe', 70, '💣', 'BLAZE'),
   sticker('poignee', 'Poignée de main', 76, '🤝'),
-  sticker('gobe', 'Gobe-mouches', 88, '😐'),
-  sticker('trophee', 'Trophée', 90, '🏆'),
+  sticker('gobe', 'Gobe-mouches', 88, '😐', 'PULSE'),
+  sticker('trophee', 'Trophée', 90, '🏆', 'BLAZE'),
 ];
 
 export const ALL = [...FRAMES, ...BACKS, ...FELTS, ...TITLES, ...NAMES, ...STICKER_ITEMS];

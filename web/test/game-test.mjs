@@ -510,6 +510,36 @@ try {
     }
   }
 
+  // Every animated cosmetic must actually be drawn animated. Counted against the
+  // catalogue rather than against a number typed here, so adding a burning title is not
+  // a reason to come back and edit this.
+  for (const [tab, kind, sel] of [
+    [4, 'TITLE', '#wardrobe .pseudo'],
+    [5, 'NAME', '#wardrobe .pseudo'],
+    [3, 'FELT', '#wardrobe .felt-shot'],
+    [2, 'BACK', '#wardrobe .card'],
+  ]) {
+    await host.click(`#kind-tabs button:nth-child(${tab})`);
+    const drawn = await host.$$eval(sel, (nodes) => ({
+      burn: nodes.filter((n) => n.querySelector('.burn, .ember, .m-BLAZE') || n.classList.contains('burn')).length,
+      storm: nodes.filter((n) => n.querySelector('.storm, .bolt, .m-STORM') || n.classList.contains('storm')).length,
+    }));
+    const truth = await host.evaluate(async (family) => {
+      const C = await import('./src/cosmetics.js');
+      const all = C.ofKind(family);
+      return {
+        burn: all.filter((i) => i.motion === 'BLAZE').length,
+        storm: all.filter((i) => i.motion === 'STORM').length,
+      };
+    }, kind);
+    console.log(`  ${kind} anime : ${drawn.burn}/${truth.burn} en feu, ${drawn.storm}/${truth.storm} sous l'orage`);
+    if (truth.burn + truth.storm === 0) problems.push(`${kind} n'a aucun cosmetique de haut niveau anime`);
+    if (drawn.burn !== truth.burn) problems.push(`${kind} : ${drawn.burn} tuiles en feu pour ${truth.burn} attendues`);
+    if (drawn.storm !== truth.storm) {
+      problems.push(`${kind} : ${drawn.storm} tuiles sous l'orage pour ${truth.storm} attendues`);
+    }
+  }
+
   // The gold frame is a level-51 reward: it must be reachable, and putting it on sticks.
   await host.click('#kind-tabs button:nth-child(1)');
   await host.click('[data-wear="fr.or"]');

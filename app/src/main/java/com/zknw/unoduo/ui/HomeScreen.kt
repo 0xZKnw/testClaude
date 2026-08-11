@@ -174,15 +174,10 @@ private fun ProfileBar(profile: Profile, onProfile: () -> Unit) {
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Black
                 )
-                val title = profile.worn(CosmeticKind.TITLE).worn
-                if (title.isNotEmpty()) {
+                val title = profile.worn(CosmeticKind.TITLE)
+                if (title.worn.isNotEmpty()) {
                     Spacer(Modifier.height(2.dp))
-                    Text(
-                        title,
-                        color = Palette.Gold,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    TitleText(title, 12.sp)
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(

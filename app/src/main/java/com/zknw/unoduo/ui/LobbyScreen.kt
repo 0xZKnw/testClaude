@@ -77,17 +77,7 @@ fun PlayerRoster(
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         PseudoText(player.name, look.nameColorOf(player.seat), 15.sp)
-                        val title = look.titleOf(player.seat)
-                        if (title.isNotEmpty()) {
-                            Text(
-                                title,
-                                color = Palette.TextDim,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        TitleText(look.titleOf(player.seat), 11.sp)
                     }
                     if (player.seat == HOST_SEAT) {
                         InkChip("Hôte", color = Palette.Gold, fontSize = 11)

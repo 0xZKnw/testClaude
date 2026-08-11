@@ -571,17 +571,7 @@ private fun RivalsRow(
                 Spacer(Modifier.width(10.dp))
                 Column {
                     PseudoText(single.name, look.nameColorOf(single.seat), 15.sp)
-                    val title = look.titleOf(single.seat)
-                    if (title.isNotEmpty()) {
-                        Text(
-                            title,
-                            color = Palette.TextDim,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    TitleText(look.titleOf(single.seat), 10.sp)
                     CardCountLine(single.cards)
                 }
                 Spacer(Modifier.weight(1f))

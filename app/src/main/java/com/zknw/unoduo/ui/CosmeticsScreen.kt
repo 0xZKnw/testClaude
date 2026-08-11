@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -54,6 +55,10 @@ import com.zknw.unoduo.progress.Motion
 import com.zknw.unoduo.ui.components.AvatarFrame
 import com.zknw.unoduo.ui.components.AvatarLook
 import com.zknw.unoduo.ui.components.InkChip
+import com.zknw.unoduo.ui.components.EMBER
+import com.zknw.unoduo.ui.components.LIGHTNING
+import com.zknw.unoduo.ui.components.blazeHeat
+import com.zknw.unoduo.ui.components.stormFlash
 import com.zknw.unoduo.ui.components.LevelBar
 import com.zknw.unoduo.ui.components.MenuBackground
 import com.zknw.unoduo.ui.components.Panel
@@ -231,6 +236,58 @@ private fun CosmeticTile(
     }
 }
 
+/**
+ * The fire or the lightning, over a cloth swatch in the wardrobe.
+ *
+ * Only the two top-tier movements get one: the slower three are a transform on the whole
+ * cloth, which a thumbnail this size cannot show, and faking them here would preview
+ * something the table never does.
+ */
+@Composable
+private fun BoxScope.FeltSpark(motion: Motion, tint: Color) {
+    if (motion != Motion.BLAZE && motion != Motion.STORM) return
+    val clock = rememberInfiniteTransition(label = "swatch")
+    val beat by clock.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(if (motion == Motion.BLAZE) 4200 else 6400, easing = LinearEasing)
+        ),
+        label = "beat"
+    )
+    if (motion == Motion.BLAZE) {
+        val heat = blazeHeat(beat)
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(
+                    Brush.verticalGradient(
+                        0.40f to Color.Transparent,
+                        0.78f to tint.copy(alpha = 0.22f + 0.26f * heat),
+                        1.00f to EMBER.copy(alpha = 0.40f + 0.42f * heat)
+                    )
+                )
+        )
+    } else {
+        val flash = stormFlash(beat)
+        if (flash > 0.01f) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                LIGHTNING.copy(alpha = 0.62f * flash),
+                                tint.copy(alpha = 0.30f * flash),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+        }
+    }
+}
+
 @Composable
 private fun Preview(item: Cosmetic, profile: Profile) {
     when (item.kind) {
@@ -256,17 +313,25 @@ private fun Preview(item: Cosmetic, profile: Profile) {
                     )
                 )
                 .border(3.dp, Palette.Outline, RoundedCornerShape(12.dp))
-        )
+        ) {
+            // The two loud cloths preview what they actually do. A tile that showed a
+            // still swatch would be selling a cloth nobody would recognise on the table.
+            FeltSpark(item.motion, Color(item.a))
+        }
 
-        CosmeticKind.TITLE -> Text(
-            text = item.worn.ifEmpty { "—" },
-            color = Palette.Gold,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Black,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+        // Shown exactly as it will be worn, movement included: a tile that previewed a
+        // grey caption would be selling the wrong thing.
+        CosmeticKind.TITLE -> if (item.worn.isEmpty()) {
+            Text(
+                text = "—",
+                color = Palette.TextDim,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center
+            )
+        } else {
+            TitleText(item, 14.sp)
+        }
 
         CosmeticKind.NAME -> PseudoText(profile.name.ifBlank { "Joueur" }, item, 18.sp)
 
@@ -288,27 +353,67 @@ fun PseudoText(
     item: Cosmetic,
     size: TextUnit,
     modifier: Modifier = Modifier
+) = WornText(name, item, size, modifier, strokeRatio = 0.17f, plain = Palette.Text)
+
+/**
+ * The line under a pseudo, painted the same way.
+ *
+ * Painted the same way as the pseudo above it on purpose: the two are read as one block,
+ * and a gilded name over a grey caption looks like the caption failed to load. Draws
+ * nothing at all when the wearer has chosen no title.
+ */
+@Composable
+fun TitleText(
+    item: Cosmetic,
+    size: TextUnit,
+    modifier: Modifier = Modifier
 ) {
-    val stroke = with(LocalDensity.current) { size.toPx() * 0.17f }
+    val text = item.worn
+    if (text.isEmpty()) return
+    // Thinner keyline than a pseudo: the title is smaller, and the same ratio would close
+    // the counters of the letters up.
+    WornText(text, item, size, modifier, strokeRatio = 0.12f, plain = Palette.TextDim)
+}
+
+/**
+ * One worn word, with whatever its cosmetic does to it.
+ *
+ * Everything sweeps its gradient along the word — that is what a gradient is for here —
+ * and the two top-tier movements add to it rather than replace it: [Motion.BLAZE] burns a
+ * halo around the letters that swells and dies back, [Motion.STORM] whites the whole word
+ * out for a few frames at a time. Both are handed out at the very top of the catalogue,
+ * so anything that reaches this branch has been earned.
+ */
+@Composable
+private fun WornText(
+    text: String,
+    item: Cosmetic,
+    size: TextUnit,
+    modifier: Modifier,
+    strokeRatio: Float,
+    plain: Color
+) {
+    val stroke = with(LocalDensity.current) { size.toPx() * strokeRatio }
     val stops = listOfNotNull(
         item.a.takeIf { it != 0L },
         item.b.takeIf { it != 0L },
         item.c.takeIf { it != 0L }
     ).map { Color(it) }
 
-    // A pseudo that catches the light: the gradient slides along the word rather than
-    // sitting still on it. Only the late unlocks do this — movement is a reward too.
-    val slide = if (item.motion == Motion.SHEEN) {
-        val clock = rememberInfiniteTransition(label = "pseudo")
+    // A word that catches the light: the gradient slides along it rather than sitting
+    // still on it. Only the late unlocks do this — movement is a reward too.
+    val beat = if (item.motion == Motion.NONE) {
+        0f
+    } else {
+        val clock = rememberInfiniteTransition(label = "worn")
+        val duration = if (item.motion == Motion.STORM) 5200 else 2600
         val value by clock.animateFloat(
             initialValue = 0f,
             targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing)),
+            animationSpec = infiniteRepeatable(tween(duration, easing = LinearEasing)),
             label = "slide"
         )
         value
-    } else {
-        0f
     }
 
     val fill = when {
@@ -317,22 +422,38 @@ fun PseudoText(
             // travels instead of stretching.
             brush = Brush.linearGradient(
                 colors = stops + stops,
-                start = Offset(slide * 240f - 240f, 0f),
-                end = Offset(slide * 240f + 240f, 0f)
+                start = Offset(beat * 240f - 240f, 0f),
+                end = Offset(beat * 240f + 240f, 0f)
             ),
             fontSize = size,
             fontWeight = FontWeight.Black
         )
         else -> TextStyle(
-            color = stops.firstOrNull() ?: Palette.Text,
+            color = stops.firstOrNull() ?: plain,
             fontSize = size,
             fontWeight = FontWeight.Black
         )
     }
 
     Box(modifier) {
+        if (item.motion == Motion.BLAZE && stops.isNotEmpty()) {
+            // A fat soft keyline in the hot colour, under everything: with no blur to
+            // hand, a stroke that breathes is what reads as heat coming off the letters.
+            val heat = blazeHeat(beat)
+            Text(
+                text = text,
+                style = TextStyle(
+                    color = stops.last().copy(alpha = 0.22f + 0.45f * heat),
+                    fontSize = size,
+                    fontWeight = FontWeight.Black,
+                    drawStyle = Stroke(width = stroke * 2.6f, join = StrokeJoin.Round)
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
         Text(
-            text = name,
+            text = text,
             style = TextStyle(
                 color = Palette.Outline,
                 fontSize = size,
@@ -342,7 +463,22 @@ fun PseudoText(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Text(text = name, style = fill, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(text = text, style = fill, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (item.motion == Motion.STORM) {
+            val flash = stormFlash(beat)
+            if (flash > 0.01f) {
+                Text(
+                    text = text,
+                    style = TextStyle(
+                        color = Color.White.copy(alpha = 0.92f * flash),
+                        fontSize = size,
+                        fontWeight = FontWeight.Black
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
     }
 }
 

@@ -154,14 +154,40 @@ textarea {
 }
 @keyframes ringspin { to { transform: rotate(360deg) } }
 
-/* A pseudo that catches the light: the gradient slides along the word rather than
-   sitting still on it. Only the late unlocks do this — movement is a reward too. */
-.pseudo.grad.lit {
+/* A word that catches the light: the gradient slides along it rather than sitting still
+   on it. Only the late unlocks do this — movement is a reward too. */
+.pseudo.grad.lit, .pseudo.grad.burn, .pseudo.grad.storm {
   background: linear-gradient(90deg, var(--na), var(--nb), var(--nc), var(--na), var(--nb));
   background-size: 260% 100%;
-  animation: pseudoslide 2.6s linear infinite;
+  /* Restated, and not by accident: the `background` shorthand above resets
+     background-clip to border-box, and these selectors outrank the .pseudo.grad rule
+     that set it to text — so without this the gradient paints a solid bar the size of
+     the box instead of being cut to the letters. */
+  -webkit-background-clip: text; background-clip: text;
 }
+.pseudo.grad.lit { animation: pseudoslide 2.6s linear infinite; }
 @keyframes pseudoslide { from { background-position: 0% 0 } to { background-position: 130% 0 } }
+
+/* The top of the catalogue. BLAZE burns a halo around the letters that swells and dies
+   back; STORM whites the whole word out for a few frames at a time, then waits — the
+   waiting is what makes a flash land. Both keep sliding underneath. */
+.pseudo.grad.burn {
+  animation: pseudoslide 2.6s linear infinite, wordblaze 2.6s ease-in-out infinite alternate;
+}
+@keyframes wordblaze {
+  from { filter: var(--ink-ring) drop-shadow(0 0 2px var(--glow)) }
+  to { filter: var(--ink-ring) drop-shadow(0 0 7px var(--glow)) drop-shadow(0 0 15px var(--glow)) }
+}
+.pseudo.grad.storm {
+  animation: pseudoslide 2.6s linear infinite, wordstorm 5.2s linear infinite;
+}
+@keyframes wordstorm {
+  0% { filter: var(--ink-ring) }
+  2% { filter: var(--ink-ring) brightness(2.8) drop-shadow(0 0 10px var(--glow)) }
+  6% { filter: var(--ink-ring) }
+  10% { filter: var(--ink-ring) brightness(2.1) drop-shadow(0 0 7px var(--glow)) }
+  13%, 100% { filter: var(--ink-ring) }
+}
 
 /* ------------------------------------------------------- frames that are things */
 /* Fire, lightning, water, a laurel, stars, a crown. Drawn as a repeating conic motif on
@@ -270,16 +296,22 @@ textarea {
   font-weight: 900; display: inline-block;
   -webkit-text-stroke: .17em var(--ink);
   paint-order: stroke fill;
+  /* Named once so the two animated variants can keep the ink ring while adding to it:
+     an animated `filter` replaces the property outright, not adds to it. */
+  --ink-ring:
+    drop-shadow(1.5px 0 0 var(--ink)) drop-shadow(-1.5px 0 0 var(--ink))
+    drop-shadow(0 1.5px 0 var(--ink)) drop-shadow(0 -1.5px 0 var(--ink));
 }
+/* Thinner keyline on the line under a pseudo: the title is smaller, and the full ratio
+   would close the counters of the letters up. */
+.pseudo.title { -webkit-text-stroke-width: .12em; }
 .pseudo.grad {
   background: linear-gradient(90deg, var(--na), var(--nb), var(--nc));
   -webkit-background-clip: text; background-clip: text; color: transparent;
   /* background-clip:text and text-stroke cannot both paint, so the outline moves to a
      shadow ring that survives the clip. */
   -webkit-text-stroke: 0;
-  filter:
-    drop-shadow(1.5px 0 0 var(--ink)) drop-shadow(-1.5px 0 0 var(--ink))
-    drop-shadow(0 1.5px 0 var(--ink)) drop-shadow(0 -1.5px 0 var(--ink));
+  filter: var(--ink-ring);
 }
 
 /* ------------------------------------------------------------------ the +50 */
@@ -358,6 +390,33 @@ textarea {
 @keyframes backdrift { from { transform: translateY(-14%) } to { transform: translateY(14%) } }
 .card .m-PULSE { animation: backpulse 2.2s ease-in-out infinite alternate; transform-origin: center; }
 @keyframes backpulse { from { transform: scale(.96) } to { transform: scale(1.04) } }
+/* The oval breathes with the fire rather than on its own clock: two rhythms on one card
+   read as a fault. */
+.card .m-OVALBLAZE { animation: backpulse 2.6s ease-in-out infinite alternate; transform-origin: center; }
+
+/* The two top-tier movements, handed out at the very end of the catalogue only. A deck
+   that burned from level 30 would be a deck nobody could stand by level 60. */
+.card .m-BLAZE, .card .m-STORM {
+  position: absolute; inset: 9.7%; pointer-events: none;
+  border-radius: 8%; overflow: hidden;
+}
+.card .m-BLAZE::before, .card .m-STORM::before { content: ''; position: absolute; inset: 0; }
+/* Heat pooled at the bottom of the panel, swelling and dying back. */
+.card .m-BLAZE::before {
+  background: linear-gradient(transparent 30%, var(--hot) 130%);
+  animation: backblaze 2.6s ease-in-out infinite alternate;
+}
+@keyframes backblaze { from { opacity: .35 } to { opacity: 1 } }
+/* Two strikes, then a long dark wait. The wait is the whole point: a strobe that never
+   rests reads as a broken screen. */
+.card .m-STORM::before {
+  background: var(--hot);
+  animation: backstorm 5.2s linear infinite;
+}
+@keyframes backstorm {
+  0% { opacity: 0 } 2% { opacity: .45 } 6% { opacity: 0 }
+  10% { opacity: .32 } 13% { opacity: 0 } 100% { opacity: 0 }
+}
 
 /* The cloth. Two layers live at once during a hand-over: the outgoing one fades out and
    is dropped, so a swap costs one paint rather than a re-layout of the table. */
@@ -377,6 +436,23 @@ textarea {
   animation: feltsheen 7s linear infinite;
 }
 @keyframes feltsheen { from { transform: translateX(-120%) } to { transform: translateX(120%) } }
+/* Embers along the bottom edge of the table, and lightning across the whole of it. Both
+   are one extra layer over the cloth, so the cloth itself is never repainted. */
+/* Also inside a wardrobe swatch, which previews the cloth movement and not just its
+   colours. */
+.felt .ember, .felt-shot .ember {
+  position: absolute; inset: 0;
+  animation: feltblaze 4.2s ease-in-out infinite alternate;
+}
+@keyframes feltblaze { from { opacity: .40 } to { opacity: 1 } }
+.felt .bolt, .felt-shot .bolt {
+  position: absolute; inset: 0;
+  animation: feltstorm 6.4s linear infinite;
+}
+@keyframes feltstorm {
+  0% { opacity: 0 } 2% { opacity: .9 } 7% { opacity: 0 }
+  11% { opacity: .6 } 14% { opacity: 0 } 100% { opacity: 0 }
+}
 
 /* ------------------------------------------------------------- levels */
 .level-badge {
@@ -431,7 +507,9 @@ textarea {
   position: relative; overflow: hidden;
   width: 100%; aspect-ratio: 1.6; border-radius: 12px; border: 3px solid var(--ink);
 }
-.title-shot { font-size: 14px; font-weight: 900; color: var(--gold); overflow-wrap: anywhere; }
+/* The tile shows a title exactly as it will be worn, movement included — the colour and
+   the ink ring come from .pseudo, so only the wrapping belongs here. */
+.title-shot { font-size: 14px; font-weight: 900; color: var(--dim); overflow-wrap: anywhere; }
 .sticker-shot { font-size: 40px; line-height: 1; }
 
 /* ------------------------------------------------------------- level up */
@@ -444,7 +522,8 @@ textarea {
  /* Clipped: the animated layers on a card back travel well past its edges, and an
     unclipped one paints a band of colour across the table. */
 .card { position: relative; flex: none; transition: transform .18s ease-out; }
-.card .m-SHEEN, .card .m-DRIFT, .card .m-PULSE { border-radius: 11%; }
+.card .m-SHEEN, .card .m-DRIFT, .card .m-PULSE,
+.card .m-BLAZE, .card .m-STORM { border-radius: 11%; }
 .card-svg { display: block; width: 100%; height: auto; filter: drop-shadow(0 3px 2px rgba(0,0,0,.45)); }
 .card.playable { transform: translateY(-14%); }
 .card.playable::after {
@@ -565,6 +644,33 @@ textarea {
   12% { opacity: 1; transform: translate(-50%, -4vh) scale(1) }
   75% { opacity: 1; transform: translate(-50%, -26vh) scale(1) }
   100% { opacity: 0; transform: translate(-50%, -30vh) scale(1.15) }
+}
+/* A thrown sticker crosses the table on its own; past a certain level it does not do it
+   quietly. The flight is the outer div's animation, so the flair rides an inner span
+   rather than fighting it for the same transform. */
+.emote .flair { display: inline-block; }
+.emote .f-SHEEN { animation: emote-spin 2.4s linear both; }
+@keyframes emote-spin { to { transform: rotate(360deg) } }
+.emote .f-PULSE, .emote .f-BLAZE { animation: emote-throb .5s ease-in-out infinite alternate; }
+@keyframes emote-throb { from { transform: scale(.92) } to { transform: scale(1.14) } }
+.emote .f-DRIFT { animation: emote-wobble .7s ease-in-out infinite alternate; }
+@keyframes emote-wobble { from { transform: rotate(-16deg) } to { transform: rotate(16deg) } }
+.emote .f-STORM { animation: emote-strobe .8s steps(1) infinite; }
+@keyframes emote-strobe {
+  0%, 58% { opacity: 1; filter: none }
+  60% { opacity: .3; filter: none }
+  64% { opacity: 1; filter: brightness(2.6) }
+  70%, 100% { opacity: 1; filter: none }
+}
+.emote .halo {
+  position: absolute; left: 50%; top: 50%; width: 96px; height: 96px; margin: -48px 0 0 -48px;
+  border-radius: 50%; z-index: -1;
+  background: radial-gradient(circle, rgba(255,197,49,.85), rgba(255,90,30,.35) 45%, transparent 70%);
+  animation: emote-halo .9s ease-in-out infinite alternate;
+}
+@keyframes emote-halo {
+  from { transform: scale(.7); opacity: .45 }
+  to { transform: scale(1.15); opacity: .9 }
 }
 
 #hand .row { display: flex; justify-content: center; }

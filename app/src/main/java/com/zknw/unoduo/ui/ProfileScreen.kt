@@ -42,6 +42,7 @@ import com.zknw.unoduo.ui.components.AvatarFrame
 import com.zknw.unoduo.ui.components.AvatarLook
 import com.zknw.unoduo.ui.components.GhostButton
 import com.zknw.unoduo.ui.components.InkChip
+import com.zknw.unoduo.ui.components.InkSurface
 import com.zknw.unoduo.ui.components.LevelBadge
 import com.zknw.unoduo.ui.components.LevelBar
 import com.zknw.unoduo.ui.components.MenuBackground
@@ -90,10 +91,18 @@ fun ProfileScreen(
                         }
                         LevelBadge(profile.level, 34.dp)
                     }
-                    val worn = profile.worn(CosmeticKind.TITLE).worn
-                    if (worn.isNotEmpty()) {
+                    val worn = profile.worn(CosmeticKind.TITLE)
+                    if (worn.worn.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
-                        InkChip(worn, color = Palette.SlateHigh)
+                        // A slab under it rather than a plain chip: the title is painted
+                        // now, and a gilded word needs something dark to sit on.
+                        InkSurface(color = Palette.SlateHigh, shape = RoundedCornerShape(12.dp)) {
+                            TitleText(
+                                worn,
+                                14.sp,
+                                Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
                     }
                     Spacer(Modifier.height(14.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

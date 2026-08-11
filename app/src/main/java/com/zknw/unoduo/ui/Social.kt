@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
@@ -34,8 +35,12 @@ import androidx.compose.ui.unit.sp
 import com.zknw.unoduo.game.GameView
 import com.zknw.unoduo.game.Seat
 import com.zknw.unoduo.net.Talk
+import com.zknw.unoduo.progress.Cosmetics
+import com.zknw.unoduo.progress.Motion
 import com.zknw.unoduo.ui.components.InkSurface
+import com.zknw.unoduo.ui.components.blazeHeat
 import com.zknw.unoduo.ui.components.clickableNoRipple
+import com.zknw.unoduo.ui.components.stormFlash
 import com.zknw.unoduo.ui.theme.Palette
 import com.zknw.unoduo.vm.Emote
 
@@ -168,26 +173,83 @@ private fun FlyingEmote(emote: Emote, origin: EmoteOrigin, box: IntSize) {
         progress.animateTo(1f, tween(2400, easing = LinearOutSlowInEasing))
     }
 
+    // What the catalogue says this one does on the way over. Looked up by its glyph
+    // rather than carried in the message: the wire already says which sticker it is, and
+    // the flair is a local decision about how to draw it.
+    val flair = remember(emote.sticker) {
+        Cosmetics.stickers.firstOrNull { it.text == emote.sticker }?.motion ?: Motion.NONE
+    }
+    // One clock for the whole flight, so the flair rides the throw instead of running on
+    // its own beat next to it.
+    val flight = progress.value
+
     // Starts just inside the edge it comes from and travels a third of the way in. Far
     // enough to read as thrown, short enough never to reach the cards.
     val travel = box.height * 0.30f
     val startY = box.height * if (origin.fromTop) 0.12f else 0.76f
 
-    Text(
-        text = emote.sticker,
-        fontSize = 58.sp,
-        modifier = Modifier.graphicsLayer {
-            val t = progress.value
-            translationX = box.width * origin.x - size.width / 2f
-            translationY = if (origin.fromTop) startY + travel * t else startY - travel * t
-            // A quick pop in, a long hold, then out: the eye needs the hold.
-            val appear = (t / 0.12f).coerceAtMost(1f)
-            val leave = ((t - 0.75f) / 0.25f).coerceIn(0f, 1f)
-            alpha = appear * (1f - leave)
-            val scale = 0.4f + 0.6f * appear + 0.15f * leave
-            scaleX = scale
-            scaleY = scale
-            rotationZ = (origin.x - 0.5f) * 34f * t
+    Box(Modifier.fillMaxSize()) {
+        // A hot ring behind the glyph, for the ones that arrive on fire.
+        if (flair == Motion.BLAZE) {
+            val heat = blazeHeat(flight)
+            Box(
+                Modifier
+                    .size(96.dp)
+                    .graphicsLayer {
+                        translationX = box.width * origin.x - size.width / 2f
+                        translationY = (
+                            if (origin.fromTop) startY + travel * flight
+                            else startY - travel * flight
+                            ) - size.height * 0.22f
+                        val appear = (flight / 0.12f).coerceAtMost(1f)
+                        val leave = ((flight - 0.75f) / 0.25f).coerceIn(0f, 1f)
+                        alpha = appear * (1f - leave) * (0.35f + 0.45f * heat)
+                        val scale = 0.7f + 0.5f * heat
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(
+                                Color(0xFFFFC531).copy(alpha = 0.85f),
+                                Color(0xFFFF5A1E).copy(alpha = 0.35f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
         }
-    )
+
+        Text(
+            text = emote.sticker,
+            fontSize = 58.sp,
+            modifier = Modifier.graphicsLayer {
+                val t = flight
+                translationX = box.width * origin.x - size.width / 2f
+                translationY = if (origin.fromTop) startY + travel * t else startY - travel * t
+                // A quick pop in, a long hold, then out: the eye needs the hold.
+                val appear = (t / 0.12f).coerceAtMost(1f)
+                val leave = ((t - 0.75f) / 0.25f).coerceIn(0f, 1f)
+                // Lightning cuts out between strikes, which is what sells it as lightning
+                // rather than as a sticker that happens to be pale.
+                val strobe = if (flair == Motion.STORM) 0.45f + 0.55f * stormFlash(t) else 1f
+                alpha = appear * (1f - leave) * strobe
+                val extra = when (flair) {
+                    Motion.PULSE -> 0.16f * blazeHeat(t)
+                    Motion.BLAZE -> 0.22f * blazeHeat(t)
+                    else -> 0f
+                }
+                val scale = 0.4f + 0.6f * appear + 0.15f * leave + extra
+                scaleX = scale
+                scaleY = scale
+                rotationZ = when (flair) {
+                    // A full turn on the way over, for the ones that deserve a flourish.
+                    Motion.SHEEN -> 360f * t
+                    Motion.DRIFT -> 22f * kotlin.math.sin(t * 12f)
+                    else -> (origin.x - 0.5f) * 34f * t
+                }
+            }
+        )
+    }
 }

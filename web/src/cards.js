@@ -363,9 +363,14 @@ export function cardBack(skin = DEFAULT_BACK) {
   // The movement rides on top as a plain div, not inside the drawing: a CSS transform on
   // one extra layer costs nothing, while animating the SVG would repaint every card on
   // every frame — and a dozen backs are on screen at once.
+  // BLAZE and STORM take their heat from the oval colour, handed to the stylesheet as a
+  // variable so the keyframes stay one rule rather than one per skin.
+  const hot = skin.motion === 'BLAZE' || skin.motion === 'STORM'
+    ? ` style="--hot:${skin.c}${skin.motion === 'BLAZE' ? '7a' : '6b'}"`
+    : '';
   const motion = skin.motion && skin.motion !== 'NONE'
     ? `<div class="m-${skin.motion}"${skin.motion === 'DRIFT'
-      ? ` style="background:linear-gradient(${skin.c}33, transparent)"` : ''}></div>`
+      ? ` style="background:linear-gradient(${skin.c}33, transparent)"` : hot}></div>`
     : '';
   const motif = motifPattern(skin.pattern, skin.c, `pat-${gid}`);
   return `${motion}<svg class="card-svg" viewBox="0 0 ${CARD_W} ${CARD_H}" xmlns="http://www.w3.org/2000/svg">
@@ -380,7 +385,7 @@ export function cardBack(skin = DEFAULT_BACK) {
     <g transform="rotate(-28 ${CARD_W / 2} ${CARD_H / 2})">
       <!-- Nested rather than combined: a CSS transform would replace the rotate
            attribute outright, and the tilt is what makes the back read as a back. -->
-      <g class="${skin.motion === 'PULSE' ? 'm-PULSE' : ''}"
+      <g class="${skin.motion === 'PULSE' ? 'm-PULSE' : (skin.motion === 'BLAZE' ? 'm-OVALBLAZE' : '')}"
          style="transform-origin:${CARD_W / 2}px ${CARD_H / 2}px">
       <ellipse cx="${CARD_W / 2}" cy="${CARD_H / 2}" rx="47" ry="30" fill="${PALETTE.outline}"/>
       <ellipse cx="${CARD_W / 2}" cy="${CARD_H / 2}" rx="43" ry="26" fill="${skin.c}"/>

@@ -372,6 +372,8 @@ private fun cardMotion(motion: Motion): Float {
     val duration = when (motion) {
         Motion.SHEEN -> 3400
         Motion.PULSE -> 2200
+        Motion.BLAZE -> 2600
+        Motion.STORM -> 5200
         else -> 4600
     }
     val value by clock.animateFloat(
@@ -379,7 +381,7 @@ private fun cardMotion(motion: Motion): Float {
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(duration, easing = LinearEasing),
-            repeatMode = if (motion == Motion.SHEEN) RepeatMode.Restart else RepeatMode.Reverse
+            repeatMode = if (motion.runsOneWay()) RepeatMode.Restart else RepeatMode.Reverse
         ),
         label = "beat"
     )
@@ -471,6 +473,33 @@ fun UnoCardBack(
                             )
                     )
                 }
+                // A deck that is on fire. The heat sits at the bottom of the panel and
+                // climbs a little as it swells, so a fan of them ripples rather than all
+                // brightening as one flat block.
+                if (skin.motion == Motion.BLAZE) {
+                    val heat = blazeHeat(beat)
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    0.30f to Color.Transparent,
+                                    0.72f to Color(skin.c).copy(alpha = 0.10f + 0.16f * heat),
+                                    1.00f to Color(skin.c).copy(alpha = 0.28f + 0.34f * heat)
+                                )
+                            )
+                    )
+                }
+                if (skin.motion == Motion.STORM) {
+                    val flash = stormFlash(beat)
+                    if (flash > 0.01f) {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color(skin.c).copy(alpha = 0.42f * flash))
+                        )
+                    }
+                }
                 if (skin.pattern != Pattern.PLAIN) {
                     Canvas(Modifier.fillMaxSize()) {
                         drawPattern(skin.pattern, Color(skin.c), cell = size.width * 0.34f)
@@ -480,11 +509,15 @@ fun UnoCardBack(
                     Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            if (skin.motion == Motion.PULSE) {
-                                val scale = 0.96f + 0.08f * beat
-                                scaleX = scale
-                                scaleY = scale
+                            val scale = when (skin.motion) {
+                                Motion.PULSE -> 0.96f + 0.08f * beat
+                                // The oval breathes with the fire rather than on its own
+                                // clock: two rhythms on one card read as a fault.
+                                Motion.BLAZE -> 0.97f + 0.06f * blazeHeat(beat)
+                                else -> 1f
                             }
+                            scaleX = scale
+                            scaleY = scale
                         }
                 ) {
                     drawFaceOval(Color(skin.c), Palette.Outline, tilt = -28f)
