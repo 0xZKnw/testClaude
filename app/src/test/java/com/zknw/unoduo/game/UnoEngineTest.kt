@@ -589,6 +589,58 @@ class UnoEngineTest {
     }
 
     @Test
+    fun `holding a counter you can still choose to swallow the stack`() {
+        val e = engine()
+        e.forceState(
+            playerHands = listOf(
+                listOf(card(1, CardColor.RED, CardKind.DRAW_TWO)) + filler(2, 700),
+                // A +2 of the same colour: a perfectly legal counter, so nothing is
+                // swallowed automatically and the choice is the guest's.
+                listOf(card(2, CardColor.RED, CardKind.DRAW_TWO)) + filler(2, 800)
+            ),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = HOST,
+            deck = filler(20, 100)
+        )
+        e.playCard(HOST, 1, null)
+        e.autoAdvance()
+
+        val facing = e.viewFor(GUEST)
+        assertEquals(2, facing.pendingDraw)
+        assertTrue("le contre est bien jouable", facing.legal.contains(2))
+        // The two are exclusive: one deals a card, the other eats a pile.
+        assertFalse(facing.canDraw)
+        assertTrue(facing.canTakeStack)
+
+        val before = facing.hand.size
+        assertTrue(e.draw(GUEST))
+        val after = e.viewFor(GUEST)
+        assertEquals(before + 2, after.hand.size)
+        // A +2 costs cards, never the turn — so there is nothing left to answer.
+        assertEquals(GUEST, e.turn)
+        assertFalse(after.canTakeStack)
+        assertTrue(after.canDraw)
+    }
+
+    @Test
+    fun `swallowing is never offered off turn or with nothing pending`() {
+        val e = engine()
+        e.forceState(
+            playerHands = listOf(
+                listOf(card(1, CardColor.RED, CardKind.NUMBER, 7)) + filler(2, 700),
+                listOf(card(2, CardColor.RED, CardKind.DRAW_TWO)) + filler(2, 800)
+            ),
+            top = card(50, CardColor.RED, CardKind.NUMBER, 5),
+            color = CardColor.RED,
+            turnSeat = HOST,
+            deck = filler(20, 100)
+        )
+        assertFalse("rien en attente", e.viewFor(HOST).canTakeStack)
+        assertFalse("pas son tour", e.viewFor(GUEST).canTakeStack)
+    }
+
+    @Test
     fun `swallowing a stack is reported so the table can show it`() {
         val e = engine()
         e.forceState(

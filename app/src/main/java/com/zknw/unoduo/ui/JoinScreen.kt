@@ -11,10 +11,14 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -52,11 +56,18 @@ fun JoinScreen(
     onBack: () -> Unit
 ) {
     var manualCode by remember { mutableStateOf("") }
+    val submit = { if (RoomCode.isValid(manualCode) && !connecting) onScanned(manualCode) }
 
     MenuBackground {
+        // The viewfinder is a square as wide as the screen, so once the keyboard is up
+        // there is no room left for the code panel underneath it. Without a scroll the
+        // OK button simply ended up behind the keyboard, out of reach: you could type a
+        // code and had no way to send it.
         Column(
             Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .imePadding()
                 .padding(horizontal = 22.dp)
         ) {
             Spacer(Modifier.height(26.dp))
@@ -127,6 +138,9 @@ fun JoinScreen(
                                 capitalization = KeyboardCapitalization.Characters,
                                 imeAction = ImeAction.Done
                             ),
+                            // The keyboard's own Done key joins, so a full code never
+                            // needs the button at all.
+                            keyboardActions = KeyboardActions(onDone = { submit() }),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = Palette.Text,
                                 unfocusedTextColor = Palette.Text,
@@ -141,7 +155,7 @@ fun JoinScreen(
                         PrimaryButton(
                             text = "OK",
                             enabled = RoomCode.isValid(manualCode) && !connecting
-                        ) { onScanned(manualCode) }
+                        ) { submit() }
                     }
                 }
             }
@@ -151,7 +165,9 @@ fun JoinScreen(
                 StatusRow(status, busy = link == LinkStatus.SEARCHING)
             }
 
-            Spacer(Modifier.weight(1f))
+            // Fixed, not a weight: a scrollable column is measured with no height limit,
+            // and a weighted child inside one has nothing to take its share of.
+            Spacer(Modifier.height(24.dp))
         }
     }
 }

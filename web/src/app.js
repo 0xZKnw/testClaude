@@ -1349,11 +1349,16 @@ function renderGame() {
     + faceUp.map((c) => `<div class="card">${cardFace(c)}</div>`).join('');
 
   // ---- deck and discard
+  // Ringed for a pending stack too, otherwise nobody finds out that the deck is how you
+  // decline to escalate: the banner offers "contre-attaque ou encaisse", and encaisser
+  // happens here.
+  const eat = V.canTakeStack(v);
   const mustDraw = V.mustDraw(v);
-  $('deck').className = mustDraw ? 'urgent' : '';
-  $('deck').innerHTML = cardBack(back) + (mustDraw ? '<div class="ring"></div>' : '');
+  const ringed = mustDraw || eat;
+  $('deck').className = ringed ? 'urgent' : '';
+  $('deck').innerHTML = cardBack(back) + (ringed ? '<div class="ring"></div>' : '');
   $('deck').onclick = () => tapDeck();
-  $('deck-label').textContent = mustDraw ? 'Pioche' : String(v.dk);
+  $('deck-label').textContent = eat ? `Encaisser +${v.pd}` : (mustDraw ? 'Pioche' : String(v.dk));
   $('discard').innerHTML =
     `<div class="active-ring" style="color:${PALETTE[v.ac]}"></div>` + cardFace(v.t);
 
@@ -1575,7 +1580,7 @@ function playCard(cardId, color) {
 
 function tapDeck() {
   const v = state.myView;
-  if (!v || !V.canDraw(v)) return;
+  if (!v || (!V.canDraw(v) && !V.canTakeStack(v))) return;
   navigator.vibrate?.(12);
   if (state.role === 'guest') state.net.send({ t: 'draw' });
   else if (state.engine?.draw(state.mySeat)) broadcast();

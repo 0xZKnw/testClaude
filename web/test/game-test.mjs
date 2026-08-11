@@ -96,6 +96,27 @@ try {
   console.log(`  main entierement visible, sans defilement : ${handVisible ? 'oui' : 'NON'}`);
   if (!handVisible) problems.push('la main deborde');
 
+  // ------------------------------------------------- encaisser un cumul
+  // The same rule the Kotlin view tests pin down: facing a stack you could counter, the
+  // deck stops dealing and starts swallowing. The two are exclusive, and neither is
+  // offered off turn.
+  const eat = await solo.evaluate(async () => {
+    const { view: V, Phase } = await import('./src/engine.js');
+    const base = { y: 0, ts: 0, ph: Phase.PLAYING, pd: 0, xp: 0, l: [], ri: [], w: null };
+    return {
+      rienEnAttente: V.canTakeStack(base),
+      cumulEnAttente: V.canTakeStack({ ...base, pd: 2 }),
+      pasSonTour: V.canTakeStack({ ...base, pd: 2, ts: 1 }),
+      piocheNormale: V.canDraw({ ...base, pd: 2 }),
+      coupDouble: V.canTakeStack({ ...base, pd: 2, xp: 1 }),
+    };
+  });
+  console.log(`  encaisser un cumul : ${JSON.stringify(eat)}`);
+  if (eat.rienEnAttente || eat.pasSonTour || eat.piocheNormale || eat.coupDouble) {
+    problems.push('la pioche propose d\'encaisser hors situation');
+  }
+  if (!eat.cumulEnAttente) problems.push('impossible d\'encaisser un cumul volontairement');
+
   // --------------------------------------------------------------- le +50
   // One round in a hundred is not something a test can sit and wait for, so both sources
   // of chance are pinned and nothing else is: the roll is forced, and the engine is handed

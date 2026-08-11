@@ -67,7 +67,8 @@ object Rules {
             listOf(
                 "Rien à poser ? Touche la pioche au centre de la table.",
                 "Si la carte piochée est jouable, tu choisis : la poser, ou passer ton tour.",
-                "En revanche, un cumul de +2 ou +4 que tu ne peux pas contrer est encaissé automatiquement — inutile de le confirmer."
+                "En revanche, un cumul de +2 ou +4 que tu ne peux pas contrer est encaissé automatiquement — inutile de le confirmer.",
+                "Si tu peux le contrer mais que tu préfères ne pas surenchérir, touche la pioche : elle affiche « Encaisser +N » et tu prends la pile plutôt que de la faire grossir."
             )
         ),
         Section(

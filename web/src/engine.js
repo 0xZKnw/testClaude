@@ -749,6 +749,11 @@ export const view = {
   canDraw: (v) => view.yourTurn(v) && v.ph === Phase.PLAYING && v.pd === 0
     && (v.xp ?? 0) === 0,
   mustDraw: (v) => view.canDraw(v) && v.l.length === 0,
+  // Taking the stack on the chin when you could have countered it. A stack you cannot
+  // answer is swallowed for you, so this is only true when you hold a counter and would
+  // rather not spend it — a real decision, and it needs somewhere to tap.
+  canTakeStack: (v) => view.yourTurn(v) && v.ph === Phase.PLAYING && v.pd > 0
+    && (v.xp ?? 0) === 0,
   topCameFromOpponent: (v) => v.lp !== null && v.lp !== v.y,
   penaltyIsMine: (v) => v.pk > 0 && v.pv === v.y,
   rivalOf: (v, seat) => v.ri.find((r) => r.s === seat) ?? null,

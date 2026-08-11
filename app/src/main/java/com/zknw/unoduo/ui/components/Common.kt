@@ -188,9 +188,9 @@ fun MenuBackground(content: @Composable () -> Unit) {
 /**
  * The colour runs to the very edge of the screen; only the content is held back, and
  * only by what would actually hide it — a camera notch, or the system bars on the rare
- * phone that refuses to hide them. The keyboard is deliberately left out: the join
- * screen sizes its viewfinder from the space it is given, and shrinking that space
- * would push the code field off the bottom rather than into view.
+ * phone that refuses to hide them. The keyboard is left to the one screen that has a
+ * field: it pads and scrolls for itself, which is the only way the code panel stays
+ * reachable with the keyboard up.
  */
 @Composable
 private fun Modifier.safeArea(): Modifier = this

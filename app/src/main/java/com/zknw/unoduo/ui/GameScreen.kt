@@ -190,10 +190,20 @@ fun GameScreen(
 
             RivalsRow(view, photos, look, onQuit)
 
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            // fillMaxWidth is load-bearing: without it the Box shrinks to the width of
+            // the deck and the discard, which pins it to the left of the screen and puts
+            // "the right edge" a quarter of the way in — the table sat off-centre and the
+            // sticker rail floated in the middle of the felt.
+            Box(
+                Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
                 TableCenter(
                     view = view,
-                    drawEnabled = view.canDraw && !inputLocked,
+                    // Also tappable to swallow a stack you could have countered: the
+                    // banner offers "contre-attaque ou encaisse", and the deck is where
+                    // encaisser happens.
+                    drawEnabled = (view.canDraw || view.canTakeStack) && !inputLocked,
                     onDraw = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         onDraw()
@@ -782,7 +792,10 @@ private fun TableCenter(view: GameView, drawEnabled: Boolean, onDraw: () -> Unit
         DrawPile(
             count = view.deckCount,
             enabled = drawEnabled,
-            urgent = view.mustDraw,
+            // Ringed for the stack too, otherwise nobody finds out that the deck is how
+            // you decline to escalate: the banner says it, but the table has to show it.
+            urgent = view.mustDraw || view.canTakeStack,
+            eat = if (view.canTakeStack) view.pendingDraw else 0,
             onDraw = onDraw
         )
         DiscardPile(view)
@@ -790,7 +803,14 @@ private fun TableCenter(view: GameView, drawEnabled: Boolean, onDraw: () -> Unit
 }
 
 @Composable
-private fun DrawPile(count: Int, enabled: Boolean, urgent: Boolean, onDraw: () -> Unit) {
+private fun DrawPile(
+    count: Int,
+    enabled: Boolean,
+    urgent: Boolean,
+    /** Size of the stack this tap would swallow, or 0 when the deck just deals a card. */
+    eat: Int = 0,
+    onDraw: () -> Unit
+) {
     // A quick squash whenever the count drops tells you a card was just taken.
     val bump = remember { Animatable(1f) }
     var previous by remember { mutableStateOf(count) }
@@ -839,7 +859,11 @@ private fun DrawPile(count: Int, enabled: Boolean, urgent: Boolean, onDraw: () -
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            if (urgent) "Pioche" else "$count",
+            when {
+                eat > 0 -> "Encaisser +$eat"
+                urgent -> "Pioche"
+                else -> "$count"
+            },
             color = if (urgent) Palette.Gold else Palette.Stock.copy(alpha = 0.85f),
             fontSize = if (urgent) 13.sp else 12.sp,
             fontWeight = FontWeight.Black

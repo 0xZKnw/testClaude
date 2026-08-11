@@ -112,6 +112,17 @@ data class GameView(
     /** Nothing to play and no stack pending: drawing is the only way forward. */
     val mustDraw: Boolean get() = canDraw && legal.isEmpty()
 
+    /**
+     * Taking the stack on the chin when you could have countered it.
+     *
+     * A stack you cannot answer is swallowed for you, so this is only ever true when you
+     * are holding a counter and would rather not spend it — which is a real decision and
+     * needs somewhere to tap. [canDraw] deliberately excludes a pending stack, so the two
+     * are separate: one draws a card, the other eats a pile.
+     */
+    val canTakeStack: Boolean
+        get() = yourTurn && phase == Phase.PLAYING && pendingDraw > 0 && extraPlays == 0
+
     /** True when the top card was played by somebody else, used to pick an animation. */
     val topCameFromOpponent: Boolean get() = lastPlayedBy != null && lastPlayedBy != youAre
 
