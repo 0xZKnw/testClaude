@@ -19,6 +19,7 @@ import {
   levelOf, wornOf, stickersOf, wear, addXp,
 } from './profile.js';
 import * as Cosm from './cosmetics.js';
+import { frameSvg } from './frames.js';
 import * as Lv from './levels.js';
 import { STICKERS } from './talk.js';
 
@@ -35,6 +36,15 @@ const BOT_THINK_MS = 750;
  */
 const EMBER = '#ff8a1e';
 const LIGHTNING = '#cfe4ff';
+
+/**
+ * The colour a cloth's motif is printed in.
+ *
+ * Not the cloth's own tone: every cloth in the catalogue is dark, so a motif in its own
+ * colour is a motif nobody has ever seen — which is exactly what happened. A pale weave
+ * over a dark cloth is how a printed cloth actually looks anyway.
+ */
+const WEAVE = '#ffffff';
 
 /** The two top-tier cloth movements, drawn the same way on the table and in the tile. */
 const feltSparkHtml = (item) => (
@@ -127,12 +137,12 @@ const clamp = (value, low, high) => Math.min(Math.max(value, low), high);
  * frame on never shrinks the picture.
  */
 function framedHtml(frame, size, inner) {
-  const band = clamp(size * 0.115, 3.5, 10);
-  const ink = clamp(size * 0.045, 1.5, 3.5);
-  const outer = size + (band + ink) * 2;
-  const vars = `--band:${band}px;--ink-w:${ink}px;--fa:${frame.a};--fb:${frame.b || frame.a};`
-    + `--fc:${frame.c || frame.b || frame.a}`;
-  return `<div class="frame f-${frame.style}" style="width:${outer}px;height:${outer}px;${vars}">`
+  // The ring is drawn, not gradient-faked: see frames.js. The box is wider than the ring
+  // because fire and a crown reach past it, and the avatar stays centred in the box
+  // rather than in the drawing.
+  const { outer, box, svg } = frameSvg(frame, size);
+  return `<div class="frame" style="width:${outer}px;height:${outer}px">`
+    + `<div class="frame-slot" style="width:${box}px;height:${box}px">${svg}</div>`
     + `${inner}</div>`;
 }
 
@@ -384,7 +394,7 @@ function previewHtml(item, p) {
       // The two loud cloths preview what they actually do. A still swatch would be
       // selling a cloth nobody would recognise once it was on the table.
       return `<div class="felt-shot" style="background:radial-gradient(circle at 50% 38%,
-        ${item.a}, ${item.b} 45%, ${item.c})">${motifHtml(item.pattern, item.a)}${
+        ${item.a}, ${item.b} 45%, ${item.c})">${motifHtml(item.pattern, WEAVE, 0.5)}${
         feltSparkHtml(item)}</div>`;
     case 'TITLE':
       // Shown exactly as it will be worn, movement included: a tile that previewed a
@@ -1317,7 +1327,10 @@ function setFelt(felt) {
   layer.className = `felt${felt.motion !== 'NONE' ? ` m-${felt.motion}` : ''}`;
   layer.style.background =
     `radial-gradient(circle at 50% 38%, ${felt.a}, ${felt.b} 45%, ${felt.c})`;
-  layer.innerHTML = motifHtml(felt.pattern, felt.a);
+  // Fainter on the table than in the wardrobe: the cloth is behind everything, and a
+  // motif you can read across the table is a motif you stop seeing the cards on. The
+  // swatch is the opposite case — a preview that shows nothing previews nothing.
+  layer.innerHTML = motifHtml(felt.pattern, WEAVE, 0.26);
   if (felt.motion === 'SHEEN') {
     const gleam = document.createElement('div');
     gleam.className = 'gleam';

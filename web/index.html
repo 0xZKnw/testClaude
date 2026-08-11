@@ -106,53 +106,34 @@ textarea {
 .avatar.turn { border-color: var(--gold); border-width: 4px; }
 
 /* ------------------------------------------------------------- avatar frames */
-/* Drawn the way every card in the game is drawn: an ink disc first, the colour on top
-   of it, and the avatar's own ink ring closing the inside. That keyline is the whole
-   difference between a frame that belongs to this game and a coloured circle. */
-.frame {
-  position: relative; border-radius: 50%; flex: none;
-  display: grid; place-items: center; background: var(--ink);
-}
-.frame::before {
-  content: ''; position: absolute; inset: var(--ink-w); border-radius: 50%; z-index: 0;
-}
-.frame > * { position: relative; z-index: 1; }
+/* The ring itself is an SVG drawing (see frames.js) — the first version built every
+   frame out of repeating-conic-gradient, which is fine for a two-tone band and hopeless
+   for anything with a shape: fire came out as a cog and the crown came out as the same
+   cog in gold. All that is left here is the box the drawing and the avatar share.
 
-.frame.f-SOLID::before { background: var(--fa); }
-.frame.f-DUO::before { background: conic-gradient(var(--fa), var(--fb), var(--fa)); }
-/* Two colours, one inside the other; the outer band is the wider of the two. */
-.frame.f-DUAL::before {
-  background: radial-gradient(closest-side,
-    var(--fb) 0 calc(100% - var(--band) * .55), var(--fa) calc(100% - var(--band) * .55));
+   The drawing is wider than the ring, because fire and a crown reach past it; it is
+   centred and ignored by the layout, so the avatar sits in the middle of the ring and
+   not in the middle of the artwork. */
+.frame { position: relative; flex: none; display: grid; place-items: center; }
+.frame-slot {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  pointer-events: none;
 }
-/* The gaps fall through to the ink disc underneath, so these read as coloured teeth on
-   an ink ring rather than as a dashed outline. */
-.frame.f-DASH::before {
-  background: repeating-conic-gradient(var(--fa) 0 11deg, transparent 11deg 21deg);
+.frame-art { display: block; overflow: visible; }
+.frame > *:not(.frame-slot) { position: relative; z-index: 1; }
+
+@keyframes framespin { to { transform: rotate(360deg) } }
+@keyframes framehalo { from { opacity: .18 } to { opacity: .52 } }
+/* The tips travel further than the base, which is what reads as a flame licking rather
+   than as a ring being resized. */
+@keyframes framelick { from { transform: scale(.94) } to { transform: scale(1.07) } }
+/* One tooth of the zigzag lit at a time. steps(1) rather than a fade: a spark either
+   jumped to this tooth or it did not. */
+@keyframes framelit { 0%, 92% { opacity: 0 } 93%, 100% { opacity: 1 } }
+@keyframes frametwinkle {
+  from { opacity: .45; transform: scale(.7) }
+  to { opacity: 1; transform: scale(1.15) }
 }
-.frame.f-BEADS::before {
-  background: repeating-conic-gradient(var(--fa) 0 5deg, transparent 5deg 20deg);
-}
-.frame.f-NOTCH::before {
-  background: repeating-conic-gradient(var(--fa) 0 22deg, var(--fb) 22deg 37deg);
-}
-.frame.f-GLOW::before { background: var(--fa); }
-.frame.f-GLOW::after {
-  content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: 0;
-  box-shadow: 0 0 0 calc(var(--band) * .8) var(--fa);
-  animation: halo 1.7s ease-in-out infinite alternate;
-}
-@keyframes halo { from { opacity: .18 } to { opacity: .52 } }
-/* A narrow bright stripe sweeping round a flat band: a sheen, not a rainbow. */
-.frame.f-SHINE::before {
-  background: conic-gradient(var(--fa) 0 38%, var(--fb) 47% 53%, var(--fa) 62% 100%);
-  animation: ringspin 2.4s linear infinite;
-}
-.frame.f-SPIN::before {
-  background: conic-gradient(var(--fa), var(--fb), var(--fc), var(--fa));
-  animation: ringspin 4.2s linear infinite;
-}
-@keyframes ringspin { to { transform: rotate(360deg) } }
 
 /* A word that catches the light: the gradient slides along it rather than sitting still
    on it. Only the late unlocks do this — movement is a reward too. */
@@ -189,92 +170,12 @@ textarea {
   13%, 100% { filter: var(--ink-ring) }
 }
 
-/* ------------------------------------------------------- frames that are things */
-/* Fire, lightning, water, a laurel, stars, a crown. Drawn as a repeating conic motif on
-   the same masked disc as the rest: one extra layer, no images, and the ink underneath
-   still shows through every gap. */
-.frame.f-FLAME::before,
-.frame.f-BOLT::before,
-.frame.f-WAVE::before,
-.frame.f-ORBIT::before,
-.frame.f-STARS::before,
-.frame.f-CROWN::before { background: var(--fa); }
-
-/* Tongues of fire: alternating wedges of two heats, flickering out of step. */
-.frame.f-FLAME::after {
-  content: ''; position: absolute; inset: calc(var(--ink-w) * -.6); border-radius: 50%;
-  background: repeating-conic-gradient(var(--fb) 0 8deg, transparent 8deg 20deg);
-  -webkit-mask: radial-gradient(closest-side, transparent 62%, #000 62%);
-  mask: radial-gradient(closest-side, transparent 62%, #000 62%);
-  animation: flicker .9s steps(4) infinite;
-}
-@keyframes flicker {
-  0% { transform: scale(1) rotate(0deg) }
-  50% { transform: scale(1.07) rotate(6deg) }
-  100% { transform: scale(1) rotate(12deg) }
-}
-
-/* A zigzag ring with one tooth lit, running round it. */
-.frame.f-BOLT::before {
-  background: repeating-conic-gradient(
-    var(--fa) 0 12deg, var(--fb) 12deg 14deg, var(--fa) 14deg 26deg);
-}
-.frame.f-BOLT::after {
-  content: ''; position: absolute; inset: var(--ink-w); border-radius: 50%;
-  background: conic-gradient(transparent 0 84%, var(--fb) 88% 92%, transparent 96%);
-  animation: ringspin 1.4s steps(14) infinite;
-}
-
-/* Water: two bands of colour rolling round at different speeds. */
-.frame.f-WAVE::before {
-  background: repeating-conic-gradient(var(--fa) 0 9deg, var(--fb) 9deg 18deg);
-  animation: ringspin 3.6s linear infinite;
-}
-.frame.f-WAVE::after {
-  content: ''; position: absolute; inset: calc(var(--ink-w) + var(--band) * .38);
-  border-radius: 50%;
-  background: repeating-conic-gradient(transparent 0 12deg, var(--fb) 12deg 16deg);
-  animation: ringspin 5.4s linear reverse infinite;
-}
-
-/* A bead running the ring, with a tail fading behind it. */
-.frame.f-ORBIT::before { background: var(--fb); }
-.frame.f-ORBIT::after {
-  content: ''; position: absolute; inset: var(--ink-w); border-radius: 50%;
-  background: conic-gradient(var(--fa) 0 4%, transparent 14% 100%);
-  animation: ringspin 2.6s linear infinite;
-}
-
-/* Stars set into the ring, twinkling together but softly. */
-.frame.f-STARS::before { background: var(--fb); }
-.frame.f-STARS::after {
-  content: ''; position: absolute; inset: var(--ink-w); border-radius: 50%;
-  background: repeating-conic-gradient(var(--fa) 0 3deg, transparent 3deg 45deg);
-  animation: twinkle 2s ease-in-out infinite alternate;
-}
-@keyframes twinkle { from { opacity: .45 } to { opacity: 1 } }
-
-/* The last frame in the game: gold points all round, and a shine that sweeps them. */
-.frame.f-CROWN::before {
-  background:
-    repeating-conic-gradient(var(--fa) 0 18deg, var(--fc) 18deg 36deg);
-}
-.frame.f-CROWN::after {
-  content: ''; position: absolute; inset: calc(var(--ink-w) * -.5); border-radius: 50%;
-  background:
-    repeating-conic-gradient(var(--fa) 0 10deg, transparent 10deg 36deg),
-    conic-gradient(transparent 0 42%, var(--fb) 50%, transparent 58% 100%);
-  background-blend-mode: normal;
-  -webkit-mask: radial-gradient(closest-side, transparent 58%, #000 58%);
-  mask: radial-gradient(closest-side, transparent 58%, #000 58%);
-  animation: ringspin 3s linear infinite;
-}
-
 /* ------------------------------------------------------------ printed motifs */
 /* Faint and repeated, never a picture: a back is on screen a dozen times at once and a
    cloth sits under the whole game. */
-.motif { position: absolute; inset: 0; pointer-events: none; opacity: .16; }
-.felt .motif { opacity: .1; }
+/* No opacity here: it lives in the drawing, where each caller can pick it. Two
+   opacities multiplied is how the cloth motif ended up at three percent. */
+.motif { position: absolute; inset: 0; pointer-events: none; }
 .p-RAYS { background: repeating-conic-gradient(currentColor 0 1.2deg, transparent 1.2deg 15deg); }
 .p-STRIPES { background: repeating-linear-gradient(45deg, currentColor 0 2px, transparent 2px 14px); }
 .p-DOTS { background-image: radial-gradient(currentColor 22%, transparent 24%); background-size: 16px 16px; }

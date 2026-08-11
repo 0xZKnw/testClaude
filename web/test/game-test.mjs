@@ -540,6 +540,23 @@ try {
     }
   }
 
+  // Every frame style has to be drawn as itself. The renderer falls back to the plain
+  // ring for a style it does not know — which is right for a save from a newer build and
+  // wrong, and silent, for one it was simply never taught.
+  const frames = await host.evaluate(async () => {
+    const F = await import('./src/frames.js');
+    const C = await import('./src/cosmetics.js');
+    const styles = [...new Set(C.ofKind('FRAME').map((i) => i.style))];
+    const plain = F.frameSvg({ style: 'SOLID', a: '#ff0000', b: '#00ff00', c: '#0000ff' }, 46).svg;
+    return styles.map((style) => ({
+      style,
+      drawn: F.frameSvg({ style, a: '#ff0000', b: '#00ff00', c: '#0000ff' }, 46).svg !== plain,
+    }));
+  });
+  const missing = frames.filter((f) => f.style !== 'SOLID' && !f.drawn).map((f) => f.style);
+  console.log(`  styles de cadre dessines : ${frames.length - missing.length}/${frames.length}`);
+  if (missing.length) problems.push(`cadres non dessines : ${missing.join(', ')}`);
+
   // The gold frame is a level-51 reward: it must be reachable, and putting it on sticks.
   await host.click('#kind-tabs button:nth-child(1)');
   await host.click('[data-wear="fr.or"]');

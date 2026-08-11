@@ -127,9 +127,12 @@ private fun FeltLayer(felt: Cosmetic) {
     ) {
         if (felt.pattern != Pattern.PLAIN) {
             Canvas(Modifier.fillMaxSize()) {
-                // Fainter than on a card: the cloth is behind everything, and a motif you
-                // can read from across the table is a motif you stop seeing the cards on.
-                drawPattern(felt.pattern, Color(felt.a), cell = 74f, alpha = 0.10f)
+                // Printed in pale ink rather than in the cloth's own tone: every cloth in
+                // the catalogue is dark, so a motif in its own colour is a motif nobody
+                // ever sees. Fainter than on a card all the same — the cloth is behind
+                // everything, and a motif you can read across the table is a motif you
+                // stop seeing the cards on.
+                drawPattern(felt.pattern, Color.White, cell = 74f, alpha = 0.11f)
             }
         }
         if (felt.motion == Motion.SHEEN) {

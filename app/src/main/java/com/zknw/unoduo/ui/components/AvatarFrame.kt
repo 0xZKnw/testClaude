@@ -8,7 +8,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -61,9 +60,14 @@ fun AvatarFrame(
     // Only the moving styles ask for a clock; a still frame costs nothing to draw.
     val phase = if (frame.style in MOVING) rememberPhase(frame.style) else 0f
 
+    // The drawing is wider than the ring — fire and a crown reach past it — but the
+    // frame still *occupies* the ring, so wearing Enfer does not shove the row about.
+    // A Box does not clip, so the extra simply overflows.
+    val art = outer + band * 4.8f
+
     Box(modifier.size(outer), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
-            drawFrame(frame, band.toPx(), ink.toPx(), phase)
+        Canvas(Modifier.size(art)) {
+            drawFrame(frame, band.toPx(), ink.toPx(), outer.toPx() / 2f, phase)
         }
         content()
     }
@@ -106,9 +110,15 @@ private fun rememberPhase(style: FrameStyle): Float {
     return value
 }
 
-private fun DrawScope.drawFrame(frame: Cosmetic, band: Float, ink: Float, phase: Float) {
+private fun DrawScope.drawFrame(
+    frame: Cosmetic,
+    band: Float,
+    ink: Float,
+    /** Radius of the ring itself. The canvas around it is deliberately larger. */
+    outer: Float,
+    phase: Float
+) {
     val middle = Offset(size.width / 2f, size.height / 2f)
-    val outer = size.minDimension / 2f
     val a = Color(frame.a)
     val b = if (frame.b != 0L) Color(frame.b) else a
     val c = if (frame.c != 0L) Color(frame.c) else b
@@ -121,6 +131,31 @@ private fun DrawScope.drawFrame(frame: Cosmetic, band: Float, ink: Float, phase:
     /** A band of colour that stops where the avatar's own ink ring begins. */
     fun disc(brush: Brush) = drawCircle(brush, radius = paint, center = middle)
     fun flat(color: Color) = drawCircle(color, radius = paint, center = middle)
+
+    /**
+     * The bevel that stops a plain ring reading as a flat sticker: a light arc across
+     * the top-left, a dark one across the bottom-right. Two strokes, and the difference
+     * between a coloured circle and something with a surface.
+     */
+    fun bevel() {
+        val r = paint - band * 0.34f
+        val w = band * 0.30f
+        val box = androidx.compose.ui.geometry.Rect(
+            middle.x - r, middle.y - r, middle.x + r, middle.y + r
+        )
+        drawArc(
+            color = Color.White.copy(alpha = 0.26f),
+            startAngle = 115f, sweepAngle = 135f, useCenter = false,
+            topLeft = box.topLeft, size = box.size,
+            style = Stroke(width = w, cap = StrokeCap.Round)
+        )
+        drawArc(
+            color = Palette.Outline.copy(alpha = 0.28f),
+            startAngle = -65f, sweepAngle = 135f, useCenter = false,
+            topLeft = box.topLeft, size = box.size,
+            style = Stroke(width = w, cap = StrokeCap.Round)
+        )
+    }
 
     /** A stroke down the middle of the band, so the ink shows through the gaps. */
     fun dashes(color: Color, on: Float, off: Float, cap: StrokeCap = StrokeCap.Butt) =
@@ -136,11 +171,14 @@ private fun DrawScope.drawFrame(frame: Cosmetic, band: Float, ink: Float, phase:
         )
 
     when (frame.style) {
-        FrameStyle.SOLID -> flat(a)
+        FrameStyle.SOLID -> { flat(a); bevel() }
 
         // Repeated at both ends so the sweep closes on itself instead of showing a seam
         // where 360° meets 0°.
-        FrameStyle.DUO -> disc(Brush.sweepGradient(listOf(a, b, a), center = middle))
+        FrameStyle.DUO -> {
+            disc(Brush.sweepGradient(listOf(a, b, a), center = middle))
+            bevel()
+        }
 
         FrameStyle.DASH -> dashes(a, band * 1.5f, band * 1.1f)
 
@@ -158,6 +196,7 @@ private fun DrawScope.drawFrame(frame: Cosmetic, band: Float, ink: Float, phase:
         FrameStyle.DUAL -> {
             flat(a)
             drawCircle(b, radius = paint - band * 0.55f, center = middle)
+            bevel()
         }
 
         FrameStyle.GLOW -> {
@@ -170,6 +209,7 @@ private fun DrawScope.drawFrame(frame: Cosmetic, band: Float, ink: Float, phase:
                 style = Stroke(width = band * 1.6f)
             )
             flat(a)
+            bevel()
         }
 
         // A narrow bright stripe sweeping round a flat band: a sheen, not a rainbow.
@@ -197,20 +237,33 @@ private fun DrawScope.drawFrame(frame: Cosmetic, band: Float, ink: Float, phase:
 
         // ---------------------------------------------------------------- things
 
-        // Tongues of fire licking outward. Each one breathes on its own offset, so the
-        // ring flickers rather than pumping in unison.
+        // Eighteen tongues, no two alike. Evenly spaced spikes of one width and one
+        // height are a sun — which is what the first version drew — so width, height and
+        // lean all come off a fixed scatter, and the tips taper to needles.
         FrameStyle.FLAME -> {
             flat(a)
-            val tongues = 9
+            val tongues = 18
             for (i in 0 until tongues) {
-                val lick = 0.55f + 0.45f * sin((phase * 2f + i * 0.7f) * PI2).absoluteValue
+                val j = jitter(i)
+                val k = jitter(i + 31)
+                // Each one breathes on its own offset, so the ring flickers rather than
+                // pumping in unison.
+                val lick = 0.78f + 0.34f * sin((phase * 2f + i * 0.7f) * PI2).absoluteValue
                 drawPath(
-                    tongue(middle, paint, band * (0.9f + 1.5f * lick), i * 360f / tongues, band),
-                    color = if (i % 2 == 0) b else a
+                    tongue(
+                        centre = middle,
+                        base = paint,
+                        height = band * (1.0f + 2.2f * j) * lick,
+                        at = i * 360f / tongues + (j - 0.5f) * 9f,
+                        half = (180f / tongues) * (0.55f + 0.75f * k),
+                        taper = 2.4f,
+                        lean = (k - 0.5f) * 26f
+                    ),
+                    color = if (i % 3 == 1) b else a
                 )
             }
             // A hot core, so the base of the fire is brighter than its tips.
-            drawCircle(b.copy(alpha = 0.55f), radius = paint - band * 0.45f, center = middle)
+            drawCircle(b.copy(alpha = 0.62f), radius = paint - band * 0.3f, center = middle)
         }
 
         // A zigzag ring, with one segment lit at a time running round it.
@@ -265,28 +318,13 @@ private fun DrawScope.drawFrame(frame: Cosmetic, band: Float, ink: Float, phase:
             }
         }
 
-        // The last frame in the game: gold points all round, a jewel on each, and a
-        // shine that sweeps over the lot.
+        // A crown, not a ring of gold spikes. Points all the way round came out as a sun
+        // wearing gold however they were shaped; one small crown sitting on a gold band
+        // is read correctly at a glance, which is all a level-100 frame has to do.
         FrameStyle.CROWN -> {
-            disc(
-                Brush.sweepGradient(
-                    listOf(a, b, a, c, a),
-                    center = middle
-                )
-            )
-            val points = 10
-            for (i in 0 until points) {
-                drawPath(
-                    tongue(middle, paint, band * 1.15f, i * 360f / points, band * 0.78f),
-                    color = a
-                )
-                drawCircle(
-                    color = b,
-                    radius = band * 0.22f,
-                    center = onRing(middle, paint + band * 0.55f, i * 360f / points)
-                )
-            }
-            // The sweep, on top of everything, so the gold catches the light.
+            disc(Brush.sweepGradient(listOf(a, b, a, c, a), center = middle))
+            bevel()
+            // The gleam, under the crown but over the band, so the gold catches light.
             rotate(phase * 360f, pivot = middle) {
                 drawCircle(
                     brush = Brush.sweepGradient(
@@ -301,6 +339,48 @@ private fun DrawScope.drawFrame(frame: Cosmetic, band: Float, ink: Float, phase:
                     center = middle
                 )
             }
+
+            val w = band * 2.0f
+            val h = band * 2.4f
+            val top = middle.y - paint - h * 0.34f
+            val keyline = band * 0.13f
+            val crown = Path().apply {
+                moveTo(middle.x - w, top + h * 0.34f)
+                lineTo(middle.x - w, top - h * 0.62f)
+                lineTo(middle.x - w * 0.46f, top - h * 0.14f)
+                lineTo(middle.x, top - h)
+                lineTo(middle.x + w * 0.46f, top - h * 0.14f)
+                lineTo(middle.x + w, top - h * 0.62f)
+                lineTo(middle.x + w, top + h * 0.34f)
+                close()
+            }
+            drawPath(crown, color = a)
+            drawPath(crown, color = Palette.Outline, style = Stroke(width = keyline))
+            // The band across the bottom of it, and a stone set in the middle.
+            drawRoundRect(
+                color = c,
+                topLeft = Offset(middle.x - w, top - h * 0.02f),
+                size = androidx.compose.ui.geometry.Size(w * 2f, h * 0.36f),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(h * 0.1f)
+            )
+            drawRoundRect(
+                color = Palette.Outline,
+                topLeft = Offset(middle.x - w, top - h * 0.02f),
+                size = androidx.compose.ui.geometry.Size(w * 2f, h * 0.36f),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(h * 0.1f),
+                style = Stroke(width = keyline)
+            )
+            fun stone(x: Float, y: Float, r: Float) {
+                drawCircle(b, radius = r, center = Offset(middle.x + x, top + y))
+                drawCircle(
+                    Palette.Outline, radius = r, center = Offset(middle.x + x, top + y),
+                    style = Stroke(width = keyline)
+                )
+            }
+            stone(0f, h * 0.16f, band * 0.26f)
+            stone(0f, -h, band * 0.3f)
+            stone(-w, -h * 0.62f, band * 0.24f)
+            stone(w, -h * 0.62f, band * 0.24f)
         }
     }
 }
@@ -314,28 +394,57 @@ private fun onRing(centre: Offset, radius: Float, degrees: Float): Offset {
 }
 
 /**
- * One lick of flame — or one point of a crown, which is the same shape with straighter
- * sides. Built from plain line segments rather than curves: at forty pixels across, the
- * difference is invisible and the code has no API surface to go stale.
+ * A fixed scatter in 0..1 for index [i]. Not randomness: the same frame has to look the
+ * same on every repaint, and the browser build has to draw the same fire from the same
+ * formula.
  */
-private fun tongue(centre: Offset, base: Float, height: Float, at: Float, width: Float): Path {
-    val half = (width / base) * 28f
+private fun jitter(i: Int): Float {
+    val v = sin(i * 12.9898f) * 43758.5453f
+    return v - kotlin.math.floor(v)
+}
+
+/**
+ * One lick of flame — or one point of a crown, which is the same shape with straighter
+ * sides. Built from plain line segments rather than curves: at forty pixels across the
+ * difference is invisible, and the same sampling runs in the browser.
+ *
+ * [half] is the half-width **in degrees**, and that is the first thing that separates
+ * fire from a sun: a tongue whose width comes from the band rather than from the spacing
+ * is a needle, and a ring of needles is a sun whatever colour it is painted.
+ *
+ * [taper] is the second. At 1 the sides run straight to the tip and the shape is a
+ * triangle. Above 1 the width falls away early and the tip draws out to a spike, which
+ * is what fire does. [lean] curls that tip sideways, so a ring of them looks blown about
+ * rather than radiating.
+ */
+private fun tongue(
+    centre: Offset,
+    base: Float,
+    height: Float,
+    at: Float,
+    half: Float,
+    taper: Float = 1f,
+    lean: Float = 0f
+): Path {
+    val steps = 10
+    val foot = base - height * 0.12f
+    fun side(t: Float, sign: Float) =
+        at + sign * half * Math.pow((1f - t).toDouble(), taper.toDouble()).toFloat() + lean * t * t
     return Path().apply {
-        val left = onRing(centre, base - width * 0.2f, at - half)
-        moveTo(left.x, left.y)
-        // Sampled along the outline: out to the tip up one side, back down the other.
-        for (step in 1..8) {
-            val t = step / 8f
-            val side = 1f - t
-            val spot = onRing(centre, base + height * t * (2f - t), at - half * side)
+        val start = onRing(centre, foot, side(0f, -1f))
+        moveTo(start.x, start.y)
+        for (step in 1..steps) {
+            val t = step / steps.toFloat()
+            val spot = onRing(centre, base + height * t, side(t, -1f))
             lineTo(spot.x, spot.y)
         }
-        for (step in 7 downTo 0) {
-            val t = step / 8f
-            val side = 1f - t
-            val spot = onRing(centre, base + height * t * (2f - t), at + half * side)
+        for (step in steps - 1 downTo 0) {
+            val t = step / steps.toFloat()
+            val spot = onRing(centre, base + height * t, side(t, 1f))
             lineTo(spot.x, spot.y)
         }
+        val end = onRing(centre, foot, side(0f, 1f))
+        lineTo(end.x, end.y)
         close()
     }
 }

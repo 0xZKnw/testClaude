@@ -300,20 +300,36 @@ export function cardFace(card, { dimmed = false } = {}) {
  * one round. Tiles are inline SVG — a strict page has no business fetching an image to
  * draw a card.
  */
+/**
+ * The motifs, each drawn once around the origin in a box about sixteen across.
+ *
+ * They are placed twice per tile at different sizes and angles — see below — because a
+ * single shape repeated on a square grid reads as a grid, which is the one thing a
+ * printed cloth must not do.
+ */
 const MOTIF_SHAPES = {
-  BOLTS: 'M15 3 L7 13 h5 l-3 10 8-12 h-5 z',
-  FLAMES: 'M13 3 C9 9 15 10 13 14 C11 12 12 10 10 9 C7 13 6 19 13 22 C20 19 18 10 13 3 z',
-  CONFETTI: 'M6 10 l7-4 5 6 -7 4 z',
-  CROWNS: 'M5 19 v-11 l4 5 4-7 4 7 4-5 v11 z',
-  RAYS: 'M13 0 v26',
-  STRIPES: 'M-4 22 L22 -4 M9 35 L35 9',
-  DOTS: 'M13 13 m-3 0 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0',
-  WAVES: 'M0 16 q6.5 -7 13 0 t13 0',
-  HEX: 'M13 1 L25 13 L13 25 L1 13 z',
+  BOLTS: { d: 'M2 -8 L-4 1 h3.4 l-2 8 6-9 h-3.4 z' },
+  // A body with a lick coming off it, not a spearhead: fire is asymmetric.
+  FLAMES: { d: 'M0 8 C-6 5 -6 -1 -2.5 -3 C-2.5 -0.6 -0.6 0.4 0.6 -1 C1 -4 -1.4 -5.6 0 -9 '
+    + 'C3.4 -5.4 7 -2 6 2.4 C5.2 6 2.8 8 0 8 z' },
+  CONFETTI: { d: 'M-5 -2 L1 -5.4 L5 2 L-1 5.4 z' },
+  CROWNS: { d: 'M-6.4 5 v-9.4 l3.2 4.2 3.2-6.2 3.2 6.2 3.2-4.2 v9.4 z' },
+  DOTS: { d: 'M0 -3.2 A3.2 3.2 0 1 1 0 3.2 A3.2 3.2 0 1 1 0 -3.2 z' },
+  // A real hexagon rather than a diamond: the diamond version read as a quilt.
+  HEX: { d: 'M0 -8 L7 -4 V4 L0 8 L-7 4 V-4 z', stroked: true },
+  RAYS: { tile: 'M13 -4 V56 M39 -4 V56', stroked: true },
+  STRIPES: { tile: 'M-8 44 L44 -8 M5 57 L57 5 M-21 31 L31 -21', stroked: true },
+  WAVES: { tile: 'M-2 14 q6.5 -7 13 0 t13 0 t13 0 M-2 40 q6.5 -7 13 0 t13 0 t13 0',
+    stroked: true },
 };
 
-/** The ones that are outlines rather than solids. */
-const MOTIF_STROKED = new Set(['RAYS', 'STRIPES', 'WAVES', 'HEX']);
+/** Where each motif is stamped inside its tile: x, y, scale, rotation. */
+const MOTIF_PLACES = [
+  [13, 13, 1, -8],
+  [39, 39, 0.78, 22],
+  [39, 12, 0.6, 14],
+  [12, 40, 0.55, -25],
+];
 
 /**
  * The motif as an SVG tile, for painting inside another drawing.
@@ -321,15 +337,22 @@ const MOTIF_STROKED = new Set(['RAYS', 'STRIPES', 'WAVES', 'HEX']);
  * It has to live in the same SVG as the card: an HTML layer underneath would be hidden
  * by the card's own artwork, and one on top would cover the UNO.
  */
-export function motifPattern(pattern, colour, id) {
+export function motifPattern(pattern, colour, id, alpha = 0.22) {
   const shape = MOTIF_SHAPES[pattern];
   if (!shape) return { defs: '', fill: '' };
-  const paint = MOTIF_STROKED.has(pattern)
-    ? `fill="none" stroke="${colour}" stroke-width="1.6"`
+  const paint = shape.stroked
+    ? `fill="none" stroke="${colour}" stroke-width="1.6" stroke-linecap="round"`
     : `fill="${colour}"`;
+  // A tile twice as wide as the old one, carrying four stamps at four sizes: the same
+  // motif on a plain grid reads as graph paper long before it reads as fire.
+  const body = shape.tile
+    ? `<path d="${shape.tile}" ${paint}/>`
+    : MOTIF_PLACES.map(([x, y, k, deg]) =>
+      `<path d="${shape.d}" ${paint} transform="translate(${x} ${y}) rotate(${deg}) scale(${k})"/>`)
+      .join('');
   return {
-    defs: `<pattern id="${id}" width="26" height="26" patternUnits="userSpaceOnUse">`
-      + `<path d="${shape}" ${paint} opacity="0.22"/></pattern>`,
+    defs: `<pattern id="${id}" width="52" height="52" patternUnits="userSpaceOnUse">`
+      + `<g opacity="${alpha}">${body}</g></pattern>`,
     fill: `url(#${id})`,
   };
 }
@@ -338,16 +361,20 @@ export function motifPattern(pattern, colour, id) {
  * The same motif as a standalone layer, for the table cloth — which is a plain div with
  * nothing painted over it, so an HTML layer is both simpler and cheaper there.
  */
-export function motifHtml(pattern, colour) {
+export function motifHtml(pattern, colour, alpha = 0.22) {
   if (!pattern || pattern === 'PLAIN') return '';
-  const { defs, fill } = motifPattern(pattern, colour, 'p');
+  const { defs, fill } = motifPattern(pattern, colour, 'p', alpha);
   if (!defs) return '';
   const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%'>"
     + `<defs>${defs.replace(/"/g, "'")}</defs>`
     + `<rect width='100%' height='100%' fill='url(#p)'/></svg>`;
-  // Single quotes throughout: this ends up inside a double-quoted style attribute.
-  return `<div class="motif" style="background-image:url('data:image/svg+xml,`
-    + `${encodeURIComponent(svg)}')"></div>`;
+  // Single quotes throughout the drawing, because this ends up inside a double-quoted
+  // style attribute — and then those quotes are escaped by hand, because
+  // encodeURIComponent leaves an apostrophe alone and one apostrophe closes the url()
+  // early. That is why no table cloth has ever shown its motif: the URL was cut at the
+  // first attribute and the browser dropped the lot.
+  const encoded = encodeURIComponent(svg).replace(/'/g, '%27');
+  return `<div class="motif" style="background-image:url('data:image/svg+xml,${encoded}')"></div>`;
 }
 
 /**
